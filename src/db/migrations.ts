@@ -1,0 +1,43 @@
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+import { DATABASE_VERSION, SCHEMA_V1 } from '@/db/schema';
+
+type UserVersionRow = { user_version: number };
+
+export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+
+  const row = await db.getFirstAsync<UserVersionRow>('PRAGMA user_version');
+  const currentVersion = row?.user_version ?? 0;
+
+  if (currentVersion > DATABASE_VERSION) {
+    throw new Error(
+      `Database version ${currentVersion} is newer than supported version ${DATABASE_VERSION}.`,
+    );
+  }
+
+  if (currentVersion < 1) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(SCHEMA_V1);
+      await tx.runAsync(
+        'INSERT OR IGNORE INTO app_meta (key, value) VALUES (?, ?)',
+        'database_revision',
+        '0',
+      );
+      await tx.runAsync(
+        "INSERT OR IGNORE INTO sequences (name, high_water_mark) VALUES ('CSR', 0), ('BS', 0), ('PA', 0)",
+      );
+      await tx.execAsync('PRAGMA user_version = 1;');
+    });
+  }
+
+  const now = new Date().toISOString();
+  await db.runAsync(
+    `INSERT OR IGNORE INTO settings
+      (id, business_name, business_address, contact_details, owner_name,
+       low_stock_notifications_enabled, app_lock_enabled, created_at, updated_at)
+     VALUES ('business', 'A.Ross Trading and Services', '', '', '', 1, 0, ?, ?)`,
+    now,
+    now,
+  );
+}

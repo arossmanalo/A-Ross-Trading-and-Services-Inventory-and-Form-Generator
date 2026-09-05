@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+*.log
+.DS_Store
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+tmp/
