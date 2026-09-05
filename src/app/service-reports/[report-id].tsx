@@ -233,6 +233,7 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Warranty" values={[report.warrantyText]} />
             <Text selectable style={styles.total}>Total Bill: {formatCentavos(report.totalBillCentavos)}</Text>
             {report.pdfState !== 'ready' ? <ActionButton disabled={busy} onPress={() => void retryPdf()}>Retry PDF</ActionButton> : <ActionButton disabled={busy} onPress={() => void sharePdf()}>Share PDF</ActionButton>}
+            <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId } })} variant="secondary">Signing & returned PDF</ActionButton>
             {report.documentState === 'finalized' ? (
               <>
                 <ActionButton disabled={busy} onPress={followUp} variant="secondary">Create follow-up CSR</ActionButton>

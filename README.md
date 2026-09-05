@@ -30,6 +30,8 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - Paid-in-full, down-payment/balance, and pay-later workflows with installment protection
 - Atomic `PA-` numbering, immutable payment history, and void-payment corrections
 - A4 Payment Acknowledgment PDFs with retry, sharing, references, and remaining balances
+- Manual remote-signing status and append-only returned signed-PDF import for CSRs and Billing Statements
+- Deterministic signed filenames, checksums, persistent private storage, and attachment sharing
 - On-device SQLite rollback diagnostic
 - Money, document-template, stock, customer-rule, and SQLite integrity tests
 
