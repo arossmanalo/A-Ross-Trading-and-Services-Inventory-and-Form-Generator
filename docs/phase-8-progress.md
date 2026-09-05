@@ -15,6 +15,6 @@
 
 ## Remaining
 
-- Supported older-backup migrations (currently packages must match schema version 5; newer versions are rejected).
+- Schema 1–4 packages are upgraded in memory before restore; unsupported newer schemas are rejected.
 - Device validation of `.arossbackup` sharing and private Drive manual upload flow.
 - Failure-injection, large-package, and on-device restore rehearsal.

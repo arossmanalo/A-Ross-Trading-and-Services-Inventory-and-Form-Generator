@@ -51,12 +51,14 @@ export function parseBackupPackage(bytes: Uint8Array): ParsedBackupPackage {
   if (!isRecord(payload) || !isRecord(payload.tables)) throw new Error('Backup data/tables.json is invalid.');
 
   const tableKeys = Object.keys(payload.tables);
-  if (tableKeys.length !== DATA_TABLES.length || DATA_TABLES.some(table => !tableKeys.includes(table))) {
+  const legacyMissing = manifest.schemaVersion < DATABASE_VERSION ? ['signature_captures'] : [];
+  if (tableKeys.some(table => !DATA_TABLES.includes(table as BackupTableName)) || DATA_TABLES.some(table => !tableKeys.includes(table) && !legacyMissing.includes(table))) {
     throw new Error('Backup table set does not match the supported schema.');
   }
   const tables = {} as Record<BackupTableName, BackupRow[]>;
   for (const table of DATA_TABLES) {
     const rows = payload.tables[table];
+    if (rows === undefined && legacyMissing.includes(table)) continue;
     if (!Array.isArray(rows)) throw new Error(`Backup table ${table} is invalid.`);
     if (rows.length !== manifest.recordCounts[table]) throw new Error(`Backup record count mismatch for ${table}.`);
     tables[table] = rows.map((row, index) => parseRow(row, `${table}[${index}]`));
@@ -101,7 +103,7 @@ export async function validateBackupPackage(bytes: Uint8Array): Promise<ParsedBa
     const actual = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, bytesToBase64(data));
     if (actual !== asset.checksum) throw new Error(`Backup asset checksum does not match: ${asset.filename}`);
   }
-  return parsed;
+  return migrateLegacyPackage(parsed);
 }
 
 /**
@@ -251,25 +253,26 @@ function restoreRow(table: BackupTableName, row: BackupRow, assets: BackupAssetM
 
 function parseManifest(value: unknown): BackupFileManifest {
   if (!isRecord(value) || value.app !== 'a-ross-inventory-and-form-generator' || value.format !== 'arossbackup' || value.formatVersion !== 1) throw new Error('Backup manifest format is unsupported.');
-  if (value.schemaVersion !== DATABASE_VERSION || !Number.isSafeInteger(value.schemaVersion)) throw new Error(`Backup schema version ${String(value.schemaVersion)} is not supported.`);
+  if (!Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1 || value.schemaVersion > DATABASE_VERSION) throw new Error(`Backup schema version ${String(value.schemaVersion)} is not supported.`);
   if (typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt))) throw new Error('Backup export date is invalid.');
   if (!Number.isSafeInteger(value.highestRevision) || value.highestRevision < 0) throw new Error('Backup revision marker is invalid.');
   if (typeof value.checksum !== 'string' || !value.checksum) throw new Error('Backup manifest checksum is missing.');
   if (typeof value.warning !== 'string' || !Array.isArray(value.assets) || !isRecord(value.recordCounts)) throw new Error('Backup manifest fields are invalid.');
   const recordCounts = {} as Record<BackupTableName, number>;
   const countKeys = Object.keys(value.recordCounts);
-  if (countKeys.length !== DATA_TABLES.length || DATA_TABLES.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
-  for (const table of DATA_TABLES) {
+  const expectedCountTables = DATA_TABLES.filter(table => value.schemaVersion === DATABASE_VERSION || table !== 'signature_captures');
+  if (countKeys.some(table => !expectedCountTables.includes(table as BackupTableName)) || expectedCountTables.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
+  for (const table of expectedCountTables) {
     const count = value.recordCounts[table];
     if (!Number.isSafeInteger(count) || count < 0) throw new Error(`Backup record count is invalid for ${table}.`);
-    recordCounts[table] = count;
+    recordCounts[table as BackupTableName] = count;
   }
   const assets = value.assets.map((asset, index) => parseAsset(asset, index));
   return {
     app: 'a-ross-inventory-and-form-generator',
     format: 'arossbackup',
     formatVersion: 1,
-    schemaVersion: DATABASE_VERSION,
+    schemaVersion: value.schemaVersion,
     exportedAt: value.exportedAt,
     highestRevision: value.highestRevision,
     recordCounts,
@@ -277,6 +280,23 @@ function parseManifest(value: unknown): BackupFileManifest {
     checksum: value.checksum,
     warning: value.warning,
   };
+}
+
+function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage {
+  if (parsed.manifest.schemaVersion === DATABASE_VERSION) return parsed;
+  const tables = { ...parsed.tables };
+  if (parsed.manifest.schemaVersion < 2) {
+    tables.service_reports = tables.service_reports.map(row => ({ billing_json: '[]', total_bill_centavos: 0, acknowledged_by_snapshot: '', ...row }));
+  }
+  if (parsed.manifest.schemaVersion < 4) {
+    tables.payments = tables.payments.map(row => ({ payment_kind: null, content_snapshot_json: null, render_template_snapshot: null, pdf_state: 'not_generated', share_state: 'not_shared', idempotency_key: null, ...row }));
+  }
+  if (parsed.manifest.schemaVersion < 5) {
+    tables.settings = tables.settings.map(row => ({ business_logo_data_url: null, ...row }));
+    tables.signature_captures = [];
+  }
+  const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
+  return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };
 }
 
 function parseAsset(value: unknown, index: number): BackupAssetManifest {

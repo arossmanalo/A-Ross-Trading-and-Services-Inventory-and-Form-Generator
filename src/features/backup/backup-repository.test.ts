@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import { DatabaseSync } from 'node:sqlite';
+import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,7 +41,7 @@ vi.mock('expo-sharing', () => ({
 
 import { createBackupPackage, getBackupStatus } from '@/features/backup/backup-repository';
 import { restoreBackupPackage, validateBackupPackage } from '@/features/backup/backup-restore';
-import { base64ToBytes } from '@/features/backup/zip';
+import { base64ToBytes, createStoredZip, readStoredZip } from '@/features/backup/zip';
 
 type Params = Array<string | number | null>;
 function adapter(database: DatabaseSync): SQLiteDatabase {
@@ -124,16 +125,56 @@ describe('backup repository', () => {
     const packageBase64 = files.get(exported.fileUri) ?? '';
     const bytes = base64ToBytes(packageBase64);
     const entries = new TextDecoder();
-    const zip = (await import('@/features/backup/zip')).readStoredZip(bytes);
+    const zip = readStoredZip(bytes);
     const manifest = JSON.parse(entries.decode(zip.get('manifest.json'))) as Record<string, unknown>;
     manifest.schemaVersion = 6;
     const data = entries.decode(zip.get('data/tables.json'));
-    const future = (await import('@/features/backup/zip')).createStoredZip([
+    const future = createStoredZip([
       { path: 'manifest.json', data: JSON.stringify(manifest) },
       { path: 'data/tables.json', data },
       { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
     ]);
     await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 6/);
     expect(raw.prepare('SELECT COUNT(*) AS count FROM backup_manifests').get()).toEqual({ count: 1 });
+  });
+
+  it('migrates a schema 1 package by filling columns introduced in later versions', async () => {
+    const exported = await createBackupPackage(db);
+    const bytes = base64ToBytes(files.get(exported.fileUri) ?? '');
+    const zip = readStoredZip(bytes);
+    const manifest = JSON.parse(new TextDecoder().decode(zip.get('manifest.json'))) as Record<string, any>;
+    const payload = JSON.parse(new TextDecoder().decode(zip.get('data/tables.json'))) as { tables: Record<string, any[]> };
+    delete payload.tables.signature_captures;
+    delete manifest.recordCounts.signature_captures;
+    manifest.schemaVersion = 1;
+    for (const row of payload.tables.service_reports) {
+      delete row.billing_json;
+      delete row.total_bill_centavos;
+      delete row.acknowledged_by_snapshot;
+    }
+    for (const row of payload.tables.payments) {
+      delete row.payment_kind;
+      delete row.content_snapshot_json;
+      delete row.render_template_snapshot;
+      delete row.pdf_state;
+      delete row.share_state;
+      delete row.idempotency_key;
+    }
+    for (const row of payload.tables.settings) delete row.business_logo_data_url;
+    const payloadJson = JSON.stringify(payload, null, 2);
+    const { checksum: _checksum, ...withoutChecksum } = manifest;
+    manifest.checksum = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify({ payloadChecksum: await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, payloadJson), manifestWithoutChecksum: withoutChecksum }, null, 2));
+    const legacy = createStoredZip([
+      { path: 'manifest.json', data: JSON.stringify(manifest, null, 2) },
+      { path: 'data/tables.json', data: payloadJson },
+      { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
+    ]);
+    const migrated = await validateBackupPackage(legacy);
+    expect(migrated.manifest.schemaVersion).toBe(1);
+    expect(migrated.tables.signature_captures).toEqual([]);
+    expect(migrated.tables.service_reports[0]).toMatchObject({ billing_json: '[]', total_bill_centavos: 0, acknowledged_by_snapshot: '' });
+    expect(migrated.tables.settings[0]).toHaveProperty('business_logo_data_url', null);
+    await expect(restoreBackupPackage(db, legacy, 'legacy.arossbackup')).resolves.toMatchObject({ filename: 'legacy.arossbackup', restoredExternalAssetCount: 1 });
+    expect(raw.prepare("SELECT billing_json,total_bill_centavos FROM service_reports WHERE id='csr'").get()).toEqual({ billing_json: '[]', total_bill_centavos: 0 });
   });
 });
