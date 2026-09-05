@@ -1,6 +1,6 @@
-import { Link } from 'expo-router';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -33,7 +33,7 @@ export default function DashboardScreen() {
   const [checkResult, setCheckResult] = useState<DatabaseSelfCheck | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let active = true;
     setCountsError(null);
     void Promise.all([
@@ -68,7 +68,7 @@ export default function DashboardScreen() {
     return () => {
       active = false;
     };
-  }, [db]);
+  }, [db]));
 
   const runSelfCheck = useCallback(async () => {
     setChecking(true);
@@ -115,6 +115,8 @@ export default function DashboardScreen() {
 
       <View style={styles.section}>
         <Text selectable style={styles.sectionTitle}>Start here</Text>
+        <ActionButton onPress={() => router.push('/reports')}>Financial reports</ActionButton>
+        <ActionButton variant="secondary" onPress={() => router.push('/reports/stock')}>Stock report</ActionButton>
         <Link href="/inventory" asChild>
           <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>

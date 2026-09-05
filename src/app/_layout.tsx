@@ -33,6 +33,8 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="index" options={{ title: 'Overview' }} />
+          <Stack.Screen name="reports/index" options={{ title: 'Financial reports' }} />
+          <Stack.Screen name="reports/stock" options={{ title: 'Stock report' }} />
           <Stack.Screen name="inventory/index" options={{ title: 'Inventory' }} />
           <Stack.Screen
             name="inventory/new"

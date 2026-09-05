@@ -35,6 +35,8 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - Offline customer/preparer signature canvas with append-only, retry-safe signed PDF versions
 - Saved preparer signature and PNG/JPEG business logo settings, frozen into newly issued CSR/BS/PA PDFs
 - Signature schema v5 migration, manual returned-PDF matching, PDF-header/size checks, and missing-file recovery messages
+- Financial reports with date/customer filters, independent sales/collection totals, current balances, expenses, and CSV sharing
+- Current stock report with item/SKU search, active/inactive/low-stock filters, and CSV sharing
 - On-device SQLite rollback diagnostic
 - Money, document-template, stock, customer-rule, and SQLite integrity tests
 

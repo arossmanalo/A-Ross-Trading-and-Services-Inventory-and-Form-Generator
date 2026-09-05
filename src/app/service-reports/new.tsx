@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
@@ -27,26 +27,31 @@ export default function NewServiceReportScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    let active = true;
     void listCustomers(db)
-      .then((rows) => setCustomers(rows.filter((customer) => customer.active)))
+      .then((rows) => { if (active) setCustomers(rows.filter((customer) => customer.active)); })
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Could not load customers.'));
-  }, [db]);
+    return () => { active = false; };
+  }, [db]));
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!customerId) {
       setEquipment([]);
       setEquipmentId('');
       return;
     }
+    let active = true;
     void getCustomerDetail(db, customerId)
       .then((customer) => {
+        if (!active) return;
         const rows = customer?.equipment.filter((entry) => entry.active) ?? [];
         setEquipment(rows);
         if (!rows.some((entry) => entry.id === equipmentId)) setEquipmentId('');
       })
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Could not load equipment.'));
-  }, [customerId, db, equipmentId]);
+    return () => { active = false; };
+  }, [customerId, db, equipmentId]));
 
   const createDraft = useCallback(async () => {
     setSaving(true);
@@ -74,6 +79,7 @@ export default function NewServiceReportScreen() {
         <Text selectable style={styles.introText}>Choose one registered customer and one of their active equipment records.</Text>
       </View>
       <Text selectable style={styles.sectionTitle}>Customer</Text>
+      {!customers.length ? <View style={styles.choices}><Text selectable style={styles.help}>No active customers are available. Register a customer and add their equipment before creating a CSR.</Text><ActionButton variant="secondary" onPress={() => router.push('/customers/new')}>Register customer</ActionButton></View> : null}
       <View style={styles.choices}>
         {customers.map((customer) => (
           <Choice key={customer.id} label={customer.name} selected={customer.id === customerId} onPress={() => setCustomerId(customer.id)} />
@@ -91,7 +97,7 @@ export default function NewServiceReportScreen() {
                 onPress={() => setEquipmentId(entry.id)}
               />
             ))}
-            {!equipment.length ? <Text selectable style={styles.help}>This customer has no active equipment.</Text> : null}
+            {!equipment.length ? <><Text selectable style={styles.help}>This customer has no active equipment.</Text><ActionButton variant="secondary" onPress={() => router.push({pathname:'/customers/equipment/new',params:{customerId}})}>Add equipment for this customer</ActionButton></> : null}
           </View>
         </>
       ) : null}
