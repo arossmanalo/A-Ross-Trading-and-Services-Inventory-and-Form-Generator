@@ -37,6 +37,8 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - Signature schema v5 migration, manual returned-PDF matching, PDF-header/size checks, and missing-file recovery messages
 - Financial reports with date/customer filters, independent sales/collection totals, current balances, expenses, and CSV sharing
 - Current stock report with item/SKU search, active/inactive/low-stock filters, and CSV sharing
+- `.arossbackup` export to the Android share sheet with revision coverage and unencrypted-data warning
+- Validated replace-only backup restore with safety export, atomic rollback, signed-PDF recovery, and schema 1–4 migration
 - On-device SQLite rollback diagnostic
 - Money, document-template, stock, customer-rule, and SQLite integrity tests
 
@@ -53,4 +55,4 @@ Open the app in Expo Go first. On the dashboard, run **Database self-check** to 
 
 See `plan.md` and `srs.md` for the approved behavior and delivery phases.
 
-Phase 6 implementation and verification details are in `docs/phase-6-verification.md`. Production acceptance still requires Android device testing and owner review of the final business logo/header and printed templates. Reports/search (Phase 7), backup/restore (Phase 8), and final device/UAT/release work remain.
+Phase 6 implementation and verification details are in `docs/phase-6-verification.md`. Phase 9 verification is tracked in `docs/phase-9-verification.md`; production acceptance still requires Android device testing and owner review of the final business logo/header and printed templates. Phase 10 covers owner UAT, APK/internal release, and the backup/recovery rehearsal.

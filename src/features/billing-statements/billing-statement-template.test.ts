@@ -24,4 +24,18 @@ describe('billing statement template', () => {
     expect(html).toContain('Liquid Detergent &lt;Premium&gt;');
     expect(html).toContain('ABC123DEF456');
   });
+
+  it('keeps long charge tables paginable with repeated headings', () => {
+    const lines = Array.from({ length: 180 }, (_, index) => ({
+      description: `Service line ${index}`,
+      quantity: 1,
+      unitLabel: 'service',
+      unitPriceCentavos: 100,
+      amountCentavos: 100,
+    }));
+    const html = buildBillingStatementHtml({ ...fixture, lines, subtotalCentavos: 18000, totalCentavos: 18000 });
+    expect(html).toContain('thead{display:table-header-group}');
+    expect(html.match(/<tr>/g)?.length).toBe(181);
+    expect(html).toContain('Service line 179');
+  });
 });

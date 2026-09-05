@@ -17,7 +17,20 @@ describe('stored zip writer', () => {
   it('rejects unsafe entry paths and invalid base64', () => {
     expect(() => createStoredZip([{ path: '../bad.json', data: '{}' }])).toThrow(/entry path/);
     expect(() => createStoredZip([{ path: '/bad.json', data: '{}' }])).toThrow(/entry path/);
+    expect(() => createStoredZip([{ path: 'same.json', data: '{}' }, { path: 'same.json', data: '{}' }])).toThrow(/Duplicate/);
     expect(() => base64ToBytes('!!!!')).toThrow(/base64/);
+  });
+
+  it('rejects encrypted and compressed entries', () => {
+    const compressed = createStoredZip([{ path: 'data.json', data: '{}' }]);
+    const centralOffset = findSignature(compressed, [0x50, 0x4b, 0x01, 0x02]);
+    compressed[centralOffset + 10] = 8;
+    expect(() => readStoredZip(compressed)).toThrow(/Unsupported ZIP entry/);
+
+    const encrypted = createStoredZip([{ path: 'data.json', data: '{}' }]);
+    const encryptedCentralOffset = findSignature(encrypted, [0x50, 0x4b, 0x01, 0x02]);
+    encrypted[encryptedCentralOffset + 8] = 1;
+    expect(() => readStoredZip(encrypted)).toThrow(/Unsupported ZIP entry/);
   });
 
   it('reads the stored archive and verifies entry checksums', () => {
@@ -36,3 +49,10 @@ describe('stored zip writer', () => {
     expect(() => readStoredZip(zip)).toThrow(/checksum|directory|truncated/i);
   });
 });
+
+function findSignature(bytes: Uint8Array, signature: number[]): number {
+  for (let index = 0; index <= bytes.length - signature.length; index += 1) {
+    if (signature.every((value, offset) => bytes[index + offset] === value)) return index;
+  }
+  throw new Error('Signature not found in test ZIP.');
+}

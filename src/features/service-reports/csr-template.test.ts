@@ -39,4 +39,15 @@ describe('CSR template', () => {
       '&lt;script&gt;&quot;test&quot; &amp; more&lt;/script&gt;',
     );
   });
+
+  it('keeps long reports paginable and preserves every usage row', () => {
+    const html = buildCsrHtml({
+      ...SNAPSHOT,
+      reportedProblem: Array.from({ length: 40 }, (_, index) => `Problem ${index} with a long description`),
+      usages: Array.from({ length: 120 }, (_, index) => ({ description: `Part ${index}`, quantity: 1, unitLabel: 'pc', billable: index % 2 === 0 })),
+    });
+    expect(html).toContain('tr{break-inside:avoid}thead{display:table-header-group}');
+    expect(html.match(/<tr>/g)?.length).toBe(121);
+    expect(html).toContain('Part 119');
+  });
 });
