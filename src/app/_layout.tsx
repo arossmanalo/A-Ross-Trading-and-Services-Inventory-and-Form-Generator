@@ -2,11 +2,12 @@ import { Suspense } from 'react';
 import { Stack } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 
 import { migrateDatabase } from '@/db/migrations';
 import { DATABASE_NAME } from '@/db/schema';
 import { colors } from '@/theme/colors';
+import { getContentWidth } from '@/theme/layout';
 
 function LoadingDatabase() {
   return (
@@ -19,6 +20,8 @@ function LoadingDatabase() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const contentWidth = getContentWidth(width);
 
   return (
     <Suspense fallback={<LoadingDatabase />}>
@@ -26,7 +29,12 @@ export default function RootLayout() {
         <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
         <Stack
           screenOptions={{
-            contentStyle: { backgroundColor: colors.background },
+            contentStyle: {
+              flex: 1,
+              alignSelf: 'center',
+              width: contentWidth,
+              backgroundColor: colors.background,
+            },
             headerTintColor: colors.label,
             headerStyle: { backgroundColor: colors.surface },
             headerShadowVisible: false,

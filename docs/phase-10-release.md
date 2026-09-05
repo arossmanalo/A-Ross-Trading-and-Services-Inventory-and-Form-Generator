@@ -66,6 +66,8 @@ Record the app version, APK build id, device model/API level, date, and result f
 | 16 | Accessibility and navigation | Back navigation, keyboard behavior, scrolling, touch targets, readable scaling, and non-color-only states work on the tablet | |
 | 17 | Business visual acceptance | Owner approves the active logo, address/contact header, CSR, Billing Statement, and Payment Acknowledgment layout | |
 
+For responsive acceptance, repeat the navigation, forms, lists, dashboards, and long-document screens on one phone-sized window and the owner tablet. Phone content should use the available width without horizontal clipping; tablet content should remain centered, readable, and fully scrollable without stretched form fields or clipped buttons. Rotate only if the device/build is configured to allow it; the current product orientation is portrait.
+
 ## Backup and recovery rehearsal
 
 Use a test copy of the owner's private Drive folder and record filenames/checksums rather than assuming Drive retention:
