@@ -177,4 +177,24 @@ describe('backup repository', () => {
     await expect(restoreBackupPackage(db, legacy, 'legacy.arossbackup')).resolves.toMatchObject({ filename: 'legacy.arossbackup', restoredExternalAssetCount: 1 });
     expect(raw.prepare("SELECT billing_json,total_bill_centavos FROM service_reports WHERE id='csr'").get()).toEqual({ billing_json: '[]', total_bill_centavos: 0 });
   });
+
+  it('rolls back the replacement when a validly-shaped row violates a foreign key', async () => {
+    const exported = await createBackupPackage(db);
+    const bytes = base64ToBytes(files.get(exported.fileUri) ?? '');
+    const zip = readStoredZip(bytes);
+    const manifest = JSON.parse(new TextDecoder().decode(zip.get('manifest.json'))) as Record<string, any>;
+    const payload = JSON.parse(new TextDecoder().decode(zip.get('data/tables.json'))) as { tables: Record<string, any[]> };
+    payload.tables.customer_equipment[0].customer_id = 'missing-customer';
+    const payloadJson = JSON.stringify(payload, null, 2);
+    const { checksum: _checksum, ...withoutChecksum } = manifest;
+    manifest.checksum = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify({ payloadChecksum: await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, payloadJson), manifestWithoutChecksum: withoutChecksum }, null, 2));
+    const broken = createStoredZip([
+      { path: 'manifest.json', data: JSON.stringify(manifest, null, 2) },
+      { path: 'data/tables.json', data: payloadJson },
+      { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
+    ]);
+    await expect(restoreBackupPackage(db, broken, 'broken.arossbackup')).rejects.toThrow(/FOREIGN KEY/i);
+    expect(raw.prepare("SELECT customer_id FROM customer_equipment WHERE id='equipment'").get()).toEqual({ customer_id: 'customer' });
+    expect(raw.prepare("SELECT name FROM customers WHERE id='customer'").get()).toEqual({ name: 'Laundry' });
+  });
 });
