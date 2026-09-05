@@ -52,6 +52,7 @@ export default function BackupScreen() {
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
       if (result.canceled) return;
       const asset = result.assets[0];
+      if (!asset) throw new Error('No backup file was selected.');
       if (!asset.name.toLowerCase().endsWith('.arossbackup')) throw new Error('Select an .arossbackup file.');
       const bytes = await readBackupFile(asset.uri);
       const confirmed = await new Promise<boolean>(resolve => {
@@ -62,6 +63,7 @@ export default function BackupScreen() {
             { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
             { text: 'Validate and restore', style: 'destructive', onPress: () => resolve(true) },
           ],
+          { onDismiss: () => resolve(false) },
         );
       });
       if (!confirmed) return;

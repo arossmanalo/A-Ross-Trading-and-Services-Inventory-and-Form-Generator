@@ -79,6 +79,8 @@ export function readStoredZip(bytes: Uint8Array): StoredZipArchive {
     }
     const localNameLength = readU16(bytes, localOffset + 26);
     const localExtraLength = readU16(bytes, localOffset + 28);
+    const localName = decodeUtf8(bytes.slice(localOffset + 30, localOffset + 30 + localNameLength));
+    if (localName !== name) throw new Error(`ZIP entry names do not match: ${name}`);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const dataEnd = dataStart + uncompressedSize;
     if (dataEnd > bytes.length) throw new Error(`ZIP entry is truncated: ${name}`);

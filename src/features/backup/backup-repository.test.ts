@@ -118,4 +118,22 @@ describe('backup repository', () => {
     expect(raw.prepare("SELECT private_path FROM document_attachments WHERE id='signed'").get()).toEqual({ private_path: 'file://documents/documents/signed/CSR-000001-signed.pdf' });
     expect(raw.prepare("SELECT value FROM app_meta WHERE key='database_revision'").get()).toEqual({ value: '5' });
   });
+
+  it('rejects a package from a newer schema before attempting restore', async () => {
+    const exported = await createBackupPackage(db);
+    const packageBase64 = files.get(exported.fileUri) ?? '';
+    const bytes = base64ToBytes(packageBase64);
+    const entries = new TextDecoder();
+    const zip = (await import('@/features/backup/zip')).readStoredZip(bytes);
+    const manifest = JSON.parse(entries.decode(zip.get('manifest.json'))) as Record<string, unknown>;
+    manifest.schemaVersion = 6;
+    const data = entries.decode(zip.get('data/tables.json'));
+    const future = (await import('@/features/backup/zip')).createStoredZip([
+      { path: 'manifest.json', data: JSON.stringify(manifest) },
+      { path: 'data/tables.json', data },
+      { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
+    ]);
+    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 6/);
+    expect(raw.prepare('SELECT COUNT(*) AS count FROM backup_manifests').get()).toEqual({ count: 1 });
+  });
 });
