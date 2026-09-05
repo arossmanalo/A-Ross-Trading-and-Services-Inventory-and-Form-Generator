@@ -38,6 +38,7 @@ export default function RootLayout() {
           <Stack.Screen name="reports/stock" options={{ title: 'Stock report' }} />
           <Stack.Screen name="reports/movements" options={{ title: 'Movement report' }} />
           <Stack.Screen name="reports/audit" options={{ title: 'Audit report' }} />
+          <Stack.Screen name="reports/collections" options={{ title: 'Collections report' }} />
           <Stack.Screen name="inventory/index" options={{ title: 'Inventory' }} />
           <Stack.Screen
             name="inventory/new"
