@@ -11,6 +11,7 @@ Phase 9 hardens the offline app before owner UAT. Automated checks run on every 
 - Backup manifest, record-count, column, signed-asset checksum, schema migration, safety-export, and restore tests.
 - Long CSR and Billing Statement fixtures covering 120 and 180 charge/usage rows, repeated table headings, and unsplit rows.
 - Full TypeScript check, Vitest suite, and Android bundle export.
+- Offline Metro smoke start succeeds with `npx expo start --offline --port 8084`; the development-tools fallback warning is non-blocking.
 
 Run the automated gate from the repository root:
 
