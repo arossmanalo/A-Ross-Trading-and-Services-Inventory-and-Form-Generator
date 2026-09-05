@@ -14,15 +14,17 @@ import {
 import { ActionButton } from '@/components/action-button';
 import { MetricCard } from '@/components/metric-card';
 import { runDatabaseSelfCheck, type DatabaseSelfCheck } from '@/db/phase-zero-check';
+import { getDashboardSummary, type DashboardActivity } from '@/features/reports/dashboard-summary';
 import { colors } from '@/theme/colors';
 
 type DashboardCounts = {
   activeItems: number;
   lowStockItems: number;
   customers: number;
+  recentActivity: DashboardActivity[];
 };
 
-const EMPTY_COUNTS: DashboardCounts = { activeItems: 0, lowStockItems: 0, customers: 0 };
+const EMPTY_COUNTS: DashboardCounts = { activeItems: 0, lowStockItems: 0, customers: 0, recentActivity: [] };
 
 export default function DashboardScreen() {
   useColorScheme();
@@ -36,27 +38,10 @@ export default function DashboardScreen() {
   useFocusEffect(useCallback(() => {
     let active = true;
     setCountsError(null);
-    void Promise.all([
-      db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM items WHERE active = 1'),
-      db.getFirstAsync<{ count: number }>(
-        `SELECT COUNT(*) AS count
-         FROM items i
-         WHERE i.active = 1
-           AND COALESCE((
-             SELECT SUM(m.quantity_delta_integer)
-             FROM inventory_movements m
-             WHERE m.item_id = i.id
-           ), 0) <= i.low_stock_threshold`,
-      ),
-      db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM customers WHERE active = 1'),
-    ])
-      .then(([items, lowStock, customers]) => {
+    void getDashboardSummary(db)
+      .then((summary) => {
         if (active) {
-          setCounts({
-            activeItems: items?.count ?? 0,
-            lowStockItems: lowStock?.count ?? 0,
-            customers: customers?.count ?? 0,
-          });
+          setCounts(summary);
         }
       })
       .catch((error: unknown) => {
@@ -226,6 +211,20 @@ export default function DashboardScreen() {
         </Link>
       </View>
 
+      <View style={styles.section}>
+        <Text selectable style={styles.sectionTitle}>Recent activity</Text>
+        {counts.recentActivity.length > 0 ? counts.recentActivity.map(activity => (
+          <View key={activity.id} style={styles.activityCard}>
+            <Text selectable style={styles.activityEvent}>{activity.eventType}</Text>
+            <Text selectable style={styles.featureBody}>
+              {formatEntity(activity.entityType)} - {activity.createdAt}
+            </Text>
+          </View>
+        )) : (
+          <Text selectable style={styles.featureBody}>No activity recorded yet.</Text>
+        )}
+      </View>
+
       <View style={styles.diagnostic}>
         <View style={styles.diagnosticHeader}>
           <View style={styles.diagnosticCopy}>
@@ -379,6 +378,18 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
   },
+  activityCard: {
+    padding: 14,
+    gap: 4,
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surface,
+  },
+  activityEvent: {
+    color: colors.label,
+    fontSize: 14,
+    fontWeight: '800',
+  },
   diagnostic: {
     gap: 14,
     padding: 17,
@@ -414,3 +425,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.995 }],
   },
 });
+
+function formatEntity(entityType: string): string {
+  return entityType.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
