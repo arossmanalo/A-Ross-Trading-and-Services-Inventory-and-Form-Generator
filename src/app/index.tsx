@@ -121,6 +121,7 @@ export default function DashboardScreen() {
         <ActionButton variant="secondary" onPress={() => router.push('/reports/movements')}>Movement report</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/audit')}>Audit report</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/collections')}>Collections report</ActionButton>
+        <ActionButton variant="secondary" onPress={() => router.push('/reports/sales')}>Sales report</ActionButton>
         <Link href="/inventory" asChild>
           <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>

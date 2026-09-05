@@ -12,13 +12,13 @@
 - Audit report with actual timestamp date range, entity-type filter, loaded-row search, and CSV sharing of event details.
 - Global search across customers, equipment, inventory items, services, CSRs, Billing Statements, and Payment Acknowledgments.
 - Collections report with payment business date range, optional customer, active/voided/all state, method filter, row search, active collected total, and CSV sharing.
+- Sales line report with finalized Billing Statement business date range, optional customer, item/service/expense filter, row search, and CSV sharing. Statement-level discounts remain unallocated to lines.
 - CSR creation now explains the empty-customer prerequisite and refreshes customer/equipment options when returning to the screen.
 
 ## Remaining
 
 - Wider date/state/equipment filters on document lists.
 - Expanded dashboard, recent activity, and backup status once Phase 8 exists.
-- Detailed sales reports with additional filters.
 - Report PDF exports and device validation of CSV sharing.
 
 Phase 8 backup/restore and subsequent device/UAT/release phases are still outstanding. No reporting feature is presented as true profit accounting.
