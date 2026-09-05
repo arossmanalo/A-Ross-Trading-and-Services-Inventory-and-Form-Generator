@@ -8,13 +8,14 @@
 - Net Revenue After Recorded Expenses can be negative. Multiple payments and expenses cannot multiply sales totals through joins.
 - Financial CSV export retains the filters and calculation scope of the displayed results.
 - Current stock report with item/SKU/unit search, active/inactive/low-stock filters, CSV sharing, and links to existing item movement history. Inactive items never enter the low-stock report.
+- Inventory movement report with recorded timestamp date range, optional item scope, movement-type filter, loaded-row search, incoming/outgoing/net summaries, and CSV sharing.
 - CSR creation now explains the empty-customer prerequisite and refreshes customer/equipment options when returning to the screen.
 
 ## Remaining
 
 - Cross-document search and wider date/state/equipment filters.
 - Expanded dashboard, recent activity, and backup status once Phase 8 exists.
-- Detailed sales, collections, movement, and audit reports with additional filters.
+- Detailed sales, collections, and audit reports with additional filters.
 - Report PDF exports and device validation of CSV sharing.
 
 Phase 8 backup/restore and subsequent device/UAT/release phases are still outstanding. No reporting feature is presented as true profit accounting.
