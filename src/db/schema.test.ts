@@ -3,14 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3 } from './schema';
 
 describe('database schema', () => {
   let db: DatabaseSync;
 
   beforeEach(() => {
     db = new DatabaseSync(':memory:');
-    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2}`);
+    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3}`);
   });
 
   afterEach(() => {
@@ -119,5 +119,10 @@ describe('database schema', () => {
         'document_attachments_one_generated_pdf',
       ]),
     );
+  });
+
+  it('adds the billing statement double-posting guard', () => {
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>;
+    expect(indexes.map((index) => index.name)).toContain('stock_transactions_one_active_statement_sale');
   });
 });

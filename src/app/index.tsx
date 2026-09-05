@@ -187,6 +187,21 @@ export default function DashboardScreen() {
             <Text selectable style={styles.chevron}>›</Text>
           </Pressable>
         </Link>
+
+        <Link href="/billing-statements" asChild>
+          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+            <View style={styles.featureIcon}>
+              <Text selectable style={styles.featureIconText}>06</Text>
+            </View>
+            <View style={styles.featureCopy}>
+              <Text selectable style={styles.featureTitle}>Billing statements</Text>
+              <Text selectable style={styles.featureBody}>
+                Combine charges, expenses, discounts, PDFs, and direct inventory sales.
+              </Text>
+            </View>
+            <Text selectable style={styles.chevron}>›</Text>
+          </Pressable>
+        </Link>
       </View>
 
       <View style={styles.diagnostic}>

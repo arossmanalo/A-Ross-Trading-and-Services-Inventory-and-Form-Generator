@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -315,4 +315,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS stock_transactions_one_active_csr_usage
 CREATE UNIQUE INDEX IF NOT EXISTS document_attachments_one_generated_pdf
   ON document_attachments(owner_type, owner_id)
   WHERE attachment_type = 'generated_pdf';
+`;
+
+export const SCHEMA_V3 = `
+CREATE UNIQUE INDEX IF NOT EXISTS stock_transactions_one_active_statement_sale
+  ON stock_transactions(billing_statement_id)
+  WHERE transaction_type = 'sale' AND state = 'active';
 `;

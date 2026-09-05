@@ -73,6 +73,11 @@ export default function RootLayout() {
           <Stack.Screen name="service-reports/[report-id]" options={{ title: 'CSR' }} />
           <Stack.Screen name="service-reports/item-usage/new" options={{ title: 'Add Item Usage', presentation: 'modal' }} />
           <Stack.Screen name="service-reports/void" options={{ title: 'Void CSR', presentation: 'modal' }} />
+          <Stack.Screen name="billing-statements/index" options={{ title: 'Billing Statements' }} />
+          <Stack.Screen name="billing-statements/new" options={{ title: 'New Statement Draft', presentation: 'modal' }} />
+          <Stack.Screen name="billing-statements/[statement-id]" options={{ title: 'Billing Statement' }} />
+          <Stack.Screen name="billing-statements/charge/new" options={{ title: 'Add Charge', presentation: 'modal' }} />
+          <Stack.Screen name="billing-statements/void" options={{ title: 'Void Statement', presentation: 'modal' }} />
         </Stack>
       </SQLiteProvider>
     </Suspense>

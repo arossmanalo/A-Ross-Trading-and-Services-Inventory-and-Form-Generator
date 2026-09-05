@@ -1,0 +1,30 @@
+/// <reference types="node" />
+
+import { DatabaseSync } from 'node:sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3 } from '@/db/schema';
+
+let idCounter=0;
+vi.mock('expo-crypto',()=>({randomUUID:()=>`test-id-${++idCounter}`,CryptoDigestAlgorithm:{SHA256:'SHA-256'},digestStringAsync:async()=> 'ABCDEF1234567890'}));
+
+import { addCsrUsageLine, addDirectItemLine, addServiceLine, addStatementExpense, createBillingStatementDraft, finalizeBillingStatement, updateBillingStatementDraft, voidBillingStatement } from './billing-statement-repository';
+
+type Params=Array<string|number|null>;
+function adapter(database:DatabaseSync):SQLiteDatabase {
+  const api={
+    getFirstAsync:async<T>(sql:string,...params:Params)=>database.prepare(sql).get(...params) as T|undefined,
+    getAllAsync:async<T>(sql:string,...params:Params)=>database.prepare(sql).all(...params) as T[],
+    runAsync:async(sql:string,...params:Params)=>{const result=database.prepare(sql).run(...params);return{changes:Number(result.changes),lastInsertRowId:Number(result.lastInsertRowid)};},
+    withExclusiveTransactionAsync:async<T>(task:(tx:SQLiteDatabase)=>Promise<T>)=>{database.exec('BEGIN IMMEDIATE');try{const result=await task(api as unknown as SQLiteDatabase);database.exec('COMMIT');return result;}catch(error){database.exec('ROLLBACK');throw error;}},
+  };
+  return api as unknown as SQLiteDatabase;
+}
+
+describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteDatabase;beforeEach(()=>{idCounter=0;raw=new DatabaseSync(':memory:');raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}`);const now='2026-09-05T00:00:00.000Z';raw.prepare("INSERT INTO app_meta(key,value) VALUES('database_revision','0')").run();raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',0),('PA',0)");raw.prepare(`INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner',?,?)`).run(now,now);raw.prepare(`INSERT INTO customers(id,name,address,active,created_at,updated_at) VALUES('customer','Laundry','Sariaya',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO items(id,name,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Detergent','carboy',120000,1,?,?)`).run(now,now);raw.prepare(`INSERT INTO inventory_movements(id,item_id,movement_type,quantity_delta_integer,description,created_at) VALUES('opening','item','restock',10,'Opening',?)`).run(now);raw.prepare(`INSERT INTO services(id,name,base_rate_centavos,active,created_at,updated_at) VALUES('service','Labor',50000,1,?,?)`).run(now,now);db=adapter(raw);});afterEach(()=>raw.close());
+
+  it('finalizes mixed charges atomically and reverses returned direct stock on void',async()=>{const statementId=await createBillingStatementDraft(db,{customerId:'customer',businessDate:'2026-09-05'});await addDirectItemLine(db,statementId,{itemId:'item',quantity:2});await addServiceLine(db,statementId,{serviceId:'service'});await addStatementExpense(db,statementId,{description:'Parking',actualCostCentavos:10000,billable:true,billedAmountCentavos:15000});await addStatementExpense(db,statementId,{description:'Meals',actualCostCentavos:8000,billable:false});await updateBillingStatementDraft(db,statementId,{businessDate:'2026-09-05',discountType:'percentage',discountValue:1000});const finalized=await finalizeBillingStatement(db,statementId);expect(finalized.bsNumber).toBe('BS-000001');expect(finalized.snapshot.subtotalCentavos).toBe(305000);expect(finalized.snapshot.totalCentavos).toBe(274500);expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(8);await expect(finalizeBillingStatement(db,statementId)).resolves.toMatchObject({bsNumber:'BS-000001'});expect((raw.prepare("SELECT COUNT(*) AS count FROM stock_transactions WHERE billing_statement_id=? AND transaction_type='sale'").get(statementId) as {count:number}).count).toBe(1);await voidBillingStatement(db,statementId,'Incorrect customer',[{itemId:'item',returnedToStock:true}]);expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(10);});
+
+  it('bills a CSR item without deducting its already-posted stock again',async()=>{const now='2026-09-05T00:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO service_reports(id,csr_number,customer_id,equipment_id,document_state,service_outcome,business_date,created_at,finalized_at) VALUES('csr','CSR-000001','customer','equipment','finalized','completed','2026-09-05',?,?)`).run(now,now);raw.prepare(`INSERT INTO service_report_item_usage(id,service_report_id,item_id,quantity_integer,billable,resolved_selling_price_centavos,price_source,description_snapshot,created_at) VALUES('usage','csr','item',1,1,120000,'base','Detergent',?)`).run(now);raw.prepare(`INSERT INTO inventory_movements(id,item_id,movement_type,quantity_delta_integer,service_report_id,description,created_at) VALUES('csr-use','item','sale',-1,'csr','CSR use',?)`).run(now);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:'csr',businessDate:'2026-09-05'});await addCsrUsageLine(db,statementId,'usage');await finalizeBillingStatement(db,statementId);expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(9);expect((raw.prepare("SELECT COUNT(*) AS count FROM stock_transactions WHERE billing_statement_id=? AND transaction_type='sale'").get(statementId) as {count:number}).count).toBe(0);});
+});

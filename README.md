@@ -22,8 +22,13 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - Atomic CSR numbering, immutable snapshots, stock posting, and price-change resolution
 - Legal-size CSR HTML/PDF renderer with persistent files, retry, and manual sharing
 - Linked follow-up CSRs and void/reissue with per-item physical disposition
+- Unnumbered Billing Statement drafts linked to an optional finalized CSR
+- Direct item, catalog service, CSR item, billable-expense, and non-chargeable expense entry
+- Fixed/percentage discounts with frozen VAT, pricing, and content snapshots
+- Atomic statement numbering and direct-sale stock posting without double-deducting CSR usage
+- A4 Billing Statement PDF generation, retry, manual sharing, and unpaid void disposition
 - On-device SQLite rollback diagnostic
-- Money, stock, customer-rule, and SQLite integrity tests
+- Money, document-template, stock, customer-rule, and SQLite integrity tests
 
 ## Commands
 

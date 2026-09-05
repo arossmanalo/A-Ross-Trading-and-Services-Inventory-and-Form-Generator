@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { DATABASE_VERSION, SCHEMA_V1, SCHEMA_V2 } from '@/db/schema';
+import { DATABASE_VERSION, SCHEMA_V1, SCHEMA_V2, SCHEMA_V3 } from '@/db/schema';
 
 type UserVersionRow = { user_version: number };
 
@@ -35,6 +35,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await db.withExclusiveTransactionAsync(async (tx) => {
       await tx.execAsync(SCHEMA_V2);
       await tx.execAsync('PRAGMA user_version = 2;');
+    });
+  }
+
+  if (currentVersion < 3) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(SCHEMA_V3);
+      await tx.execAsync('PRAGMA user_version = 3;');
     });
   }
 
