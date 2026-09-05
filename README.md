@@ -55,4 +55,4 @@ Open the app in Expo Go first. On the dashboard, run **Database self-check** to 
 
 See `plan.md` and `srs.md` for the approved behavior and delivery phases.
 
-Phase 6 implementation and verification details are in `docs/phase-6-verification.md`. Phase 9 verification is tracked in `docs/phase-9-verification.md`; production acceptance still requires Android device testing and owner review of the final business logo/header and printed templates. Phase 10 covers owner UAT, APK/internal release, and the backup/recovery rehearsal.
+Phase 6 implementation and verification details are in `docs/phase-6-verification.md`. Phase 9 verification is tracked in `docs/phase-9-verification.md`. Phase 10's owner UAT, internal APK build, and backup/recovery runbook is in `docs/phase-10-release.md`; production acceptance still requires Android device testing and owner review of the final business logo/header and printed templates.
