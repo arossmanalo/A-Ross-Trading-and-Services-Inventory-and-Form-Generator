@@ -14,6 +14,7 @@ import {
 import { ActionButton } from '@/components/action-button';
 import { MetricCard } from '@/components/metric-card';
 import { runDatabaseSelfCheck, type DatabaseSelfCheck } from '@/db/phase-zero-check';
+import type { BackupStatus } from '@/features/backup/backup-repository';
 import { getDashboardSummary, type DashboardActivity } from '@/features/reports/dashboard-summary';
 import { colors } from '@/theme/colors';
 
@@ -21,10 +22,23 @@ type DashboardCounts = {
   activeItems: number;
   lowStockItems: number;
   customers: number;
+  backupStatus: BackupStatus;
   recentActivity: DashboardActivity[];
 };
 
-const EMPTY_COUNTS: DashboardCounts = { activeItems: 0, lowStockItems: 0, customers: 0, recentActivity: [] };
+const EMPTY_COUNTS: DashboardCounts = {
+  activeItems: 0,
+  lowStockItems: 0,
+  customers: 0,
+  backupStatus: {
+    currentRevision: 0,
+    lastExport: null,
+    revisionsNotExported: 0,
+    finalizedRecordCount: 0,
+    noticeDue: false,
+  },
+  recentActivity: [],
+};
 
 export default function DashboardScreen() {
   useColorScheme();
@@ -100,6 +114,7 @@ export default function DashboardScreen() {
 
       <View style={styles.section}>
         <Text selectable style={styles.sectionTitle}>Start here</Text>
+        <ActionButton variant={counts.backupStatus.noticeDue ? 'primary' : 'secondary'} onPress={() => router.push('/backup')}>Backup</ActionButton>
         <ActionButton onPress={() => router.push('/search')}>Search records</ActionButton>
         <ActionButton onPress={() => router.push('/reports')}>Financial reports</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/stock')}>Stock report</ActionButton>
@@ -209,6 +224,18 @@ export default function DashboardScreen() {
             <Text selectable style={styles.chevron}>›</Text>
           </Pressable>
         </Link>
+      </View>
+
+      <View style={styles.section}>
+        <Text selectable style={styles.sectionTitle}>Backup</Text>
+        <View style={styles.activityCard}>
+          <Text selectable style={styles.activityEvent}>
+            {counts.backupStatus.revisionsNotExported === 0 ? 'Latest export is current' : `${counts.backupStatus.revisionsNotExported} revision(s) need export`}
+          </Text>
+          <Text selectable style={[styles.featureBody, counts.backupStatus.noticeDue ? styles.warningText : null]}>
+            {counts.backupStatus.noticeDue ? 'Seven-day backup notice is due.' : 'Manual private Drive upload after export.'}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -419,6 +446,10 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 13,
     lineHeight: 18,
+  },
+  warningText: {
+    color: colors.warning,
+    fontWeight: '700',
   },
   pressed: {
     opacity: 0.72,
