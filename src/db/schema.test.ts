@@ -3,14 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2 } from './schema';
 
 describe('database schema', () => {
   let db: DatabaseSync;
 
   beforeEach(() => {
     db = new DatabaseSync(':memory:');
-    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1}`);
+    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2}`);
   });
 
   afterEach(() => {
@@ -103,5 +103,21 @@ describe('database schema', () => {
       .get() as { count: number };
     expect(versions.count).toBe(2);
     expect(active.count).toBe(1);
+  });
+
+  it('adds the CSR v2 snapshot fields and double-posting guards', () => {
+    const columns = db.prepare("PRAGMA table_info('service_reports')").all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining(['billing_json', 'total_bill_centavos', 'acknowledged_by_snapshot']),
+    );
+
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>;
+    expect(indexes.map((index) => index.name)).toEqual(
+      expect.arrayContaining([
+        'service_report_usage_one_item',
+        'stock_transactions_one_active_csr_usage',
+        'document_attachments_one_generated_pdf',
+      ]),
+    );
   });
 });

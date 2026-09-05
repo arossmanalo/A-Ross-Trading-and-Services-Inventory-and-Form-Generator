@@ -17,6 +17,11 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - Editable service catalog with owner-controlled default rates and activation controls
 - Versioned customer-specific item pricing with base-price fallback
 - Business identity settings and low-stock notification preference
+- Autosaved, unnumbered CSR drafts with customer/equipment selection
+- Billable and non-billable CSR item usage with finalization-time stock rechecks
+- Atomic CSR numbering, immutable snapshots, stock posting, and price-change resolution
+- Legal-size CSR HTML/PDF renderer with persistent files, retry, and manual sharing
+- Linked follow-up CSRs and void/reissue with per-item physical disposition
 - On-device SQLite rollback diagnostic
 - Money, stock, customer-rule, and SQLite integrity tests
 

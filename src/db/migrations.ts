@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { DATABASE_VERSION, SCHEMA_V1 } from '@/db/schema';
+import { DATABASE_VERSION, SCHEMA_V1, SCHEMA_V2 } from '@/db/schema';
 
 type UserVersionRow = { user_version: number };
 
@@ -28,6 +28,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         "INSERT OR IGNORE INTO sequences (name, high_water_mark) VALUES ('CSR', 0), ('BS', 0), ('PA', 0)",
       );
       await tx.execAsync('PRAGMA user_version = 1;');
+    });
+  }
+
+  if (currentVersion < 2) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(SCHEMA_V2);
+      await tx.execAsync('PRAGMA user_version = 2;');
     });
   }
 

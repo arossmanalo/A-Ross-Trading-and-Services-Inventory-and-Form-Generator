@@ -175,16 +175,18 @@ export default function DashboardScreen() {
           </Pressable>
         </Link>
 
-        <View style={[styles.featureCard, styles.featureDisabled]}>
-          <View style={[styles.featureIcon, styles.featureIconMuted]}>
+        <Link href="/service-reports" asChild>
+          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+            <View style={styles.featureIcon}>
             <Text selectable style={styles.featureIconText}>05</Text>
-          </View>
-          <View style={styles.featureCopy}>
-            <Text selectable style={styles.featureTitle}>Customer service reports</Text>
-            <Text selectable style={styles.featureBody}>Next development slice.</Text>
-          </View>
-          <Text selectable style={styles.comingSoon}>COMING NEXT</Text>
-        </View>
+            </View>
+            <View style={styles.featureCopy}>
+              <Text selectable style={styles.featureTitle}>Customer service reports</Text>
+              <Text selectable style={styles.featureBody}>Draft, finalize, render, and share service records.</Text>
+            </View>
+            <Text selectable style={styles.chevron}>›</Text>
+          </Pressable>
+        </Link>
       </View>
 
       <View style={styles.diagnostic}>

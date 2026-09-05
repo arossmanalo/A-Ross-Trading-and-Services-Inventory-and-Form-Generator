@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -297,4 +297,22 @@ WHEN NEW.quantity_delta_integer < 0
 BEGIN
   SELECT RAISE(ABORT, 'INSUFFICIENT_STOCK');
 END;
+`;
+
+export const SCHEMA_V2 = `
+ALTER TABLE service_reports ADD COLUMN billing_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE service_reports ADD COLUMN total_bill_centavos INTEGER NOT NULL DEFAULT 0
+  CHECK (total_bill_centavos >= 0);
+ALTER TABLE service_reports ADD COLUMN acknowledged_by_snapshot TEXT NOT NULL DEFAULT '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS service_report_usage_one_item
+  ON service_report_item_usage(service_report_id, item_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stock_transactions_one_active_csr_usage
+  ON stock_transactions(service_report_id)
+  WHERE transaction_type = 'usage' AND state = 'active';
+
+CREATE UNIQUE INDEX IF NOT EXISTS document_attachments_one_generated_pdf
+  ON document_attachments(owner_type, owner_id)
+  WHERE attachment_type = 'generated_pdf';
 `;
