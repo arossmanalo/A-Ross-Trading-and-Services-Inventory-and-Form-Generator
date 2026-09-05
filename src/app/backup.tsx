@@ -1,9 +1,11 @@
+import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { readBackupFile, restoreBackupPackage, type BackupRestoreResult } from '@/features/backup/backup-restore';
 import { getBackupStatus, shareBackupPackage, type BackupStatus } from '@/features/backup/backup-repository';
 import { colors } from '@/theme/colors';
 
@@ -37,6 +39,37 @@ export default function BackupScreen() {
       setStatus(await getBackupStatus(db));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Backup export failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreBackup = async () => {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset.name.toLowerCase().endsWith('.arossbackup')) throw new Error('Select an .arossbackup file.');
+      const bytes = await readBackupFile(asset.uri);
+      const confirmed = await new Promise<boolean>(resolve => {
+        Alert.alert(
+          'Replace local data?',
+          'This validates the backup, creates a safety export when local records exist, then replaces all local records. This cannot be undone from the app.',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Validate and restore', style: 'destructive', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!confirmed) return;
+      const restored: BackupRestoreResult = await restoreBackupPackage(db, bytes, asset.name);
+      setMessage(`${restored.filename} restored through revision ${restored.highestRevision}. ${restored.restoredExternalAssetCount} signed file(s) restored.${restored.safetyExportFilename ? ` Safety export: ${restored.safetyExportFilename}` : ''}`);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Backup restore failed.');
     } finally {
       setBusy(false);
     }
@@ -82,6 +115,9 @@ export default function BackupScreen() {
 
       <ActionButton disabled={busy} onPress={() => void exportBackup()}>
         {busy ? 'Creating backup...' : 'Create and share backup'}
+      </ActionButton>
+      <ActionButton disabled={busy} variant="secondary" onPress={() => void restoreBackup()}>
+        {busy ? 'Working...' : 'Validate and restore backup'}
       </ActionButton>
       {message ? <Text selectable style={{ color: colors.success }}>{message}</Text> : null}
       {error ? <Text selectable style={{ color: colors.error }}>{error}</Text> : null}

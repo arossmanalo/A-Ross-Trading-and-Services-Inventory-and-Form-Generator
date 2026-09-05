@@ -55,7 +55,7 @@ export type BackupAssetManifest = {
   size: number;
 };
 
-const DATA_TABLES = [
+export const DATA_TABLES = [
   'app_meta',
   'sequences',
   'settings',
@@ -78,8 +78,8 @@ const DATA_TABLES = [
   'signature_captures',
 ] as const;
 
-type BackupTableName = typeof DATA_TABLES[number];
-type BackupRow = Record<string, string | number | null>;
+export type BackupTableName = typeof DATA_TABLES[number];
+export type BackupRow = Record<string, string | number | null>;
 type AttachmentRow = {
   id: string;
   owner_type: string;
@@ -261,7 +261,7 @@ function parseRecordCounts(raw: string): Record<string, number> {
   }
 }
 
-function safeAssetName(name: string): string {
+export function safeAssetName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 

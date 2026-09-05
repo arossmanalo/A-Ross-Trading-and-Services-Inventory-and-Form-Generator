@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { base64ToBytes, bytesToBase64, createStoredZip } from '@/features/backup/zip';
+import { base64ToBytes, bytesToBase64, createStoredZip, readStoredZip } from '@/features/backup/zip';
 
 describe('stored zip writer', () => {
   it('creates a zip with local headers, central directory, and base64 round trip', () => {
@@ -18,5 +18,21 @@ describe('stored zip writer', () => {
     expect(() => createStoredZip([{ path: '../bad.json', data: '{}' }])).toThrow(/entry path/);
     expect(() => createStoredZip([{ path: '/bad.json', data: '{}' }])).toThrow(/entry path/);
     expect(() => base64ToBytes('!!!!')).toThrow(/base64/);
+  });
+
+  it('reads the stored archive and verifies entry checksums', () => {
+    const zip = createStoredZip([
+      { path: 'manifest.json', data: '{"ok":true}' },
+      { path: 'assets/signed.pdf', data: new Uint8Array([0, 1, 2, 255]) },
+    ]);
+    const entries = readStoredZip(zip);
+    expect(new TextDecoder().decode(entries.get('manifest.json'))).toBe('{"ok":true}');
+    expect(Array.from(entries.get('assets/signed.pdf') ?? [])).toEqual([0, 1, 2, 255]);
+  });
+
+  it('rejects a tampered archive', () => {
+    const zip = createStoredZip([{ path: 'manifest.json', data: '{}' }]);
+    zip[14] ^= 1;
+    expect(() => readStoredZip(zip)).toThrow(/checksum|directory|truncated/i);
   });
 });

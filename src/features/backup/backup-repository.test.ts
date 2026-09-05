@@ -25,7 +25,12 @@ vi.mock('expo-file-system/legacy', () => ({
     if (!contents) throw new Error(`Missing ${path}`);
     return contents;
   },
-  getInfoAsync: async (path: string) => ({ exists: files.has(path), isDirectory: false, size: files.get(path)?.length ?? 0 }),
+  getInfoAsync: async (path: string) => {
+    const contents = files.get(path);
+    const padding = contents?.endsWith('==') ? 2 : contents?.endsWith('=') ? 1 : 0;
+    return { exists: files.has(path), isDirectory: false, size: contents ? Math.ceil(contents.length * 3 / 4) - padding : 0 };
+  },
+  deleteAsync: async (path: string) => { files.delete(path); },
 }));
 
 vi.mock('expo-sharing', () => ({
@@ -34,10 +39,13 @@ vi.mock('expo-sharing', () => ({
 }));
 
 import { createBackupPackage, getBackupStatus } from '@/features/backup/backup-repository';
+import { restoreBackupPackage, validateBackupPackage } from '@/features/backup/backup-restore';
+import { base64ToBytes } from '@/features/backup/zip';
 
 type Params = Array<string | number | null>;
 function adapter(database: DatabaseSync): SQLiteDatabase {
   const api = {
+    execAsync: async (sql: string) => { database.exec(sql); },
     getFirstAsync: async <T>(sql: string, ...params: Params) => database.prepare(sql).get(...params) as T | undefined,
     getAllAsync: async <T>(sql: string, ...params: Params) => database.prepare(sql).all(...params) as T[],
     runAsync: async (sql: string, ...params: Params) => {
@@ -95,5 +103,19 @@ describe('backup repository', () => {
     files.clear();
     await expect(createBackupPackage(db)).rejects.toThrow(/Signed file is missing/);
     expect(raw.prepare('SELECT COUNT(*) AS count FROM backup_manifests').get()).toEqual({ count: 0 });
+  });
+
+  it('validates an exported package before restore and preserves the signed asset', async () => {
+    const exported = await createBackupPackage(db);
+    const packageBase64 = files.get(exported.fileUri);
+    expect(packageBase64).toBeDefined();
+    const parsed = await validateBackupPackage(base64ToBytes(packageBase64 ?? ''));
+    expect(parsed.manifest.highestRevision).toBe(exported.manifest.highestRevision);
+
+    const restored = await restoreBackupPackage(db, base64ToBytes(packageBase64 ?? ''), exported.filename);
+    expect(restored.safetyExportFilename).toMatch(/\.arossbackup$/);
+    expect(restored.restoredExternalAssetCount).toBe(1);
+    expect(raw.prepare("SELECT private_path FROM document_attachments WHERE id='signed'").get()).toEqual({ private_path: 'file://documents/documents/signed/CSR-000001-signed.pdf' });
+    expect(raw.prepare("SELECT value FROM app_meta WHERE key='database_revision'").get()).toEqual({ value: '5' });
   });
 });

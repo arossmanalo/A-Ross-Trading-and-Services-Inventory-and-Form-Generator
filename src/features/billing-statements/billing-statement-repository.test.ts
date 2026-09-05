@@ -8,6 +8,8 @@ import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5 } from '@/db/sche
 
 let idCounter=0;
 vi.mock('expo-crypto',()=>({randomUUID:()=>`test-id-${++idCounter}`,CryptoDigestAlgorithm:{SHA256:'SHA-256'},digestStringAsync:async()=> 'ABCDEF1234567890'}));
+beforeEach(() => vi.useFakeTimers({ now: new Date('2026-09-05T12:00:00.000Z') }));
+afterEach(() => vi.useRealTimers());
 
 import { addCsrUsageLine, addDirectItemLine, addServiceLine, addStatementExpense, createBillingStatementDraft, finalizeBillingStatement, updateBillingStatementDraft, voidBillingStatement } from './billing-statement-repository';
 import { createLaterPayment, listPaymentsForStatement, voidPayment } from '@/features/payments/payment-repository';
