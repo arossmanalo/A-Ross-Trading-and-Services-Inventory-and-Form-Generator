@@ -115,6 +115,7 @@ export default function DashboardScreen() {
 
       <View style={styles.section}>
         <Text selectable style={styles.sectionTitle}>Start here</Text>
+        <ActionButton onPress={() => router.push('/search')}>Search records</ActionButton>
         <ActionButton onPress={() => router.push('/reports')}>Financial reports</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/stock')}>Stock report</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/movements')}>Movement report</ActionButton>

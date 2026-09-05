@@ -10,11 +10,12 @@
 - Current stock report with item/SKU/unit search, active/inactive/low-stock filters, CSV sharing, and links to existing item movement history. Inactive items never enter the low-stock report.
 - Inventory movement report with recorded timestamp date range, optional item scope, movement-type filter, loaded-row search, incoming/outgoing/net summaries, and CSV sharing.
 - Audit report with actual timestamp date range, entity-type filter, loaded-row search, and CSV sharing of event details.
+- Global search across customers, equipment, inventory items, services, CSRs, Billing Statements, and Payment Acknowledgments.
 - CSR creation now explains the empty-customer prerequisite and refreshes customer/equipment options when returning to the screen.
 
 ## Remaining
 
-- Cross-document search and wider date/state/equipment filters.
+- Wider date/state/equipment filters on document lists.
 - Expanded dashboard, recent activity, and backup status once Phase 8 exists.
 - Detailed sales and collections reports with additional filters.
 - Report PDF exports and device validation of CSV sharing.
