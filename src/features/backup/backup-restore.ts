@@ -132,9 +132,9 @@ export async function restoreBackupPackage(db: SQLiteDatabase, bytes: Uint8Array
       }
       // Generated PDFs are reproducible from frozen snapshots but are not
       // carried in the package. Make their retry state explicit after import.
-      await tx.runAsync("UPDATE service_reports SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized' AND pdf_state='ready'");
-      await tx.runAsync("UPDATE billing_statements SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized' AND pdf_state='ready'");
-      await tx.runAsync("UPDATE payments SET pdf_state='not_generated',share_state='not_shared' WHERE state='active' AND pdf_state='ready'");
+      await tx.runAsync("UPDATE service_reports SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized'");
+      await tx.runAsync("UPDATE billing_statements SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized'");
+      await tx.runAsync("UPDATE payments SET pdf_state='not_generated',share_state='not_shared' WHERE state='active'");
       await tx.runAsync(
         'INSERT INTO backup_manifests(id,filename,schema_version,highest_revision,record_counts_json,checksum,created_at) VALUES(?,?,?,?,?,?,?)',
         restoreId,
