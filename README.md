@@ -27,6 +27,9 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - Fixed/percentage discounts with frozen VAT, pricing, and content snapshots
 - Atomic statement numbering and direct-sale stock posting without double-deducting CSR usage
 - A4 Billing Statement PDF generation, retry, manual sharing, and unpaid void disposition
+- Paid-in-full, down-payment/balance, and pay-later workflows with installment protection
+- Atomic `PA-` numbering, immutable payment history, and void-payment corrections
+- A4 Payment Acknowledgment PDFs with retry, sharing, references, and remaining balances
 - On-device SQLite rollback diagnostic
 - Money, document-template, stock, customer-rule, and SQLite integrity tests
 

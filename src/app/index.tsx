@@ -202,6 +202,21 @@ export default function DashboardScreen() {
             <Text selectable style={styles.chevron}>›</Text>
           </Pressable>
         </Link>
+
+        <Link href="/payments" asChild>
+          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+            <View style={styles.featureIcon}>
+              <Text selectable style={styles.featureIconText}>07</Text>
+            </View>
+            <View style={styles.featureCopy}>
+              <Text selectable style={styles.featureTitle}>Payments</Text>
+              <Text selectable style={styles.featureBody}>
+                Review numbered acknowledgments and payment corrections.
+              </Text>
+            </View>
+            <Text selectable style={styles.chevron}>›</Text>
+          </Pressable>
+        </Link>
       </View>
 
       <View style={styles.diagnostic}>

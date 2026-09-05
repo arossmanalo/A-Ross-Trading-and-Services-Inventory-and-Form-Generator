@@ -24,6 +24,8 @@ const snapshot: BillingStatementRenderSnapshot = {
   discountLabel: 'Discount (5%)',
   discountCentavos: 177050,
   totalCentavos: 3363950,
+  paymentsReceivedCentavos: 500000,
+  balanceDueCentavos: 2863950,
   vatDisplayMode: 'disabled',
   vatRateBasisPoints: 0,
 };

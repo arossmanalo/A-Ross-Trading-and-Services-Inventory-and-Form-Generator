@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 3;
+export const DATABASE_VERSION = 4;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -321,4 +321,24 @@ export const SCHEMA_V3 = `
 CREATE UNIQUE INDEX IF NOT EXISTS stock_transactions_one_active_statement_sale
   ON stock_transactions(billing_statement_id)
   WHERE transaction_type = 'sale' AND state = 'active';
+`;
+
+export const SCHEMA_V4 = `
+ALTER TABLE payments ADD COLUMN payment_kind TEXT
+  CHECK (payment_kind IN ('paid_in_full', 'down_payment', 'balance_payment', 'later_full'));
+ALTER TABLE payments ADD COLUMN content_snapshot_json TEXT;
+ALTER TABLE payments ADD COLUMN render_template_snapshot TEXT;
+ALTER TABLE payments ADD COLUMN template_version TEXT;
+ALTER TABLE payments ADD COLUMN pdf_state TEXT NOT NULL DEFAULT 'not_generated'
+  CHECK (pdf_state IN ('not_generated', 'pending', 'ready', 'error'));
+ALTER TABLE payments ADD COLUMN share_state TEXT NOT NULL DEFAULT 'not_shared'
+  CHECK (share_state IN ('not_shared', 'shared'));
+ALTER TABLE payments ADD COLUMN idempotency_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_one_active_down_payment
+  ON payments(billing_statement_id)
+  WHERE payment_kind = 'down_payment' AND state = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS payments_idempotency_key_unique
+  ON payments(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 `;

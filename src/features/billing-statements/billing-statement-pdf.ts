@@ -6,14 +6,17 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { finalizeBillingStatement } from '@/features/billing-statements/billing-statement-repository';
+import { renderPaymentAcknowledgment } from '@/features/payments/payment-pdf';
+import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
 const A4_WIDTH_POINTS = 595;
 const A4_HEIGHT_POINTS = 842;
 
-export async function finalizeAndRenderBillingStatement(db: SQLiteDatabase, statementId: string, pricePolicy: 'keep-draft' | 'reject' | 'use-current' = 'reject'): Promise<{ bsNumber: string; pdfUri: string }> {
-  const finalized = await finalizeBillingStatement(db, statementId, pricePolicy);
+export async function finalizeAndRenderBillingStatement(db: SQLiteDatabase, statementId: string, pricePolicy: 'keep-draft' | 'reject' | 'use-current' = 'reject', paymentSelection: InitialPaymentSelection = { choice: 'pay_later' }): Promise<{ bsNumber: string; pdfUri: string; paymentId: string | null }> {
+  const finalized = await finalizeBillingStatement(db, statementId, pricePolicy, paymentSelection);
   const pdfUri = await renderFinalizedBillingStatementPdf(db, statementId, finalized.bsNumber, finalized.html);
-  return { bsNumber: finalized.bsNumber, pdfUri };
+  if (finalized.initialPayment) await renderPaymentAcknowledgment(db, finalized.initialPayment);
+  return { bsNumber: finalized.bsNumber, pdfUri, paymentId: finalized.initialPayment?.paymentId ?? null };
 }
 
 export async function retryBillingStatementPdf(db: SQLiteDatabase, statementId: string): Promise<string> {

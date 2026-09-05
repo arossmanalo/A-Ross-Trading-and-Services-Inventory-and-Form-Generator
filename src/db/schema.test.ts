@@ -3,14 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4 } from './schema';
 
 describe('database schema', () => {
   let db: DatabaseSync;
 
   beforeEach(() => {
     db = new DatabaseSync(':memory:');
-    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3}`);
+    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4}`);
   });
 
   afterEach(() => {
@@ -124,5 +124,17 @@ describe('database schema', () => {
   it('adds the billing statement double-posting guard', () => {
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>;
     expect(indexes.map((index) => index.name)).toContain('stock_transactions_one_active_statement_sale');
+  });
+
+  it('adds frozen payment-document fields and the active down-payment guard', () => {
+    const columns = db.prepare("PRAGMA table_info('payments')").all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'payment_kind', 'content_snapshot_json', 'render_template_snapshot',
+      'template_version', 'pdf_state', 'share_state', 'idempotency_key',
+    ]));
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>;
+    expect(indexes.map((index) => index.name)).toEqual(expect.arrayContaining([
+      'payments_one_active_down_payment', 'payments_idempotency_key_unique',
+    ]));
   });
 });

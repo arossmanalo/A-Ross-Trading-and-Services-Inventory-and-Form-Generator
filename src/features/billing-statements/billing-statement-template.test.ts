@@ -8,6 +8,7 @@ const fixture: BillingStatementRenderSnapshot = {
   customer: { name: 'C & C Laundry', address: 'Lucban sariaya, Quezon' }, serviceReportNumber: 'CSR-000031',
   lines: [{ description: 'Liquid Detergent <Premium>', quantity: 7, unitLabel: 'carboy', unitPriceCentavos: 120000, amountCentavos: 840000 }],
   subtotalCentavos: 840000, discountLabel: 'Discount (5%)', discountCentavos: 42000, totalCentavos: 798000,
+  paymentsReceivedCentavos: 200000, balanceDueCentavos: 598000,
   vatDisplayMode: 'disabled', vatRateBasisPoints: 0,
 };
 
@@ -18,6 +19,8 @@ describe('billing statement template', () => {
     expect(html).toContain('BS-000042');
     expect(html).toContain('CSR CSR-000031');
     expect(html).toContain('₱7,980.00');
+    expect(html).toContain('Payments Received');
+    expect(html).toContain('₱5,980.00');
     expect(html).toContain('Liquid Detergent &lt;Premium&gt;');
     expect(html).toContain('ABC123DEF456');
   });
