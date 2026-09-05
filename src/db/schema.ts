@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 4;
+export const DATABASE_VERSION = 5;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -341,4 +341,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS payments_one_active_down_payment
 CREATE UNIQUE INDEX IF NOT EXISTS payments_idempotency_key_unique
   ON payments(idempotency_key)
   WHERE idempotency_key IS NOT NULL;
+`;
+
+export const SCHEMA_V5 = `
+ALTER TABLE settings ADD COLUMN business_logo_data_url TEXT;
+CREATE TABLE signature_captures (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('settings','service_report','billing_statement')),
+  owner_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('customer','preparer')),
+  signer_name TEXT NOT NULL,
+  png_data_url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  render_template_snapshot TEXT,
+  pdf_state TEXT NOT NULL DEFAULT 'pending' CHECK (pdf_state IN ('pending','ready','error')),
+  deterministic_filename TEXT,
+  private_path TEXT,
+  checksum TEXT
+);
+CREATE INDEX signature_captures_owner ON signature_captures(owner_type,owner_id,created_at);
+CREATE TRIGGER signature_captures_immutable
+BEFORE UPDATE OF id,owner_type,owner_id,role,signer_name,png_data_url,created_at,render_template_snapshot,deterministic_filename ON signature_captures
+BEGIN SELECT RAISE(ABORT, 'SIGNATURE_IS_IMMUTABLE'); END;
+CREATE TRIGGER signature_captures_no_delete BEFORE DELETE ON signature_captures
+BEGIN SELECT RAISE(ABORT, 'SIGNATURE_IS_IMMUTABLE'); END;
 `;

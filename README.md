@@ -32,6 +32,9 @@ Offline-first Android inventory and form generator for A.Ross Trading and Servic
 - A4 Payment Acknowledgment PDFs with retry, sharing, references, and remaining balances
 - Manual remote-signing status and append-only returned signed-PDF import for CSRs and Billing Statements
 - Deterministic signed filenames, checksums, persistent private storage, and attachment sharing
+- Offline customer/preparer signature canvas with append-only, retry-safe signed PDF versions
+- Saved preparer signature and PNG/JPEG business logo settings, frozen into newly issued CSR/BS/PA PDFs
+- Signature schema v5 migration, manual returned-PDF matching, PDF-header/size checks, and missing-file recovery messages
 - On-device SQLite rollback diagnostic
 - Money, document-template, stock, customer-rule, and SQLite integrity tests
 
@@ -47,3 +50,5 @@ npm test
 Open the app in Expo Go first. On the dashboard, run **Database self-check** to verify migration and exclusive-transaction rollback on the device.
 
 See `plan.md` and `srs.md` for the approved behavior and delivery phases.
+
+Phase 6 implementation and verification details are in `docs/phase-6-verification.md`. Production acceptance still requires Android device testing and owner review of the final business logo/header and printed templates. Reports/search (Phase 7), backup/restore (Phase 8), and final device/UAT/release work remain.

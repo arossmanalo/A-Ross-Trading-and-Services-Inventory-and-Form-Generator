@@ -1,5 +1,64 @@
-import { useFocusEffect,useLocalSearchParams } from 'expo-router';import { useSQLiteContext } from 'expo-sqlite';import { useCallback,useState } from 'react';import { Pressable,ScrollView,StyleSheet,Text,View } from 'react-native';
-import { ActionButton } from '@/components/action-button';import { getSignableDocument,pickAndAttachSignedPdf,setDocumentSignatureStatus,shareSignedAttachment } from '@/features/signatures/signature-repository';import type { SignableDocument,SignableOwnerType,SignatureStatus } from '@/features/signatures/signature-types';import { colors } from '@/theme/colors';
-const STATUSES:Array<{value:Exclude<SignatureStatus,'signed_in_person'|'signed_document_attached'>;label:string}>=[{value:'not_required',label:'Not required'},{value:'pending',label:'Pending'},{value:'declined',label:'Declined'},{value:'no_response',label:'No response'}];
-export default function ManageSignaturesScreen(){const{ownerType,ownerId}=useLocalSearchParams<{ownerType:SignableOwnerType;ownerId:string}>();const db=useSQLiteContext();const[document,setDocument]=useState<SignableDocument|null>(null);const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);const load=useCallback(async()=>{if(ownerType&&ownerId)setDocument(await getSignableDocument(db,ownerType,ownerId));},[db,ownerId,ownerType]);useFocusEffect(useCallback(()=>{void load().catch((e:unknown)=>setError(e instanceof Error?e.message:'Could not load signing details.'));},[load]));const run=useCallback(async(action:()=>Promise<unknown>)=>{setBusy(true);setError(null);try{await action();await load();}catch(e){setError(e instanceof Error?e.message:'Signing action failed.');}finally{setBusy(false);}},[load]);if(!document)return <View style={styles.center}><Text selectable style={styles.help}>{error??'Loading…'}</Text></View>;return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}><View style={styles.hero}><Text selectable style={styles.eyebrow}>SIGNING & RETURNED FILES</Text><Text selectable style={styles.number}>{document.documentNumber}</Text><Text selectable style={styles.customer}>{document.customerName}</Text></View><View style={styles.section}><Text selectable style={styles.title}>Signature status</Text><View style={styles.pills}>{STATUSES.map((entry)=><Pressable key={entry.value} accessibilityRole="button" disabled={busy||document.documentState!=='finalized'} onPress={()=>void run(()=>setDocumentSignatureStatus(db,ownerType,ownerId,entry.value))} style={[styles.pill,document.signatureStatus===entry.value&&styles.selected]}><Text selectable style={[styles.pillText,document.signatureStatus===entry.value&&styles.selectedText]}>{entry.label}</Text></Pressable>)}</View><Text selectable style={styles.current}>Current: {document.signatureStatus.replaceAll('_',' ')}</Text></View><View style={styles.info}><Text selectable style={styles.infoTitle}>Manual remote-signing workflow</Text><Text selectable style={styles.help}>Share the generated PDF using the document screen. After the customer signs it externally and returns it, import that PDF here. The original financial content remains locked.</Text></View><ActionButton disabled={busy||document.documentState!=='finalized'} onPress={()=>void run(()=>pickAndAttachSignedPdf(db,ownerType,ownerId))}>{busy?'Working…':'Import returned signed PDF'}</ActionButton><View style={styles.section}><Text selectable style={styles.title}>Returned signed PDFs</Text>{document.attachments.length?document.attachments.map((attachment)=><Pressable key={attachment.id} accessibilityRole="button" onPress={()=>void run(()=>shareSignedAttachment(attachment))} style={({pressed})=>[styles.attachment,pressed&&styles.pressed]}><View style={styles.copy}><Text selectable style={styles.filename}>{attachment.filename}</Text><Text selectable style={styles.help}>{new Date(attachment.createdAt).toLocaleString()} · checksum {attachment.checksum.slice(0,12).toUpperCase()}</Text></View><Text selectable style={styles.share}>SHARE</Text></Pressable>):<Text selectable style={styles.help}>No returned signed PDF has been imported.</Text>}</View>{error?<Text selectable style={styles.error}>{error}</Text>:null}</ScrollView>}
-const styles=StyleSheet.create({content:{gap:17,padding:18,paddingBottom:44},center:{flex:1,alignItems:'center',justifyContent:'center'},hero:{gap:5,padding:18,backgroundColor:colors.brandNavy,borderRadius:19,borderCurve:'continuous'},eyebrow:{color:'#a9c9f5',fontSize:10,fontWeight:'900',letterSpacing:1},number:{color:'#fff',fontSize:21,fontWeight:'900'},customer:{color:'#d7e5f8',fontSize:13},section:{gap:10},title:{color:colors.label,fontSize:17,fontWeight:'900'},pills:{flexDirection:'row',flexWrap:'wrap',gap:7},pill:{minHeight:40,justifyContent:'center',paddingHorizontal:12,borderWidth:1,borderColor:colors.separator,borderRadius:20,backgroundColor:colors.surface},selected:{borderColor:colors.brandBlue,backgroundColor:'#eaf2ff'},pillText:{color:colors.secondaryLabel,fontSize:12,fontWeight:'800'},selectedText:{color:colors.brandNavy},current:{color:colors.secondaryLabel,fontSize:11,textTransform:'capitalize'},info:{gap:5,padding:15,backgroundColor:'#eaf2ff',borderRadius:15,borderCurve:'continuous'},infoTitle:{color:colors.brandNavy,fontSize:14,fontWeight:'900'},help:{color:colors.secondaryLabel,fontSize:12,lineHeight:18},attachment:{minHeight:66,flexDirection:'row',alignItems:'center',gap:10,paddingVertical:10,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:colors.separator},copy:{flex:1,gap:3},filename:{color:colors.label,fontSize:13,fontWeight:'800'},share:{color:colors.brandBlue,fontSize:9,fontWeight:'900'},error:{color:colors.error,fontSize:13,fontWeight:'600'},pressed:{opacity:.72}});
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useCallback, useRef, useState } from 'react';
+import { ScrollView, Switch, Text, View } from 'react-native';
+import { ActionButton } from '@/components/action-button';
+import { listSignatureCaptures, type SignatureCapture } from '@/features/signatures/capture-repository';
+import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
+import { getSignableDocument, pickAndAttachSignedPdf, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
+import type { SignableDocument, SignableOwnerType, SignatureStatus } from '@/features/signatures/signature-types';
+import { colors } from '@/theme/colors';
+
+const STATUSES: Array<{value:Exclude<SignatureStatus,'signed_in_person'|'signed_document_attached'>;label:string}> = [{value:'not_required',label:'Not required'},{value:'pending',label:'Pending'},{value:'declined',label:'Declined'},{value:'no_response',label:'No response'}];
+
+export default function ManageSignaturesScreen() {
+  const {ownerType,ownerId} = useLocalSearchParams<{ownerType:SignableOwnerType;ownerId:string}>();
+  const db = useSQLiteContext();
+  const [document,setDocument] = useState<SignableDocument|null>(null);
+  const [captures,setCaptures] = useState<SignatureCapture[]>([]);
+  const [matched,setMatched] = useState(false);
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState<string|null>(null);
+  const running = useRef(false);
+  const load = useCallback(async () => {
+    if (!ownerId || !['service_report','billing_statement'].includes(ownerType)) throw new Error('Invalid signing target.');
+    setDocument(await getSignableDocument(db,ownerType,ownerId));
+    setCaptures(await listSignatureCaptures(db,ownerType,ownerId));
+  },[db,ownerType,ownerId]);
+  useFocusEffect(useCallback(() => {setMatched(false);void load().catch((e:unknown) => setError(e instanceof Error ? e.message : 'Could not load document.'));},[load]));
+  const run = async (action:()=>Promise<unknown>) => {
+    if (running.current) return;
+    running.current=true;setBusy(true);setError(null);
+    try {await action();await load();} catch(e) {setError(e instanceof Error ? e.message : 'Signing action failed.');} finally {running.current=false;setBusy(false);}
+  };
+  if (!document) return <Text selectable>{error ?? 'Loading signing details…'}</Text>;
+  const locked = busy || document.documentState !== 'finalized';
+  return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
+    <View style={{backgroundColor:colors.brandNavy,padding:18,borderRadius:18,gap:8}}>
+      <Text selectable style={{color:'#fff',fontSize:22,fontWeight:'800'}}>{document.documentNumber}</Text>
+      <Text selectable style={{color:'#fff'}}>{document.customerName}</Text>
+      <Text selectable style={{color:'#fff'}}>Revision 1 · Fingerprint {document.fingerprint}</Text>
+      <Text selectable style={{color:'#fff'}}>Current: {document.signatureStatus.replaceAll('_',' ')} · {document.documentState}</Text>
+    </View>
+    <Text selectable style={{fontWeight:'700'}}>In-person signing</Text>
+    <Text>Review the original PDF with the signer first. Each capture is retained; signed copies include a separate acknowledgment page and leave the original unchanged.</Text>
+    {(['customer','preparer'] as const).map(role => <ActionButton key={role} disabled={locked} onPress={() => router.push({pathname:'/signatures/capture',params:{ownerType,ownerId,role}})}>Draw {role} signature</ActionButton>)}
+    {captures.map(capture => <View key={capture.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
+      <Text selectable>{capture.signer_name} · {capture.role}</Text>
+      <Text selectable>{new Date(capture.created_at).toLocaleString()} · PDF {capture.pdf_state}</Text>
+      <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {
+        const path = await renderSignaturePdf(db,capture.id);
+        await shareSignedAttachment({id:capture.id,filename:capture.deterministic_filename!,privatePath:path,checksum:capture.checksum??'',createdAt:capture.created_at});
+      })}>Render / share this signed version</ActionButton>
+    </View>)}
+    <Text selectable style={{fontWeight:'700'}}>Manual remote signing</Text>
+    <Text>Share the original PDF from its document screen. Check the returned PDF’s number, revision, and fingerprint above before importing. This is manual matching, not cryptographic signature verification. Original and returned files are kept.</Text>
+    <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Switch accessibilityLabel="I checked the returned document number, revision and fingerprint" disabled={locked} value={matched} onValueChange={setMatched}/><Text style={{flex:1}}>I checked that the returned PDF matches this document.</Text></View>
+    <ActionButton disabled={locked || !matched} onPress={() => void run(async () => {await pickAndAttachSignedPdf(db,ownerType,ownerId,document.fingerprint);setMatched(false);})}>Import returned PDF (up to 25 MB)</ActionButton>
+    {document.attachments.map(attachment => <ActionButton key={attachment.id} disabled={busy} variant="secondary" onPress={() => void run(() => shareSignedAttachment(attachment))}>Share {attachment.filename}</ActionButton>)}
+    <Text selectable style={{fontWeight:'700'}}>Record signing status</Text>
+    <Text>Changing status does not delete signatures or returned files.</Text>
+    <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{STATUSES.map(entry => <ActionButton compact key={entry.value} variant={document.signatureStatus === entry.value ? 'primary' : 'secondary'} disabled={locked} onPress={() => void run(() => setDocumentSignatureStatus(db,ownerType,ownerId,entry.value))}>{entry.label}</ActionButton>)}</View>
+    {error ? <Text selectable style={{color:colors.error}}>{error}</Text> : null}
+  </ScrollView>;
+}

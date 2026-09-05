@@ -84,6 +84,7 @@ export default function RootLayout() {
           <Stack.Screen name="payments/[payment-id]" options={{ title: 'Payment Acknowledgment' }} />
           <Stack.Screen name="payments/void" options={{ title: 'Void Payment', presentation: 'modal' }} />
           <Stack.Screen name="signatures/manage" options={{ title: 'Signing & Returned Files' }} />
+          <Stack.Screen name="signatures/capture" options={{ title: 'Draw signature', presentation: 'modal' }} />
         </Stack>
       </SQLiteProvider>
     </Suspense>

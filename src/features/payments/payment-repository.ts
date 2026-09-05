@@ -1,3 +1,4 @@
+import { getBusinessLogo } from '@/features/settings/settings-repository';
 import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
@@ -5,6 +6,7 @@ import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { allocateDocumentNumber } from '@/db/sequences';
 import { validateBusinessDate } from '@/domain/business-date';
 import { buildPaymentAcknowledgmentHtml, PAYMENT_ACKNOWLEDGMENT_TEMPLATE_VERSION, type PaymentRenderSnapshot } from '@/features/payments/payment-template';
+import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import type { InitialPaymentSelection, PaymentEntryInput, PaymentKind, PaymentMethod, PaymentState, PaymentSummary, StatementPaymentStatus } from '@/features/payments/payment-types';
 
 type PaymentRow = {
@@ -128,6 +130,7 @@ async function insertPayment(db: SQLiteDatabase, context: InitialPaymentContext,
   const totalAfter = activePaidBefore + input.amountCentavos;
   if (totalAfter > context.statementTotalCentavos) throw new Error('Payment cannot exceed the remaining balance.');
   const snapshot: PaymentRenderSnapshot = {
+    preparerSignatureHtml: await getPreparerSignatureHtml(db),
     paNumber, businessDate: input.businessDate, fingerprint: '', business: context.business,
     customer: context.customer, billingStatementNumber: context.billingStatementNumber,
     paymentKind: kind, amountCentavos: input.amountCentavos, method: input.method,
@@ -135,6 +138,7 @@ async function insertPayment(db: SQLiteDatabase, context: InitialPaymentContext,
     statementTotalCentavos: context.statementTotalCentavos,
     totalPaymentsAfterCentavos: totalAfter, remainingBalanceCentavos: context.statementTotalCentavos - totalAfter,
   };
+    snapshot.business.logoDataUrl = await getBusinessLogo(db);
   snapshot.fingerprint = (await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify(snapshot))).slice(0,12).toUpperCase();
   const html = buildPaymentAcknowledgmentHtml(snapshot);
   const now = new Date().toISOString();

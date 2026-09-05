@@ -1,3 +1,4 @@
+import { getBusinessLogo } from '@/features/settings/settings-repository';
 import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
@@ -6,6 +7,7 @@ import { allocateDocumentNumber } from '@/db/sequences';
 import { getLocalBusinessDate, validateBusinessDate } from '@/domain/business-date';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { buildCsrHtml, CSR_TEMPLATE_VERSION, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
+import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import type {
   CreateServiceReportDraftInput,
   DocumentState,
@@ -391,6 +393,7 @@ export async function finalizeServiceReport(
 
     const csrNumber = await allocateDocumentNumber(tx, 'CSR');
     const snapshot: CsrRenderSnapshot = {
+      preparerSignatureHtml: await getPreparerSignatureHtml(tx),
       csrNumber,
       businessDate: row.business_date,
       fingerprint: '',
@@ -421,6 +424,7 @@ export async function finalizeServiceReport(
         billable: usage.billable === 1,
       })),
     };
+    snapshot.business.logoDataUrl = await getBusinessLogo(tx);
     snapshot.fingerprint = (await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
       JSON.stringify(snapshot),

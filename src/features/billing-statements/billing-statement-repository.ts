@@ -1,3 +1,4 @@
+import { getBusinessLogo } from '@/features/settings/settings-repository';
 import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
@@ -7,6 +8,7 @@ import { validateBusinessDate } from '@/domain/business-date';
 import { calculateDiscountCentavos, type Discount } from '@/domain/money';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { BILLING_STATEMENT_TEMPLATE_VERSION, buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
+import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import type { BillingDiscountType, BillingDocumentState, BillingExpense, BillingPriceSource, BillingStatementDetail, BillingStatementLine, BillingStatementSummary, EligibleCsrUsage } from '@/features/billing-statements/billing-statement-types';
 import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features/payments/payment-repository';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
@@ -172,6 +174,8 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
     const initialPayment = await createInitialPaymentRecord(tx, { statementId, billingStatementNumber: bsNumber, statementTotalCentavos: total, business: { name: row.business_name, address: row.business_address, contactDetails: row.contact_details }, customer: { name: row.customer_name, address: row.customer_address } }, paymentSelection);
     const paid = initialPayment?.snapshot.amountCentavos ?? 0;
     const snapshot: BillingStatementRenderSnapshot = { bsNumber,businessDate:row.business_date,fingerprint:'',business:{name:row.business_name,address:row.business_address,contactDetails:row.contact_details},customer:{name:row.customer_name,address:row.customer_address},serviceReportNumber:row.csr_number,lines:lines.map((line)=>({description:line.description_snapshot,quantity:line.quantity_integer,unitLabel:line.line_type === 'item' ? line.unit_label || 'pc' : line.line_type === 'service' ? 'service' : 'expense',unitPriceCentavos:line.unit_price_centavos,amountCentavos:line.amount_centavos})),subtotalCentavos:subtotal,discountLabel:discountLabel(row.discount_type,row.discount_value),discountCentavos,totalCentavos:total,paymentsReceivedCentavos:paid,balanceDueCentavos:total-paid,vatDisplayMode:row.vat_display_mode,vatRateBasisPoints:row.vat_rate_basis_points };
+    snapshot.preparerSignatureHtml = await getPreparerSignatureHtml(tx);
+    snapshot.business.logoDataUrl = await getBusinessLogo(tx);
     snapshot.fingerprint=(await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,JSON.stringify(snapshot))).slice(0,12).toUpperCase(); const html=buildBillingStatementHtml(snapshot); const now=new Date().toISOString();
     if (required.size) { const transactionId=Crypto.randomUUID(); await tx.runAsync(`INSERT INTO stock_transactions(id,customer_id,billing_statement_id,transaction_type,state,note,created_at) VALUES(?,?,?,'sale','active',?,?)`,transactionId,row.customer_id,statementId,`Finalized ${bsNumber}`,now); for (const [itemId,entry] of required) await tx.runAsync(`INSERT INTO inventory_movements(id,item_id,stock_transaction_id,movement_type,quantity_delta_integer,billing_statement_id,description,created_at) VALUES(?,?,?,'sale',?,?,?,?)`,Crypto.randomUUID(),itemId,transactionId,-entry.quantity,statementId,`${bsNumber}: ${entry.name}`,now); }
     await tx.runAsync(`UPDATE billing_statements SET bs_number=?,document_state='finalized',subtotal_centavos=?,discounted_total_centavos=?,payment_choice=?,vat_snapshot_json=?,content_snapshot_json=?,render_template_snapshot=?,template_version=?,pdf_state='pending',finalized_at=? WHERE id=? AND document_state='draft'`,bsNumber,subtotal,total,paymentSelection.choice,JSON.stringify({mode:row.vat_display_mode,rateBasisPoints:row.vat_rate_basis_points}),JSON.stringify(snapshot),html,BILLING_STATEMENT_TEMPLATE_VERSION,now,statementId);

@@ -11,6 +11,20 @@ type SettingsRow = {
   low_stock_notifications_enabled: number;
 };
 
+export async function getBusinessLogo(db: SQLiteDatabase): Promise<string | null> {
+  const row = await db.getFirstAsync<{business_logo_data_url:string|null}>("SELECT business_logo_data_url FROM settings WHERE id='business'");
+  return row?.business_logo_data_url ?? null;
+}
+
+export async function saveBusinessLogo(db: SQLiteDatabase, dataUrl: string | null): Promise<void> {
+  if (dataUrl !== null && (dataUrl.length > 2_800_000 || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl))) throw new Error('Select a PNG or JPEG logo up to 2 MB.');
+  await db.withExclusiveTransactionAsync(async tx => {
+    await tx.runAsync("UPDATE settings SET business_logo_data_url=?,updated_at=? WHERE id='business'",dataUrl,new Date().toISOString());
+    await appendAuditEvent(tx,{eventType:'settings.logo_changed',entityType:'settings',entityId:'business',details:{hasLogo:dataUrl !== null}});
+    await incrementDatabaseRevision(tx);
+  });
+}
+
 export async function getBusinessSettings(db: SQLiteDatabase): Promise<BusinessSettings> {
   const row = await db.getFirstAsync<SettingsRow>(
     `SELECT business_name, business_address, contact_details, owner_name,

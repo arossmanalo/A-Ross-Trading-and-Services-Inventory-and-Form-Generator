@@ -3,14 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5 } from './schema';
 
 describe('database schema', () => {
   let db: DatabaseSync;
 
   beforeEach(() => {
     db = new DatabaseSync(':memory:');
-    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4}`);
+    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4} ${SCHEMA_V5}`);
   });
 
   afterEach(() => {
@@ -22,7 +22,7 @@ describe('database schema', () => {
       .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'")
       .get() as { count: number };
 
-    expect(row.count).toBe(19);
+    expect(row.count).toBe(20);
   });
 
   it('allows duplicate customer names and equipment serial numbers', () => {

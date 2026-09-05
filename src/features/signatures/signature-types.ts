@@ -14,6 +14,7 @@ export type SignableDocument = {
   ownerId: string;
   documentNumber: string;
   customerName: string;
+  fingerprint: string;
   signatureStatus: SignatureStatus;
   documentState: 'draft' | 'finalized' | 'voided';
   attachments: SignedAttachment[];

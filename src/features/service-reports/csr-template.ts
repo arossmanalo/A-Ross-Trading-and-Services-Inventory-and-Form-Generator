@@ -1,10 +1,12 @@
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v1';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v2';
 
 export type CsrRenderSnapshot = {
+  preparerSignatureHtml?: string;
   csrNumber: string;
   businessDate: string;
   fingerprint: string;
   business: {
+    logoDataUrl?: string | null;
     name: string;
     address: string;
     contactDetails: string;
@@ -56,7 +58,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     .map(([value, label]) => `<span class="choice">${snapshot.serviceOutcome === value ? '&#9745;' : '&#9744;'} ${escapeHtml(label)}</span>`)
     .join('');
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -97,7 +99,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
 </head>
 <body>
   <header class="header">
-    <div class="mark">AR</div>
+    <div class="mark">${snapshot.business.logoDataUrl ? `<img alt="Business logo" src="${escapeHtml(snapshot.business.logoDataUrl)}" style="width:100%;height:100%;object-fit:contain"/>` : 'AR'}</div>
     <div class="business">${escapeHtml(snapshot.business.name)}</div>
     <div class="contact">${escapeHtml([snapshot.business.address, snapshot.business.contactDetails].filter(Boolean).join('\n'))}</div>
   </header>
@@ -126,9 +128,11 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     <div class="signature"><div class="signature-name">${escapeHtml(snapshot.servicedBy)}</div><div class="signature-label">Serviced By</div></div>
     <div class="signature"><div class="signature-name">${escapeHtml(snapshot.acknowledgedBy)}</div><div class="signature-label">Acknowledged By</div></div>
   </section>
-  <footer class="footer">${escapeHtml(snapshot.csrNumber)} | Template ${CSR_TEMPLATE_VERSION} | Fingerprint ${escapeHtml(snapshot.fingerprint)}</footer>
+  <footer class="footer">${escapeHtml(snapshot.csrNumber)} | Revision 1 | Template ${CSR_TEMPLATE_VERSION} | Fingerprint ${escapeHtml(snapshot.fingerprint)}</footer>
 </body>
 </html>`;
+  return html.replace('<footer class="footer">', `${snapshot.preparerSignatureHtml ?? ''}<footer class="footer">`)
+    .replace('</style>', 'body{overflow-wrap:anywhere}tr{break-inside:avoid}thead{display:table-header-group}</style>');
 }
 
 function cell(label: string, value: string, full = false): string {
@@ -136,10 +140,11 @@ function cell(label: string, value: string, full = false): string {
 }
 
 function listSection(title: string, entries: string[]): string {
+  const minimumRows = title === 'Recommendations' || title === "Customer's Remarks" ? 2 : 3;
   const content = entries.length
     ? `<ul>${entries.map((entry) => `<li>${escapeHtml(entry)}</li>`).join('')}</ul>`
     : '-';
-  return `<section class="section"><div class="section-title">${escapeHtml(title)}</div><div class="section-body">${content}</div></section>`;
+  return `<section class="section"><div class="section-title">${escapeHtml(title)}</div><div class="section-body" style="min-height:${minimumRows * 16}px">${content}</div></section>`;
 }
 
 function textSection(title: string, value: string): string {

@@ -4,6 +4,8 @@ import { ActivityIndicator, KeyboardAvoidingView, ScrollView, StyleSheet, Switch
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { SavedSignatureSettings } from '@/features/signatures/saved-signature-settings';
+import { BusinessLogoSettings } from '@/features/settings/business-logo-settings';
 import {
   getBusinessSettings,
   updateBusinessSettings,
@@ -100,6 +102,8 @@ export default function SettingsScreen() {
           value={contactDetails}
         />
         <FormField autoCapitalize="words" label="Owner / serviced by" onChangeText={setOwnerName} value={ownerName} />
+        <SavedSignatureSettings />
+        <BusinessLogoSettings />
 
         <View style={styles.settingCard}>
           <View style={styles.settingCopy}>
