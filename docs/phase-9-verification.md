@@ -5,6 +5,7 @@ Phase 9 hardens the offline app before owner UAT. Automated checks run on every 
 ## Automated coverage
 
 - Fresh, repeat, legacy, and unsupported-newer database migrations (`src/db/migrations.test.ts`).
+- Database self-check rollback probe (`src/db/phase-zero-check.test.ts`).
 - Exclusive-transaction rollback for invalid restore rows (`src/features/backup/backup-repository.test.ts`).
 - ZIP truncation, checksum, duplicate-entry, unsafe-path, encryption/compression rejection (`src/features/backup/zip.test.ts`).
 - Backup manifest, record-count, column, signed-asset checksum, schema migration, safety-export, and restore tests.
