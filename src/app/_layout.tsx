@@ -26,20 +26,21 @@ export default function RootLayout() {
   return (
     <Suspense fallback={<LoadingDatabase />}>
       <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDatabase} useSuspense>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        <Stack
-          screenOptions={{
-            contentStyle: {
-              flex: 1,
-              alignSelf: 'center',
-              width: contentWidth,
-              backgroundColor: colors.background,
-            },
-            headerTintColor: colors.label,
-            headerStyle: { backgroundColor: colors.surface },
-            headerShadowVisible: false,
-          }}
-        >
+        <View style={styles.appShell}>
+          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          <Stack
+            screenOptions={{
+              contentStyle: {
+                flex: 1,
+                alignSelf: 'center',
+                width: contentWidth,
+                backgroundColor: colors.background,
+              },
+              headerTintColor: colors.label,
+              headerStyle: { backgroundColor: colors.surface },
+              headerShadowVisible: false,
+            }}
+          >
           <Stack.Screen name="index" options={{ title: 'Overview' }} />
           <Stack.Screen name="backup" options={{ title: 'Backup' }} />
           <Stack.Screen name="search" options={{ title: 'Search' }} />
@@ -101,13 +102,18 @@ export default function RootLayout() {
           <Stack.Screen name="payments/void" options={{ title: 'Void Payment', presentation: 'modal' }} />
           <Stack.Screen name="signatures/manage" options={{ title: 'Signing & Returned Files' }} />
           <Stack.Screen name="signatures/capture" options={{ title: 'Draw signature', presentation: 'modal' }} />
-        </Stack>
+          </Stack>
+        </View>
       </SQLiteProvider>
     </Suspense>
   );
 }
 
 const styles = StyleSheet.create({
+  appShell: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   loading: {
     flex: 1,
     alignItems: 'center',
