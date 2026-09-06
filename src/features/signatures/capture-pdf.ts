@@ -25,9 +25,10 @@ async function render(db: SQLiteDatabase, captureId: string): Promise<string> {
   try {
     const pdf = await Print.printToFileAsync({html:capture.render_template_snapshot,width:capture.owner_type === 'service_report' ? 612 : 595,height:capture.owner_type === 'service_report' ? 1008 : 842,base64:true,textZoom:100});
     cacheUri = pdf.uri;
+    if (!pdf.base64) throw new Error('PDF checksum source was not returned.');
     await FileSystem.makeDirectoryAsync(directory,{intermediates:true});
-    await FileSystem.copyAsync({from:pdf.uri,to:destination});
-    const base64 = await FileSystem.readAsStringAsync(destination,{encoding:FileSystem.EncodingType.Base64});
+    await FileSystem.writeAsStringAsync(destination,pdf.base64,{encoding:FileSystem.EncodingType.Base64});
+    const base64 = pdf.base64;
     if (!base64.startsWith('JVBERi0')) throw new Error('The generated file is not a PDF.');
     const checksum = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,base64);
     await db.withExclusiveTransactionAsync(async tx => {

@@ -91,7 +91,9 @@ async function renderFinalizedServiceReportPdf(
     const destination = `${directory}${filename}`;
     const existing = await FileSystem.getInfoAsync(destination);
     if (existing.exists) await FileSystem.deleteAsync(destination, { idempotent: true });
-    await FileSystem.copyAsync({ from: result.uri, to: destination });
+    await FileSystem.writeAsStringAsync(destination, result.base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
     const checksum = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, result.base64);
     const now = new Date().toISOString();
 

@@ -16,6 +16,7 @@ vi.mock('expo-file-system/legacy',() => ({
   getInfoAsync:async(path:string) => ({exists:files.has(path),isDirectory:false,size:files.get(path)?.length??0}),
   makeDirectoryAsync:async()=>{},
   copyAsync:async({from,to}:{from:string;to:string}) => {if(!files.has(from))throw new Error('Missing source');files.set(to,files.get(from)!);},
+  writeAsStringAsync:async(path:string,contents:string) => {files.set(path,contents);},
   readAsStringAsync:async(path:string) => files.get(path),
   deleteAsync:async(path:string) => {files.delete(path);},
 }));
@@ -45,7 +46,7 @@ describe('signature persistence and recovery',() => {
   let raw:DatabaseSync; let db:SQLiteDatabase;
   beforeEach(() => {
     files.clear();printer.mockReset();
-    printer.mockImplementation(async()=>{files.set('cache/render.pdf','JVBERi0xLjQK');return{uri:'cache/render.pdf'};});
+    printer.mockImplementation(async()=>{files.set('cache/render.pdf','JVBERi0xLjQK');return{uri:'cache/render.pdf',base64:'JVBERi0xLjQK'};});
     raw = new DatabaseSync(':memory:');
     raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}
       INSERT INTO app_meta VALUES('database_revision','0');
