@@ -43,6 +43,6 @@ describe('database self-check', () => {
     expect(result.rollbackVerified).toBe(true);
     expect(result.schemaVersion).toBe(6);
     expect(result.sqliteVersion).not.toBe('unknown');
-    expect(raw.prepare("SELECT COUNT(*) AS count FROM sqlite_temp_master WHERE type='table' AND name='phase_zero_rollback_probe'").get()).toEqual({ count: 0 });
+    expect(raw.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='phase_zero_rollback_probe'").get()).toEqual({ count: 0 });
   });
 });
