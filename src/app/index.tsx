@@ -128,7 +128,7 @@ export default function DashboardScreen() {
         <ActionButton variant="secondary" onPress={() => router.push('/reports/collections')}>Collections report</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/sales')}>Sales report</ActionButton>
         <Link href="/inventory" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Inventory" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>01</Text>
             </View>
@@ -143,7 +143,7 @@ export default function DashboardScreen() {
         </Link>
 
         <Link href="/customers" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Customers and equipment" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>02</Text>
             </View>
@@ -158,7 +158,7 @@ export default function DashboardScreen() {
         </Link>
 
         <Link href="/services" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Service catalog" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>03</Text>
             </View>
@@ -173,7 +173,7 @@ export default function DashboardScreen() {
         </Link>
 
         <Link href="/settings" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Settings" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>04</Text>
             </View>
@@ -188,7 +188,7 @@ export default function DashboardScreen() {
         </Link>
 
         <Link href="/service-reports" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Customer service reports" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
             <Text selectable style={styles.featureIconText}>05</Text>
             </View>
@@ -201,7 +201,7 @@ export default function DashboardScreen() {
         </Link>
 
         <Link href="/billing-statements" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Billing statements" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>06</Text>
             </View>
@@ -216,7 +216,7 @@ export default function DashboardScreen() {
         </Link>
 
         <Link href="/payments" asChild>
-          <Pressable style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+          <Pressable accessibilityRole="button" accessibilityHint="Open Payments" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>07</Text>
             </View>
@@ -352,6 +352,8 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.separator,
     borderRadius: 18,
     borderCurve: 'continuous',
     boxShadow: '0 2px 10px rgba(15, 23, 42, 0.07)',

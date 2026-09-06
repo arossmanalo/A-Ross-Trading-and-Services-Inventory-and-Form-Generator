@@ -1,14 +1,14 @@
 /**
- * Keep business forms comfortable to use on both narrow phones and wide
- * tablets. The stack applies this width to every route, so individual screens
- * can continue using their normal ScrollView/FlatList layouts.
+ * Screens use the full viewport so tablet content is not isolated in a narrow
+ * centered column. Individual screens provide their own internal padding and
+ * responsive wrapping for readable forms and lists.
  */
-export const MAX_CONTENT_WIDTH = 960;
+export const MIN_CONTENT_WIDTH = 320;
 
 export function getContentWidth(windowWidth: number): number {
   if (!Number.isFinite(windowWidth) || windowWidth <= 0) {
-    return MAX_CONTENT_WIDTH;
+    return MIN_CONTENT_WIDTH;
   }
 
-  return Math.min(windowWidth, MAX_CONTENT_WIDTH);
+  return windowWidth;
 }
