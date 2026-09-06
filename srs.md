@@ -499,7 +499,7 @@ The two samples contain different business addresses, and the Billing sample use
 
 1. Settings snapshots are authoritative for logo, address, contact information, and VAT display.
 2. `Billing Statement — Not a Tax Invoice` and `Payment Acknowledgment — Not a Tax Receipt` remain authoritative titles.
-3. A clean source logo and confirmation of the active business header text are desirable before production visual acceptance.
+3. The supplied A.Ross logo is bundled as the default app/document logo; confirmation of the active business header text remains desirable before production visual acceptance.
 4. Phase 0 shall create filled long-content prototypes for both page sizes and obtain owner approval for typography, spacing, pagination, and the new signature/totals content.
 
 No behavioral requirements question remains open.

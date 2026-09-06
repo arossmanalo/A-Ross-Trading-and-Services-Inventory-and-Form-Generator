@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildPaymentAcknowledgmentHtml, type PaymentRenderSnapshot } from './payment-template';
+import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
 
 const fixture: PaymentRenderSnapshot = {
   paNumber:'PA-000042',businessDate:'2026-09-05',fingerprint:'ABC123DEF456',
@@ -10,4 +11,4 @@ const fixture: PaymentRenderSnapshot = {
   statementTotalCentavos:1327500,totalPaymentsAfterCentavos:500000,remainingBalanceCentavos:827500,
 };
 
-describe('payment acknowledgment template',()=>{it('renders the non-tax title, traceability, method, and balance',()=>{const html=buildPaymentAcknowledgmentHtml(fixture);expect(html).toContain('Payment Acknowledgment');expect(html).toContain('Not a Tax Receipt');expect(html).toContain('PA-000042');expect(html).toContain('BS-000031');expect(html).toContain('GCash / E-wallet');expect(html).toContain('₱8,275.00');expect(html).toContain('ABC123DEF456');});});
+describe('payment acknowledgment template',()=>{it('renders the non-tax title, traceability, method, balance, and default logo',()=>{const html=buildPaymentAcknowledgmentHtml(fixture);expect(html).toContain('Payment Acknowledgment');expect(html).toContain('Not a Tax Receipt');expect(html).toContain('PA-000042');expect(html).toContain('BS-000031');expect(html).toContain('GCash / E-wallet');expect(html).toContain('₱8,275.00');expect(html).toContain('ABC123DEF456');expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);});});

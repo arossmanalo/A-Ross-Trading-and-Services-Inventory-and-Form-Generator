@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildBillingStatementHtml, type BillingStatementRenderSnapshot } from './billing-statement-template';
+import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
 
 const fixture: BillingStatementRenderSnapshot = {
   bsNumber: 'BS-000042', businessDate: '2026-08-31', fingerprint: 'ABC123DEF456',
@@ -23,6 +24,7 @@ describe('billing statement template', () => {
     expect(html).toContain('₱5,980.00');
     expect(html).toContain('Liquid Detergent &lt;Premium&gt;');
     expect(html).toContain('ABC123DEF456');
+    expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);
   });
 
   it('keeps long charge tables paginable with repeated headings', () => {

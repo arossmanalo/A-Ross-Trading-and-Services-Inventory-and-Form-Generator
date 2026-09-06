@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildCsrHtml, escapeHtml, type CsrRenderSnapshot } from './csr-template';
+import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
 
 const SNAPSHOT: CsrRenderSnapshot = {
   csrNumber: 'CSR-000001',
@@ -35,6 +36,7 @@ describe('CSR template', () => {
     expect(html).toContain('CSR-000001');
     expect(html).toContain('Services Used');
     expect(html).toContain('Preventive maintenance');
+    expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);
   });
 
   it('escapes owner-entered content', () => {

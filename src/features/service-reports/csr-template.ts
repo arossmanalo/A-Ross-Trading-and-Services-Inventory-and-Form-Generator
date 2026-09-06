@@ -1,3 +1,5 @@
+import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
+
 export const CSR_TEMPLATE_VERSION = 'csr-legal-v2';
 
 export type CsrRenderSnapshot = {
@@ -103,7 +105,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
 </head>
 <body>
   <header class="header">
-    <div class="mark">${snapshot.business.logoDataUrl ? `<img alt="Business logo" src="${escapeHtml(snapshot.business.logoDataUrl)}" style="width:100%;height:100%;object-fit:contain"/>` : 'AR'}</div>
+    <div class="mark">${logoHtml(snapshot.business.logoDataUrl)}</div>
     <div class="business">${escapeHtml(snapshot.business.name)}</div>
     <div class="contact">${escapeHtml([snapshot.business.address, snapshot.business.contactDetails].filter(Boolean).join('\n'))}</div>
   </header>
@@ -177,4 +179,9 @@ export function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function logoHtml(logoDataUrl?: string | null): string {
+  const source = logoDataUrl?.trim() ? logoDataUrl : DEFAULT_BUSINESS_LOGO_DATA_URL;
+  return `<img alt="Business logo" src="${escapeHtml(source)}" style="width:100%;height:100%;object-fit:contain"/>`;
 }

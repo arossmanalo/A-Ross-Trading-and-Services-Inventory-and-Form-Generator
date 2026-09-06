@@ -32,10 +32,16 @@ export function BusinessLogoSettings() {
   };
   return <View style={{gap:12}}>
     <Text selectable style={{fontWeight:'700'}}>Business logo</Text>
-    {logo?<Image source={{uri:logo}} contentFit="contain" style={{height:100,backgroundColor:'#fff'}}/>:<Text>No logo selected. Documents use the AR text placeholder.</Text>}
+    <Image
+      accessibilityLabel="A.Ross Trading and Services logo"
+      source={logo ? {uri:logo} : require('../../../assets/a-ross-logo.png')}
+      contentFit="contain"
+      style={{height:100,backgroundColor:'#fff'}}
+    />
     <ActionButton variant="secondary" disabled={busy} onPress={()=>void change(false)}>Choose PNG / JPEG logo</ActionButton>
-    {logo?<ActionButton variant="secondary" disabled={busy} onPress={()=>void change(true)}>Clear logo for future documents</ActionButton>:null}
-    <Text>Logo images are stored offline and frozen into each new document. Older documents do not change.</Text>
+    {logo?<ActionButton variant="secondary" disabled={busy} onPress={()=>void change(true)}>Restore default logo</ActionButton>:null}
+    <Text selectable>{logo ? 'A custom logo is active. It is stored offline and frozen into each new document.' : 'The bundled A.Ross logo is active. Choose a custom logo to use a different mark on future documents.'}</Text>
+    <Text selectable>Older documents do not change.</Text>
     {error?<Text selectable style={{color:'#b91c1c'}}>{error}</Text>:null}
   </View>;
 }

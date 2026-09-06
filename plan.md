@@ -234,4 +234,4 @@ The CSR PDF and Billing Statement image were reviewed on 2026-09-05 and their st
 
 The samples are layout references, not authoritative business-data sources. Their addresses differ, and the Billing sample contains the superseded labels `Invoice`, `This is not a receipt`, and `All Prices Are VAT Exclusive`. The app instead uses the owner-configured logo, address, contact details, VAT-display setting, and the agreed internal-document titles.
 
-A clean original logo asset and confirmation of the active business address/contact text are still desirable before production PDF sign-off. No behavioral planning question remains open.
+The supplied A.Ross logo is now bundled as the default app and document logo. The owner-configured business address/contact text remains the final visual sign-off item. No behavioral planning question remains open.

@@ -1,4 +1,5 @@
 import { Link, router, useFocusEffect } from 'expo-router';
+import { Image } from 'expo-image';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import {
@@ -89,8 +90,12 @@ export default function DashboardScreen() {
     >
       <View style={styles.hero}>
         <View style={styles.brandMark}>
-          <View style={styles.brandSlash} />
-          <Text selectable style={styles.brandLetters}>AR</Text>
+          <Image
+            accessibilityLabel="A.Ross Trading and Services logo"
+            contentFit="contain"
+            source={require('../../assets/a-ross-logo.png')}
+            style={styles.brandLogo}
+          />
         </View>
         <View style={styles.heroCopy}>
           <Text selectable style={styles.eyebrow}>OFFLINE WORKSPACE</Text>
@@ -302,18 +307,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderCurve: 'continuous',
   },
-  brandSlash: {
-    position: 'absolute',
-    width: 62,
-    height: 7,
-    backgroundColor: colors.brandRed,
-    transform: [{ rotate: '24deg' }],
-  },
-  brandLetters: {
-    color: colors.brandNavy,
-    fontSize: 27,
-    fontWeight: '900',
-    letterSpacing: -2,
+  brandLogo: {
+    width: 66,
+    height: 42,
   },
   heroCopy: {
     flex: 1,
