@@ -4,7 +4,7 @@
     "slug": "a-ross-inventory-and-forms",
     "scheme": "aross-app",
     "version": "0.1.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "plugins": [

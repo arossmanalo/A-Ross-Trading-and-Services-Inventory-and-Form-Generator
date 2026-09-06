@@ -95,6 +95,8 @@ Create these exact records before running the workflow cases:
 | UAT-32 Navigation/accessibility | On phone and tablet, use Android Back through a modal and detail screen, enable large system font, and navigate by touch only. | Back returns to the expected parent; no content is hidden at large text; controls remain reachable and states are not conveyed by color alone. | |
 | UAT-33 Business visual sign-off | Compare CSR, Billing Statement, and Payment Acknowledgment PDFs with the approved sample formats. Verify the configured logo, address, contacts, titles, disclaimers, and VAT mode. | Owner approves spacing, typography, page size, logo/header, totals, signatures, and the non-tax-document wording. | |
 
+For responsive acceptance, repeat UAT-03 and UAT-04 in both portrait and landscape. The app uses the system's default orientation so a tablet can use its full landscape viewport; generated CSR, Billing Statement, and Payment Acknowledgment PDFs remain portrait Legal/A4 regardless of screen orientation.
+
 ## Backup and recovery rehearsal
 
 Use a test copy of the owner's private Drive folder and record filenames/checksums rather than assuming Drive retention:
