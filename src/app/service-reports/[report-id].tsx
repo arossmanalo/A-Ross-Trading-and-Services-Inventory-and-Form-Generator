@@ -253,6 +253,7 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Machine Status" values={[report.machineStatus]} />
             <ReadSection label="Warranty" values={[report.warrantyText]} />
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>TOTAL BILL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Derived from billable inventory items and service rates.</Text></View>
+            <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/service-reports/preview', params: { reportId } })} variant="secondary">Preview PDF</ActionButton>
             {report.pdfState !== 'ready' ? <ActionButton disabled={busy} onPress={() => void retryPdf()}>Retry PDF</ActionButton> : <ActionButton disabled={busy} onPress={() => void sharePdf()}>Share PDF</ActionButton>}
             <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId } })} variant="secondary">Signing & returned PDF</ActionButton>
             {report.documentState === 'finalized' ? (

@@ -38,6 +38,24 @@ export async function retryServiceReportPdf(
   return renderFinalizedServiceReportPdf(db, reportId, row.csr_number, row.render_template_snapshot);
 }
 
+export async function getServiceReportPreview(
+  db: SQLiteDatabase,
+  reportId: string,
+): Promise<{ csrNumber: string; html: string }> {
+  const row = await db.getFirstAsync<{
+    csr_number: string | null;
+    render_template_snapshot: string | null;
+    document_state: string;
+  }>(
+    'SELECT csr_number, render_template_snapshot, document_state FROM service_reports WHERE id = ?',
+    reportId,
+  );
+  if (!row || row.document_state !== 'finalized' || !row.csr_number || !row.render_template_snapshot) {
+    throw new Error('Only a finalized CSR with a frozen template can be previewed.');
+  }
+  return { csrNumber: row.csr_number, html: row.render_template_snapshot };
+}
+
 export async function shareServiceReportPdf(db: SQLiteDatabase, reportId: string): Promise<void> {
   const attachment = await db.getFirstAsync<{ private_path: string; deterministic_filename: string }>(
     `SELECT private_path, deterministic_filename

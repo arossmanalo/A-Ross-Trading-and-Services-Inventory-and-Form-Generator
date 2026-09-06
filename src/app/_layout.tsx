@@ -88,6 +88,7 @@ export default function RootLayout() {
           <Stack.Screen name="service-reports/index" options={{ title: 'Service Reports' }} />
           <Stack.Screen name="service-reports/new" options={{ title: 'New CSR Draft', presentation: 'modal' }} />
           <Stack.Screen name="service-reports/[report-id]" options={{ title: 'CSR' }} />
+          <Stack.Screen name="service-reports/preview" options={{ title: 'CSR PDF Preview' }} />
           <Stack.Screen name="service-reports/item-usage/new" options={{ title: 'Add Item Usage', presentation: 'modal' }} />
           <Stack.Screen name="service-reports/service-usage/new" options={{ title: 'Add Service Usage', presentation: 'modal' }} />
           <Stack.Screen name="service-reports/void" options={{ title: 'Void CSR', presentation: 'modal' }} />
