@@ -95,6 +95,7 @@ export default function RootLayout() {
           <Stack.Screen name="billing-statements/index" options={{ title: 'Billing Statements' }} />
           <Stack.Screen name="billing-statements/new" options={{ title: 'New Statement Draft', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/[statement-id]" options={{ title: 'Billing Statement' }} />
+          <Stack.Screen name="billing-statements/preview" options={{ title: 'Billing Statement Preview' }} />
           <Stack.Screen name="billing-statements/charge/new" options={{ title: 'Add Charge', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/void" options={{ title: 'Void Statement', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/finalize" options={{ title: 'Finalize Statement', presentation: 'modal' }} />

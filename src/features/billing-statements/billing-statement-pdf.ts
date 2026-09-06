@@ -25,6 +25,21 @@ export async function retryBillingStatementPdf(db: SQLiteDatabase, statementId: 
   return renderFinalizedBillingStatementPdf(db,statementId,row.bs_number,row.render_template_snapshot);
 }
 
+export async function getBillingStatementPreview(
+  db: SQLiteDatabase,
+  statementId: string,
+): Promise<{ bsNumber: string; html: string }> {
+  const row = await db.getFirstAsync<{
+    bs_number: string | null;
+    render_template_snapshot: string | null;
+    document_state: string;
+  }>('SELECT bs_number,render_template_snapshot,document_state FROM billing_statements WHERE id=?', statementId);
+  if (!row || row.document_state !== 'finalized' || !row.bs_number || !row.render_template_snapshot) {
+    throw new Error('Only a finalized statement with a frozen template can be previewed.');
+  }
+  return { bsNumber: row.bs_number, html: row.render_template_snapshot };
+}
+
 export async function shareBillingStatementPdf(db: SQLiteDatabase, statementId: string): Promise<void> {
   const attachment=await db.getFirstAsync<{private_path:string;deterministic_filename:string}>(`SELECT private_path,deterministic_filename FROM document_attachments WHERE owner_type='billing_statement' AND owner_id=? AND attachment_type='generated_pdf'`,statementId);
   if(!attachment) throw new Error('Generate the billing statement PDF before sharing.');

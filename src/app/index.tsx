@@ -1,4 +1,4 @@
-import { Link, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
@@ -127,8 +127,7 @@ export default function DashboardScreen() {
         <ActionButton variant="secondary" onPress={() => router.push('/reports/audit')}>Audit report</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/collections')}>Collections report</ActionButton>
         <ActionButton variant="secondary" onPress={() => router.push('/reports/sales')}>Sales report</ActionButton>
-        <Link href="/inventory" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Inventory" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Inventory" onPress={() => router.push('/inventory')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>01</Text>
             </View>
@@ -138,12 +137,10 @@ export default function DashboardScreen() {
                 Add items and opening stock, with every movement recorded.
               </Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
 
-        <Link href="/customers" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Customers and equipment" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Customers and equipment" onPress={() => router.push('/customers')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>02</Text>
             </View>
@@ -153,12 +150,10 @@ export default function DashboardScreen() {
                 Register customers and keep reusable machine records together.
               </Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
 
-        <Link href="/services" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Service catalog" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Service catalog" onPress={() => router.push('/services')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>03</Text>
             </View>
@@ -168,12 +163,10 @@ export default function DashboardScreen() {
                 Maintain owner-controlled labor and service rates.
               </Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
 
-        <Link href="/settings" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Settings" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Settings" onPress={() => router.push('/settings')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>04</Text>
             </View>
@@ -183,12 +176,10 @@ export default function DashboardScreen() {
                 Business identity and low-stock notification preference.
               </Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
 
-        <Link href="/service-reports" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Customer service reports" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Customer service reports" onPress={() => router.push('/service-reports')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
             <Text selectable style={styles.featureIconText}>05</Text>
             </View>
@@ -196,12 +187,10 @@ export default function DashboardScreen() {
               <Text selectable style={styles.featureTitle}>Customer service reports</Text>
               <Text selectable style={styles.featureBody}>Draft, finalize, render, and share service records.</Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
 
-        <Link href="/billing-statements" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Billing statements" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Billing statements" onPress={() => router.push('/billing-statements')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>06</Text>
             </View>
@@ -211,12 +200,10 @@ export default function DashboardScreen() {
                 Combine charges, expenses, discounts, PDFs, and direct inventory sales.
               </Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
 
-        <Link href="/payments" asChild>
-          <Pressable accessibilityRole="button" accessibilityHint="Open Payments" style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+        <Pressable accessibilityRole="button" accessibilityHint="Open Payments" onPress={() => router.push('/payments')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
             <View style={styles.featureIcon}>
               <Text selectable style={styles.featureIconText}>07</Text>
             </View>
@@ -226,9 +213,8 @@ export default function DashboardScreen() {
                 Review numbered acknowledgments and payment corrections.
               </Text>
             </View>
-            <Text selectable style={styles.chevron}>›</Text>
-          </Pressable>
-        </Link>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
       </View>
 
       <View style={styles.section}>
@@ -352,8 +338,8 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.separator,
+    borderWidth: 1.5,
+    borderColor: colors.brandBlue,
     borderRadius: 18,
     borderCurve: 'continuous',
     boxShadow: '0 2px 10px rgba(15, 23, 42, 0.07)',
@@ -393,9 +379,20 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   chevron: {
-    color: colors.secondaryLabel,
-    fontSize: 30,
-    fontWeight: '400',
+    color: colors.brandBlue,
+    fontSize: 24,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  cardAction: {
+    alignItems: 'center',
+    gap: 1,
+  },
+  openLabel: {
+    color: colors.brandBlue,
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.7,
   },
   comingSoon: {
     color: colors.secondaryLabel,

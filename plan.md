@@ -30,6 +30,7 @@ The generated financial document is an internal **Billing Statement — Not a Ta
 
 - Registered customers and reusable customer-equipment records.
 - Digital CSRs with drafts, outcomes, finalization, void/reissue, follow-up visits, item usage, acknowledgment state, and PDF output.
+- Finalized CSR and Billing Statement views include offline previews of their frozen document snapshots before PDF generation or sharing.
 - CSR drafts can select catalog services and inventory items (or create a missing catalog entry inline); the read-only total is derived from billable item usage and selected service rates.
 - Inventory items, integer stock, Restock and Consumption actions, low-stock thresholds, deactivation, and append-only movements.
 - Base prices, per-customer prices, and owner-authorized one-time overrides.

@@ -215,6 +215,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-14.5:** Sharing failure yields `Not yet shared`; retry does not change finalization.
 - **FR-14.6:** Generated PDFs shall live in persistent app-private storage and may be regenerated from frozen data.
 - **FR-14.7:** The supplied samples define layout hierarchy and proportions. Owner-configured business identity, agreed document titles, and functional additions in this SRS take precedence over sample data and superseded wording.
+- **FR-14.8:** Finalized CSR and Billing Statement detail screens shall provide an offline, scrollable preview of their frozen render-template snapshot. Drafts and records without a frozen snapshot shall not be previewable.
 
 ### 4.15 Reporting
 
