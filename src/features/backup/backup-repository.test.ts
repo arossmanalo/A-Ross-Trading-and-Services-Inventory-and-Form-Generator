@@ -5,7 +5,7 @@ import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6 } from '@/db/schema';
 
 const files = new Map<string, string>();
 let idCounter = 0;
@@ -76,7 +76,7 @@ describe('backup repository', () => {
     idCounter = 0;
     files.clear();
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}`);
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}`);
     raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','3');");
     raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',1),('PA',1);");
     raw.exec("INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner','2026-09-01','2026-09-01');");
@@ -127,14 +127,14 @@ describe('backup repository', () => {
     const entries = new TextDecoder();
     const zip = readStoredZip(bytes);
     const manifest = JSON.parse(entries.decode(zip.get('manifest.json'))) as Record<string, unknown>;
-    manifest.schemaVersion = 6;
+    manifest.schemaVersion = 7;
     const data = entries.decode(zip.get('data/tables.json'));
     const future = createStoredZip([
       { path: 'manifest.json', data: JSON.stringify(manifest) },
       { path: 'data/tables.json', data },
       { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
     ]);
-    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 6/);
+    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 7/);
     expect(raw.prepare('SELECT COUNT(*) AS count FROM backup_manifests').get()).toEqual({ count: 1 });
   });
 
@@ -146,6 +146,8 @@ describe('backup repository', () => {
     const payload = JSON.parse(new TextDecoder().decode(zip.get('data/tables.json'))) as { tables: Record<string, any[]> };
     delete payload.tables.signature_captures;
     delete manifest.recordCounts.signature_captures;
+    delete payload.tables.service_report_service_usage;
+    delete manifest.recordCounts.service_report_service_usage;
     manifest.schemaVersion = 1;
     for (const row of payload.tables.service_reports) {
       delete row.billing_json;

@@ -51,7 +51,10 @@ export function parseBackupPackage(bytes: Uint8Array): ParsedBackupPackage {
   if (!isRecord(payload) || !isRecord(payload.tables)) throw new Error('Backup data/tables.json is invalid.');
 
   const tableKeys = Object.keys(payload.tables);
-  const legacyMissing = manifest.schemaVersion < DATABASE_VERSION ? ['signature_captures'] : [];
+  const legacyMissing = [
+    ...(manifest.schemaVersion < 6 ? ['service_report_service_usage'] : []),
+    ...(manifest.schemaVersion < 5 ? ['signature_captures'] : []),
+  ];
   if (tableKeys.some(table => !DATA_TABLES.includes(table as BackupTableName)) || DATA_TABLES.some(table => !tableKeys.includes(table) && !legacyMissing.includes(table))) {
     throw new Error('Backup table set does not match the supported schema.');
   }
@@ -260,7 +263,11 @@ function parseManifest(value: unknown): BackupFileManifest {
   if (typeof value.warning !== 'string' || !Array.isArray(value.assets) || !isRecord(value.recordCounts)) throw new Error('Backup manifest fields are invalid.');
   const recordCounts = {} as Record<BackupTableName, number>;
   const countKeys = Object.keys(value.recordCounts);
-  const expectedCountTables = DATA_TABLES.filter(table => value.schemaVersion === DATABASE_VERSION || table !== 'signature_captures');
+  const expectedCountTables = DATA_TABLES.filter((table) => {
+    if (table === 'service_report_service_usage') return value.schemaVersion >= 6;
+    if (table === 'signature_captures') return value.schemaVersion >= 5;
+    return true;
+  });
   if (countKeys.some(table => !expectedCountTables.includes(table as BackupTableName)) || expectedCountTables.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
   for (const table of expectedCountTables) {
     const count = value.recordCounts[table];
@@ -294,6 +301,9 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
   if (parsed.manifest.schemaVersion < 5) {
     tables.settings = tables.settings.map(row => ({ business_logo_data_url: null, ...row }));
     tables.signature_captures = [];
+  }
+  if (parsed.manifest.schemaVersion < 6) {
+    tables.service_report_service_usage = [];
   }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };

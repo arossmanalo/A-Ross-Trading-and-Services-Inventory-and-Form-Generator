@@ -15,6 +15,8 @@ export type ServiceReportFields = {
   totalBillCentavos: number;
 };
 
+export type EditableServiceReportFields = Omit<ServiceReportFields, 'totalBillCentavos'>;
+
 export type ServiceReportSummary = {
   id: string;
   csrNumber: string | null;
@@ -40,6 +42,16 @@ export type ServiceReportUsage = {
   overrideReason: string | null;
 };
 
+export type ServiceReportServiceUsage = {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  quantity: 1;
+  resolvedRateCentavos: number;
+  rateSource: 'catalog' | 'override';
+  overrideReason: string | null;
+};
+
 export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   customerId: string;
   equipmentId: string;
@@ -49,6 +61,7 @@ export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   shareState: 'not_shared' | 'shared';
   finalizedAt: string | null;
   usages: ServiceReportUsage[];
+  services: ServiceReportServiceUsage[];
 };
 
 export type CreateServiceReportDraftInput = {
@@ -59,7 +72,7 @@ export type CreateServiceReportDraftInput = {
   backdateReason?: string;
 };
 
-export type UpdateServiceReportDraftInput = ServiceReportFields & {
+export type UpdateServiceReportDraftInput = EditableServiceReportFields & {
   serviceOutcome: ServiceOutcome;
   businessDate: string;
   backdateReason?: string;

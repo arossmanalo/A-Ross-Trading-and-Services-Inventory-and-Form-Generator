@@ -35,13 +35,13 @@ function adapter(database: DatabaseSync): SQLiteDatabase {
 describe('database self-check', () => {
   let raw: DatabaseSync;
 
-  beforeEach(() => { raw = new DatabaseSync(':memory:'); raw.exec('PRAGMA user_version = 5;'); });
+  beforeEach(() => { raw = new DatabaseSync(':memory:'); raw.exec('PRAGMA user_version = 6;'); });
   afterEach(() => raw.close());
 
   it('confirms the exclusive transaction rollback probe is clean', async () => {
     const result = await runDatabaseSelfCheck(adapter(raw));
     expect(result.rollbackVerified).toBe(true);
-    expect(result.schemaVersion).toBe(5);
+    expect(result.schemaVersion).toBe(6);
     expect(result.sqliteVersion).not.toBe('unknown');
     expect(raw.prepare("SELECT COUNT(*) AS count FROM sqlite_temp_master WHERE type='table' AND name='phase_zero_rollback_probe'").get()).toEqual({ count: 0 });
   });

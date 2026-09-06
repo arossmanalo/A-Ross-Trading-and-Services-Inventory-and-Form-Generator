@@ -8,11 +8,13 @@ import { getLocalBusinessDate, validateBusinessDate } from '@/domain/business-da
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { buildCsrHtml, CSR_TEMPLATE_VERSION, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
+import { calculateServiceReportTotal } from '@/features/service-reports/service-report-total';
 import type {
   CreateServiceReportDraftInput,
   DocumentState,
   ServiceOutcome,
   ServiceReportDetail,
+  ServiceReportServiceUsage,
   ServiceReportSummary,
   ServiceReportUsage,
   UpdateServiceReportDraftInput,
@@ -69,6 +71,20 @@ type FinalizationUsageRow = UsageRow & {
   customer_price_centavos: number | null;
 };
 
+type ServiceUsageRow = {
+  id: string;
+  service_id: string;
+  service_name: string;
+  quantity_integer: number;
+  resolved_rate_centavos: number;
+  rate_source: ServiceReportServiceUsage['rateSource'];
+  override_reason: string | null;
+};
+
+type FinalizationServiceUsageRow = ServiceUsageRow & {
+  base_rate_centavos: number;
+};
+
 export class DraftPriceChangedError extends Error {
   constructor(readonly itemNames: string[]) {
     super(`Pricing changed for: ${itemNames.join(', ')}. Choose which prices to retain.`);
@@ -102,7 +118,17 @@ export async function getServiceReport(
     reportId,
   );
   if (!row) return null;
-  return { ...mapDetailRow(row), usages: await listReportUsages(db, reportId) };
+  const usages = await listReportUsages(db, reportId);
+  const services = await listReportServices(db, reportId);
+  const detail = mapDetailRow(row);
+  return {
+    ...detail,
+    totalBillCentavos: row.document_state === 'draft'
+      ? calculateServiceReportTotal(usages, services)
+      : detail.totalBillCentavos,
+    usages,
+    services,
+  };
 }
 
 export async function createServiceReportDraft(
@@ -176,7 +202,6 @@ export async function updateServiceReportDraft(
   input: UpdateServiceReportDraftInput,
 ): Promise<void> {
   validateBusinessDate(input.businessDate, input.backdateReason);
-  assertNonNegativeMoney(input.totalBillCentavos);
   const now = new Date().toISOString();
   await db.withExclusiveTransactionAsync(async (tx) => {
     const update = await tx.runAsync(
@@ -185,7 +210,7 @@ export async function updateServiceReportDraft(
            reported_problem_json = ?, diagnosis_json = ?, action_taken_json = ?,
            recommendations_json = ?, billing_json = ?, customer_remarks_json = ?,
            machine_status = ?, warranty_text = ?, serviced_by_snapshot = ?,
-           acknowledged_by_snapshot = ?, total_bill_centavos = ?
+           acknowledged_by_snapshot = ?
        WHERE id = ? AND document_state = 'draft'`,
       input.serviceOutcome,
       input.businessDate,
@@ -200,10 +225,10 @@ export async function updateServiceReportDraft(
       input.warrantyText.trim(),
       input.servicedBy.trim(),
       input.acknowledgedBy.trim(),
-      input.totalBillCentavos,
       reportId,
     );
     if (update.changes !== 1) throw new Error('Only a draft CSR can be edited.');
+    await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.draft_saved',
       entityType: 'service_report',
@@ -274,6 +299,7 @@ export async function addReportItemUsage(
       if (String(error).includes('UNIQUE')) throw new Error('This item is already listed on the CSR.');
       throw error;
     }
+    await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.item_usage_added',
       entityType: 'service_report',
@@ -301,8 +327,94 @@ export async function removeReportItemUsage(
       reportId,
     );
     if (result.changes !== 1) throw new Error('Only draft item usage can be removed.');
+    await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.item_usage_removed',
+      entityType: 'service_report',
+      entityId: reportId,
+      createdAt: new Date().toISOString(),
+    });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
+export async function addReportServiceUsage(
+  db: SQLiteDatabase,
+  reportId: string,
+  serviceId: string,
+  overrideRateCentavos?: number,
+  overrideReason?: string,
+): Promise<string> {
+  if (overrideRateCentavos !== undefined) assertNonNegativeMoney(overrideRateCentavos, 'Service rate');
+  const reason = overrideReason?.trim() || null;
+  const usageId = Crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const report = await tx.getFirstAsync<{ id: string }>(
+      "SELECT id FROM service_reports WHERE id = ? AND document_state = 'draft'",
+      reportId,
+    );
+    if (!report) throw new Error('Only a draft CSR can accept service usage.');
+    const service = await tx.getFirstAsync<{
+      name: string;
+      active: number;
+      base_rate_centavos: number;
+    }>('SELECT name, active, base_rate_centavos FROM services WHERE id = ?', serviceId);
+    if (!service || service.active !== 1) throw new Error('Select an active service.');
+    const rate = overrideRateCentavos ?? service.base_rate_centavos;
+    const isOverride = overrideRateCentavos !== undefined && overrideRateCentavos !== service.base_rate_centavos;
+    if (isOverride && !reason) throw new Error('A reason is required when overriding a service rate.');
+    try {
+      await tx.runAsync(
+        `INSERT INTO service_report_service_usage
+          (id, service_report_id, service_id, quantity_integer, resolved_rate_centavos,
+           rate_source, override_reason, description_snapshot, created_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+        usageId,
+        reportId,
+        serviceId,
+        rate,
+        isOverride ? 'override' : 'catalog',
+        isOverride ? reason : null,
+        service.name,
+        now,
+      );
+    } catch (error) {
+      if (String(error).includes('UNIQUE')) throw new Error('This service is already listed on the CSR.');
+      throw error;
+    }
+    await recalculateServiceReportTotal(tx, reportId);
+    await appendAuditEvent(tx, {
+      eventType: 'csr.service_usage_added',
+      entityType: 'service_report',
+      entityId: reportId,
+      details: { serviceId, rateCentavos: rate, overridden: isOverride },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+  return usageId;
+}
+
+export async function removeReportServiceUsage(
+  db: SQLiteDatabase,
+  reportId: string,
+  usageId: string,
+): Promise<void> {
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const result = await tx.runAsync(
+      `DELETE FROM service_report_service_usage
+       WHERE id = ? AND service_report_id = ?
+         AND EXISTS (SELECT 1 FROM service_reports WHERE id = ? AND document_state = 'draft')`,
+      usageId,
+      reportId,
+      reportId,
+    );
+    if (result.changes !== 1) throw new Error('Only draft service usage can be removed.');
+    await recalculateServiceReportTotal(tx, reportId);
+    await appendAuditEvent(tx, {
+      eventType: 'csr.service_usage_removed',
       entityType: 'service_report',
       entityId: reportId,
       createdAt: new Date().toISOString(),
@@ -322,6 +434,7 @@ export async function deleteServiceReportDraft(
     );
     if (!draft) throw new Error('Only an unnumbered draft can be deleted.');
     await tx.runAsync('DELETE FROM service_report_item_usage WHERE service_report_id = ?', reportId);
+    await tx.runAsync('DELETE FROM service_report_service_usage WHERE service_report_id = ?', reportId);
     await tx.runAsync("DELETE FROM service_reports WHERE id = ? AND document_state = 'draft'", reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.draft_deleted',
@@ -378,7 +491,8 @@ export async function finalizeServiceReport(
     if (row.document_state !== 'draft') throw new Error('Only a draft CSR can be finalized.');
     validateBusinessDate(row.business_date, row.backdate_reason ?? undefined);
 
-    const usages = await listFinalizationUsages(tx, reportId, row.customer_id);
+    let usages = await listFinalizationUsages(tx, reportId, row.customer_id);
+    let services = await listFinalizationServices(tx, reportId);
     const priceChanges: string[] = [];
     for (const usage of usages) {
       if (usage.quantity_integer > usage.current_stock) {
@@ -389,7 +503,62 @@ export async function finalizeServiceReport(
         if (usage.resolved_selling_price_centavos !== currentPrice) priceChanges.push(usage.item_name);
       }
     }
+    for (const service of services) {
+      if (service.rate_source !== 'override' && service.resolved_rate_centavos !== service.base_rate_centavos) {
+        priceChanges.push(service.service_name);
+      }
+    }
     if (priceChanges.length && pricePolicy === 'reject') throw new DraftPriceChangedError(priceChanges);
+
+    for (const usage of usages) {
+      if (usage.billable !== 1) continue;
+      const currentPrice = usage.customer_price_centavos ?? usage.base_selling_price_centavos;
+      const currentSource = usage.customer_price_centavos === null ? 'base' : 'customer';
+      if (pricePolicy === 'use-current') {
+        await tx.runAsync(
+          `UPDATE service_report_item_usage
+           SET resolved_selling_price_centavos = ?, price_source = ?, override_reason = NULL
+           WHERE id = ?`,
+          currentPrice,
+          currentSource,
+          usage.id,
+        );
+      } else if (pricePolicy === 'keep-draft' && usage.resolved_selling_price_centavos !== currentPrice) {
+        await tx.runAsync(
+          `UPDATE service_report_item_usage
+           SET price_source = 'override', override_reason = 'Draft price retained after price change'
+           WHERE id = ?`,
+          usage.id,
+        );
+      }
+    }
+    for (const service of services) {
+      if (service.rate_source === 'override') continue;
+      if (pricePolicy === 'use-current') {
+        await tx.runAsync(
+          `UPDATE service_report_service_usage
+           SET resolved_rate_centavos = ?, rate_source = 'catalog', override_reason = NULL
+           WHERE id = ?`,
+          service.base_rate_centavos,
+          service.id,
+        );
+      } else if (pricePolicy === 'keep-draft' && service.resolved_rate_centavos !== service.base_rate_centavos) {
+        await tx.runAsync(
+          `UPDATE service_report_service_usage
+           SET rate_source = 'override', override_reason = 'Draft rate retained after rate change'
+           WHERE id = ?`,
+          service.id,
+        );
+      }
+    }
+    usages = await listFinalizationUsages(tx, reportId, row.customer_id);
+    services = await listFinalizationServices(tx, reportId);
+    const totalBillCentavos = calculateServiceReportTotal(usages.map((usage) => ({
+      quantity: usage.quantity_integer,
+      billable: usage.billable === 1,
+      resolvedSellingPriceCentavos: usage.resolved_selling_price_centavos,
+    })), services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })));
+    await tx.runAsync('UPDATE service_reports SET total_bill_centavos = ? WHERE id = ?', totalBillCentavos, reportId);
 
     const csrNumber = await allocateDocumentNumber(tx, 'CSR');
     const snapshot: CsrRenderSnapshot = {
@@ -416,12 +585,16 @@ export async function finalizeServiceReport(
       warrantyText: row.warranty_text,
       servicedBy: row.serviced_by_snapshot,
       acknowledgedBy: row.acknowledged_by_snapshot,
-      totalBillCentavos: row.total_bill_centavos,
+      totalBillCentavos,
       usages: usages.map((usage) => ({
         description: usage.item_name,
         quantity: usage.quantity_integer,
         unitLabel: usage.unit_label,
         billable: usage.billable === 1,
+      })),
+      services: services.map((service) => ({
+        description: service.service_name,
+        rateCentavos: service.resolved_rate_centavos,
       })),
     };
     snapshot.business.logoDataUrl = await getBusinessLogo(tx);
@@ -444,28 +617,6 @@ export async function finalizeServiceReport(
     );
 
     for (const usage of usages) {
-      if (usage.billable === 1) {
-        const currentPrice = usage.customer_price_centavos ?? usage.base_selling_price_centavos;
-        const currentSource = usage.customer_price_centavos === null ? 'base' : 'customer';
-        if (pricePolicy === 'use-current') {
-          await tx.runAsync(
-            `UPDATE service_report_item_usage
-             SET resolved_selling_price_centavos = ?, price_source = ?, override_reason = NULL
-             WHERE id = ?`,
-            currentPrice,
-            currentSource,
-            usage.id,
-          );
-        } else if (pricePolicy === 'keep-draft' && usage.resolved_selling_price_centavos !== currentPrice) {
-          await tx.runAsync(
-            `UPDATE service_report_item_usage
-             SET price_source = 'override', override_reason = 'Draft price retained after price change'
-             WHERE id = ?`,
-            usage.id,
-          );
-        }
-      }
-
       await tx.runAsync(
         `INSERT INTO inventory_movements
           (id, item_id, stock_transaction_id, movement_type, quantity_delta_integer,
@@ -641,6 +792,19 @@ async function listReportUsages(db: SQLiteDatabase, reportId: string): Promise<S
   return rows.map(mapUsageRow);
 }
 
+async function listReportServices(db: SQLiteDatabase, reportId: string): Promise<ServiceReportServiceUsage[]> {
+  const rows = await db.getAllAsync<ServiceUsageRow>(
+    `SELECT u.id, u.service_id, COALESCE(u.description_snapshot, s.name) AS service_name,
+            u.quantity_integer, u.resolved_rate_centavos, u.rate_source, u.override_reason
+     FROM service_report_service_usage u
+     JOIN services s ON s.id = u.service_id
+     WHERE u.service_report_id = ?
+     ORDER BY u.created_at ASC`,
+    reportId,
+  );
+  return rows.map(mapServiceUsageRow);
+}
+
 async function listFinalizationUsages(
   db: SQLiteDatabase,
   reportId: string,
@@ -663,6 +827,58 @@ async function listFinalizationUsages(
   );
 }
 
+async function listFinalizationServices(
+  db: SQLiteDatabase,
+  reportId: string,
+): Promise<FinalizationServiceUsageRow[]> {
+  return db.getAllAsync<FinalizationServiceUsageRow>(
+    `SELECT u.id, u.service_id, COALESCE(u.description_snapshot, s.name) AS service_name,
+            u.quantity_integer, u.resolved_rate_centavos, u.rate_source, u.override_reason,
+            s.base_rate_centavos
+     FROM service_report_service_usage u
+     JOIN services s ON s.id = u.service_id
+     WHERE u.service_report_id = ?
+     ORDER BY u.created_at ASC`,
+    reportId,
+  );
+}
+
+async function recalculateServiceReportTotal(
+  db: SQLiteDatabase,
+  reportId: string,
+): Promise<number> {
+  const [items, services] = await Promise.all([
+    db.getAllAsync<{
+      quantity_integer: number;
+      billable: number;
+      resolved_selling_price_centavos: number | null;
+    }>(
+      `SELECT quantity_integer, billable, resolved_selling_price_centavos
+       FROM service_report_item_usage WHERE service_report_id = ?`,
+      reportId,
+    ),
+    db.getAllAsync<{ resolved_rate_centavos: number }>(
+      `SELECT resolved_rate_centavos
+       FROM service_report_service_usage WHERE service_report_id = ?`,
+      reportId,
+    ),
+  ]);
+  const total = calculateServiceReportTotal(
+    items.map((item) => ({
+      quantity: item.quantity_integer,
+      billable: item.billable === 1,
+      resolvedSellingPriceCentavos: item.resolved_selling_price_centavos,
+    })),
+    services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })),
+  );
+  await db.runAsync(
+    "UPDATE service_reports SET total_bill_centavos = ? WHERE id = ? AND document_state = 'draft'",
+    total,
+    reportId,
+  );
+  return total;
+}
+
 function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
   return {
     id: row.id,
@@ -676,7 +892,7 @@ function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
   };
 }
 
-function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages'> {
+function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'services'> {
   return {
     ...mapSummaryRow(row),
     customerId: row.customer_id,
@@ -716,6 +932,18 @@ function mapUsageRow(row: UsageRow): ServiceReportUsage {
   };
 }
 
+function mapServiceUsageRow(row: ServiceUsageRow): ServiceReportServiceUsage {
+  return {
+    id: row.id,
+    serviceId: row.service_id,
+    serviceName: row.service_name,
+    quantity: 1,
+    resolvedRateCentavos: row.resolved_rate_centavos,
+    rateSource: row.rate_source,
+    overrideReason: row.override_reason,
+  };
+}
+
 function cleanEntries(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean);
 }
@@ -729,6 +957,6 @@ function parseEntries(value: string): string[] {
   }
 }
 
-function assertNonNegativeMoney(value: number): void {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error('Total Bill must be a non-negative amount.');
+function assertNonNegativeMoney(value: number, label = 'Amount'): void {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a non-negative amount.`);
 }

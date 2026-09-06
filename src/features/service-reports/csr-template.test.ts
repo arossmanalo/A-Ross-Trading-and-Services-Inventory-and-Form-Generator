@@ -22,6 +22,7 @@ const SNAPSHOT: CsrRenderSnapshot = {
   acknowledgedBy: 'Customer',
   totalBillCentavos: 125000,
   usages: [{ description: 'Hose', quantity: 1, unitLabel: 'pc', billable: true }],
+  services: [{ description: 'Preventive maintenance', rateCentavos: 50000 }],
 };
 
 describe('CSR template', () => {
@@ -32,6 +33,8 @@ describe('CSR template', () => {
     expect(html).toContain('Status After Service');
     expect(html).toContain('Acknowledged By');
     expect(html).toContain('CSR-000001');
+    expect(html).toContain('Services Used');
+    expect(html).toContain('Preventive maintenance');
   });
 
   it('escapes owner-entered content', () => {
@@ -45,6 +48,7 @@ describe('CSR template', () => {
       ...SNAPSHOT,
       reportedProblem: Array.from({ length: 40 }, (_, index) => `Problem ${index} with a long description`),
       usages: Array.from({ length: 120 }, (_, index) => ({ description: `Part ${index}`, quantity: 1, unitLabel: 'pc', billable: index % 2 === 0 })),
+      services: [],
     });
     expect(html).toContain('tr{break-inside:avoid}thead{display:table-header-group}');
     expect(html.match(/<tr>/g)?.length).toBe(121);

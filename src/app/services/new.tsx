@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -10,6 +10,7 @@ import { createService } from '@/features/services/service-repository';
 import { colors } from '@/theme/colors';
 
 export default function NewServiceScreen() {
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const db = useSQLiteContext();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -26,13 +27,14 @@ export default function NewServiceScreen() {
         description,
         baseRateCentavos: parseCurrencyToCentavos(rate || '0'),
       });
-      router.replace({ pathname: '/services/[service-id]', params: { 'service-id': serviceId } });
+      if (returnTo === 'service-report-service-usage') router.back();
+      else router.replace({ pathname: '/services/[service-id]', params: { 'service-id': serviceId } });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save the service.');
     } finally {
       setSaving(false);
     }
-  }, [db, description, name, rate]);
+  }, [db, description, name, rate, returnTo]);
 
   return (
     <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>

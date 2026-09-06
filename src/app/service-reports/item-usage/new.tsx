@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
@@ -21,11 +21,17 @@ export default function NewReportItemUsageScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    void listInventoryItems(db)
-      .then((rows) => setItems(rows.filter((item) => item.active)))
-      .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Could not load inventory.'));
+  const loadItems = useCallback(async () => {
+    try {
+      const rows = await listInventoryItems(db);
+      setItems(rows.filter((item) => item.active));
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Could not load inventory.');
+    }
   }, [db]);
+
+  useFocusEffect(useCallback(() => { void loadItems(); }, [loadItems]));
 
   const save = useCallback(async () => {
     if (!reportId || !selectedItem) {
@@ -74,6 +80,7 @@ export default function NewReportItemUsageScreen() {
         <View style={styles.header}>
           <Text selectable style={styles.eyebrow}>ITEM USED</Text>
           <Text selectable style={styles.help}>Draft selection does not deduct stock. Availability is checked again at finalization.</Text>
+          <ActionButton compact onPress={() => router.push('/inventory/new')} variant="secondary">Add new inventory item</ActionButton>
           {selectedItem ? (
             <View style={styles.editor}>
               <Text selectable style={styles.selectedName}>{selectedItem.name}</Text>
@@ -91,6 +98,7 @@ export default function NewReportItemUsageScreen() {
           {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
         </View>
       }
+      ListEmptyComponent={<View style={styles.empty}><Text selectable style={styles.help}>No active inventory items are available.</Text><ActionButton compact onPress={() => router.push('/inventory/new')}>Add new inventory item</ActionButton></View>}
     />
   );
 }
@@ -112,4 +120,5 @@ const styles = StyleSheet.create({
   selectLabel: { color: colors.brandBlue, fontSize: 9, fontWeight: '900', letterSpacing: .7 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  empty: { gap: 12, paddingVertical: 24 },
 });

@@ -5,11 +5,12 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
-import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
+import { formatCentavos } from '@/domain/money';
 import {
   DraftPriceChangedError,
   deleteServiceReportDraft,
   getServiceReport,
+  removeReportServiceUsage,
   removeReportItemUsage,
   updateServiceReportDraft,
 } from '@/features/service-reports/service-report-repository';
@@ -35,11 +36,10 @@ type FormState = {
   warrantyText: string;
   servicedBy: string;
   acknowledgedBy: string;
-  totalBill: string;
 };
 
 const EMPTY_FORM: FormState = {
-  businessDate: '', backdateReason: '', serviceOutcome: 'incomplete', reportedProblem: '', diagnosis: '', actionTaken: '', recommendations: '', billing: '', customerRemarks: '', machineStatus: '', warrantyText: '', servicedBy: '', acknowledgedBy: '', totalBill: '0.00',
+  businessDate: '', backdateReason: '', serviceOutcome: 'incomplete', reportedProblem: '', diagnosis: '', actionTaken: '', recommendations: '', billing: '', customerRemarks: '', machineStatus: '', warrantyText: '', servicedBy: '', acknowledgedBy: '',
 };
 
 export default function ServiceReportDetailScreen() {
@@ -106,11 +106,28 @@ export default function ServiceReportDetailScreen() {
       });
   }, [dirty, reportId, saveDraft]);
 
+  const addService = useCallback(() => {
+    if (!reportId) return;
+    void (dirty ? saveDraft() : Promise.resolve())
+      .then(() => router.push({ pathname: '/service-reports/service-usage/new', params: { reportId } }))
+      .catch((saveError: unknown) => {
+        setError(saveError instanceof Error ? saveError.message : 'Save the draft before adding services.');
+      });
+  }, [dirty, reportId, saveDraft]);
+
   const removeUsage = useCallback((usageId: string) => {
     if (!reportId) return;
     Alert.alert('Remove item usage?', 'Draft stock has not been deducted yet.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => void removeReportItemUsage(db, reportId, usageId).then(loadReport).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not remove item.')) },
+    ]);
+  }, [db, loadReport, reportId]);
+
+  const removeService = useCallback((usageId: string) => {
+    if (!reportId) return;
+    Alert.alert('Remove service usage?', 'The service will be removed from this draft total.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => void removeReportServiceUsage(db, reportId, usageId).then(loadReport).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not remove service.')) },
     ]);
   }, [db, loadReport, reportId]);
 
@@ -124,7 +141,7 @@ export default function ServiceReportDetailScreen() {
       await loadReport();
     } catch (finalizeError) {
       if (finalizeError instanceof DraftPriceChangedError) {
-        Alert.alert('Item prices changed', finalizeError.message, [
+        Alert.alert('Prices changed', finalizeError.message, [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Keep draft prices', onPress: () => void runFinalize('keep-draft') },
           { text: 'Use current prices', onPress: () => void runFinalize('use-current') },
@@ -215,11 +232,15 @@ export default function ServiceReportDetailScreen() {
             <Multiline label="Billing notes" value={form.billing} onChange={(v) => setField('billing', v)} />
             <Multiline label="Warranty" value={form.warrantyText} onChange={(v) => setField('warrantyText', v)} />
             <Multiline label="Customer's Remarks" value={form.customerRemarks} onChange={(v) => setField('customerRemarks', v)} />
-            <FormField keyboardType="decimal-pad" label="Total Bill" onChangeText={(v) => setField('totalBill', v)} value={form.totalBill} />
             <FormField label="Serviced By" onChangeText={(v) => setField('servicedBy', v)} value={form.servicedBy} />
             <FormField label="Acknowledged By" onChangeText={(v) => setField('acknowledgedBy', v)} value={form.acknowledgedBy} />
+            <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus selected service rates. Non-billable items are excluded.</Text></View>
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Items used</Text><ActionButton compact onPress={addItem}>Add item</ActionButton></View>
             {report?.usages.map((usage) => <View key={usage.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{usage.itemName}</Text><Text selectable style={styles.meta}>{usage.quantity} {usage.unitLabel} · {usage.billable ? `Billable ${formatCentavos(usage.resolvedSellingPriceCentavos ?? 0)}` : 'Non-billable'}</Text></View><Pressable onPress={() => removeUsage(usage.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
+            {!report.usages.length ? <Text selectable style={styles.emptyHint}>No inventory items added yet.</Text> : null}
+            <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Services used</Text><ActionButton compact onPress={addService}>Add service</ActionButton></View>
+            {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{formatCentavos(service.resolvedRateCentavos)} · quantity 1{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
+            {!report.services.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
             <ActionButton disabled={busy} onPress={deleteDraft} variant="danger">Delete draft</ActionButton>
           </>
@@ -231,7 +252,7 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Recommendations" values={report.recommendations} />
             <ReadSection label="Machine Status" values={[report.machineStatus]} />
             <ReadSection label="Warranty" values={[report.warrantyText]} />
-            <Text selectable style={styles.total}>Total Bill: {formatCentavos(report.totalBillCentavos)}</Text>
+            <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>TOTAL BILL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Derived from billable inventory items and service rates.</Text></View>
             {report.pdfState !== 'ready' ? <ActionButton disabled={busy} onPress={() => void retryPdf()}>Retry PDF</ActionButton> : <ActionButton disabled={busy} onPress={() => void sharePdf()}>Share PDF</ActionButton>}
             <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId } })} variant="secondary">Signing & returned PDF</ActionButton>
             {report.documentState === 'finalized' ? (
@@ -256,12 +277,12 @@ function ReadSection({ label, values }: { label: string; values: string[] }) {
 }
 
 function toForm(report: ServiceReportDetail): FormState {
-  return { businessDate: report.businessDate, backdateReason: report.backdateReason ?? '', serviceOutcome: report.serviceOutcome, reportedProblem: report.reportedProblem.join('\n'), diagnosis: report.diagnosis.join('\n'), actionTaken: report.actionTaken.join('\n'), recommendations: report.recommendations.join('\n'), billing: report.billing.join('\n'), customerRemarks: report.customerRemarks.join('\n'), machineStatus: report.machineStatus, warrantyText: report.warrantyText, servicedBy: report.servicedBy, acknowledgedBy: report.acknowledgedBy, totalBill: (report.totalBillCentavos / 100).toFixed(2) };
+  return { businessDate: report.businessDate, backdateReason: report.backdateReason ?? '', serviceOutcome: report.serviceOutcome, reportedProblem: report.reportedProblem.join('\n'), diagnosis: report.diagnosis.join('\n'), actionTaken: report.actionTaken.join('\n'), recommendations: report.recommendations.join('\n'), billing: report.billing.join('\n'), customerRemarks: report.customerRemarks.join('\n'), machineStatus: report.machineStatus, warrantyText: report.warrantyText, servicedBy: report.servicedBy, acknowledgedBy: report.acknowledgedBy };
 }
 
 function toDraftInput(form: FormState) {
   const lines = (value: string) => value.split('\n');
-  return { businessDate: form.businessDate, backdateReason: form.backdateReason, serviceOutcome: form.serviceOutcome, reportedProblem: lines(form.reportedProblem), diagnosis: lines(form.diagnosis), actionTaken: lines(form.actionTaken), recommendations: lines(form.recommendations), billing: lines(form.billing), customerRemarks: lines(form.customerRemarks), machineStatus: form.machineStatus, warrantyText: form.warrantyText, servicedBy: form.servicedBy, acknowledgedBy: form.acknowledgedBy, totalBillCentavos: parseCurrencyToCentavos(form.totalBill || '0') };
+  return { businessDate: form.businessDate, backdateReason: form.backdateReason, serviceOutcome: form.serviceOutcome, reportedProblem: lines(form.reportedProblem), diagnosis: lines(form.diagnosis), actionTaken: lines(form.actionTaken), recommendations: lines(form.recommendations), billing: lines(form.billing), customerRemarks: lines(form.customerRemarks), machineStatus: form.machineStatus, warrantyText: form.warrantyText, servicedBy: form.servicedBy, acknowledgedBy: form.acknowledgedBy };
 }
 
 function formatLabel(value: string) { return value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase()); }
@@ -290,5 +311,8 @@ const styles = StyleSheet.create({
   readSection: { gap: 5, padding: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.separator, borderRadius: 14, borderCurve: 'continuous' },
   readText: { color: colors.label, fontSize: 14, lineHeight: 20 },
   total: { color: colors.brandNavy, fontSize: 19, fontWeight: '900', textAlign: 'right', fontVariant: ['tabular-nums'] },
+  totalCard: { gap: 5, padding: 15, backgroundColor: '#eaf2ff', borderRadius: 15, borderCurve: 'continuous' },
+  totalHelp: { color: colors.secondaryLabel, fontSize: 12, lineHeight: 17 },
+  emptyHint: { color: colors.secondaryLabel, fontSize: 13, fontStyle: 'italic' },
   errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 });

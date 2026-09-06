@@ -39,6 +39,10 @@ export type CsrRenderSnapshot = {
     unitLabel: string;
     billable: boolean;
   }>;
+  services?: Array<{
+    description: string;
+    rateCentavos: number;
+  }>;
 };
 
 const PHP_FORMATTER = new Intl.NumberFormat('en-PH', {
@@ -121,6 +125,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   ${textSection('Machine Status', snapshot.machineStatus)}
   ${listSection('Billing', snapshot.billing)}
   ${usageSection(snapshot.usages)}
+  ${serviceSection(snapshot.services)}
   ${textSection('Warranty', snapshot.warrantyText)}
   ${listSection("Customer's Remarks", snapshot.customerRemarks)}
   <div class="total-row"><div class="total-box"><span>Total Bill</span><span>${escapeHtml(PHP_FORMATTER.format(snapshot.totalBillCentavos / 100))}</span></div></div>
@@ -155,6 +160,13 @@ function usageSection(usages: CsrRenderSnapshot['usages']): string {
   if (!usages.length) return '';
   return `<section class="section"><div class="section-title">Items Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Quantity</th></tr></thead><tbody>${usages
     .map((usage) => `<tr><td>${escapeHtml(usage.description)}${usage.billable ? '' : ' (non-billable)'}</td><td class="qty">${usage.quantity} ${escapeHtml(usage.unitLabel)}</td></tr>`)
+    .join('')}</tbody></table></section>`;
+}
+
+function serviceSection(services: CsrRenderSnapshot['services'] = []): string {
+  if (!services.length) return '';
+  return `<section class="section"><div class="section-title">Services Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Rate</th></tr></thead><tbody>${services
+    .map((service) => `<tr><td>${escapeHtml(service.description)}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(service.rateCentavos / 100))}</td></tr>`)
     .join('')}</tbody></table></section>`;
 }
 

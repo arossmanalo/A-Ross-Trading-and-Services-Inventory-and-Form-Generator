@@ -132,6 +132,9 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-8.16:** The sample's visible row counts (three each for Reported Problem, Diagnosis, Action Taken, and Billing; two each for Recommendations and Customer's Remarks) are minimum layout slots, not data limits. Additional entries shall flow to continuation pages.
 - **FR-8.17:** Status After Service shall render the four confirmed choices in one ruled selection row when space permits.
 - **FR-8.18:** The blank second page in the supplied source PDF shall be treated as a scan/export artifact and shall not be generated.
+- **FR-8.19:** A CSR may contain inventory item usage, service usage, or both. Each selected service has quantity one and stores the catalog rate or an owner-authorized override with its reason.
+- **FR-8.20:** CSR Total Bill shall be read-only and automatically equal the sum of billable item quantities at their resolved selling prices plus all selected service rates. Non-billable item usage is excluded.
+- **FR-8.21:** Draft totals shall recalculate whenever CSR fields, item usage, service usage, or service-rate overrides change. Finalization shall recheck current prices according to the selected policy and freeze the computed total in the CSR snapshot.
 
 ### 4.9 Billing Statements
 

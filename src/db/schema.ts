@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 5;
+export const DATABASE_VERSION = 6;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -365,4 +365,23 @@ BEFORE UPDATE OF id,owner_type,owner_id,role,signer_name,png_data_url,created_at
 BEGIN SELECT RAISE(ABORT, 'SIGNATURE_IS_IMMUTABLE'); END;
 CREATE TRIGGER signature_captures_no_delete BEFORE DELETE ON signature_captures
 BEGIN SELECT RAISE(ABORT, 'SIGNATURE_IS_IMMUTABLE'); END;
+`;
+
+export const SCHEMA_V6 = `
+CREATE TABLE service_report_service_usage (
+  id TEXT PRIMARY KEY NOT NULL,
+  service_report_id TEXT NOT NULL REFERENCES service_reports(id),
+  service_id TEXT NOT NULL REFERENCES services(id),
+  quantity_integer INTEGER NOT NULL DEFAULT 1 CHECK (quantity_integer = 1),
+  resolved_rate_centavos INTEGER NOT NULL CHECK (resolved_rate_centavos >= 0),
+  rate_source TEXT NOT NULL CHECK (rate_source IN ('catalog', 'override')),
+  override_reason TEXT,
+  description_snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX service_report_service_usage_one_service
+  ON service_report_service_usage(service_report_id, service_id);
+CREATE INDEX service_report_service_usage_report_idx
+  ON service_report_service_usage(service_report_id, created_at);
 `;

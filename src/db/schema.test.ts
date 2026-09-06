@@ -3,14 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6 } from './schema';
 
 describe('database schema', () => {
   let db: DatabaseSync;
 
   beforeEach(() => {
     db = new DatabaseSync(':memory:');
-    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4} ${SCHEMA_V5}`);
+    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4} ${SCHEMA_V5} ${SCHEMA_V6}`);
   });
 
   afterEach(() => {
@@ -22,7 +22,7 @@ describe('database schema', () => {
       .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'")
       .get() as { count: number };
 
-    expect(row.count).toBe(20);
+    expect(row.count).toBe(21);
   });
 
   it('allows duplicate customer names and equipment serial numbers', () => {
@@ -124,6 +124,15 @@ describe('database schema', () => {
   it('adds the billing statement double-posting guard', () => {
     const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>;
     expect(indexes.map((index) => index.name)).toContain('stock_transactions_one_active_statement_sale');
+  });
+
+  it('adds service usage rows for CSR charges', () => {
+    const columns = db.prepare("PRAGMA table_info('service_report_service_usage')").all() as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      'service_report_id', 'service_id', 'quantity_integer', 'resolved_rate_centavos', 'rate_source',
+    ]));
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>;
+    expect(indexes.map((index) => index.name)).toContain('service_report_service_usage_one_service');
   });
 
   it('adds frozen payment-document fields and the active down-payment guard', () => {
