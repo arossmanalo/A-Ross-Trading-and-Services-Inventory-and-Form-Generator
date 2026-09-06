@@ -72,6 +72,7 @@ async function renderFinalizedServiceReportPdf(
   csrNumber: string,
   html: string,
 ): Promise<string> {
+  let cacheUri: string | undefined;
   try {
     const result = await Print.printToFileAsync({
       html,
@@ -80,6 +81,7 @@ async function renderFinalizedServiceReportPdf(
       base64: true,
       textZoom: 100,
     });
+    cacheUri = result.uri;
     if (!FileSystem.documentDirectory) throw new Error('Persistent document storage is unavailable.');
     if (!result.base64) throw new Error('PDF checksum source was not returned.');
 
@@ -89,7 +91,7 @@ async function renderFinalizedServiceReportPdf(
     const destination = `${directory}${filename}`;
     const existing = await FileSystem.getInfoAsync(destination);
     if (existing.exists) await FileSystem.deleteAsync(destination, { idempotent: true });
-    await FileSystem.moveAsync({ from: result.uri, to: destination });
+    await FileSystem.copyAsync({ from: result.uri, to: destination });
     const checksum = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, result.base64);
     const now = new Date().toISOString();
 
@@ -138,6 +140,8 @@ async function renderFinalizedServiceReportPdf(
   } catch (error) {
     await markPdfError(db, reportId, error);
     throw error;
+  } finally {
+    if (cacheUri) await FileSystem.deleteAsync(cacheUri, { idempotent: true }).catch(() => undefined);
   }
 }
 

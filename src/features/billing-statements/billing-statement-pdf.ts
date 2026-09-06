@@ -34,16 +34,19 @@ export async function shareBillingStatementPdf(db: SQLiteDatabase, statementId: 
 }
 
 async function renderFinalizedBillingStatementPdf(db: SQLiteDatabase, statementId: string, bsNumber: string, html: string): Promise<string> {
+  let cacheUri: string | undefined;
   try {
-    const result=await Print.printToFileAsync({html,width:A4_WIDTH_POINTS,height:A4_HEIGHT_POINTS,base64:true,textZoom:100});
+    const result=await Print.printToFileAsync({html,width:A4_WIDTH_POINTS,height:A4_HEIGHT_POINTS,base64:true,textZoom:100}); cacheUri=result.uri;
     if(!FileSystem.documentDirectory) throw new Error('Persistent document storage is unavailable.');
     if(!result.base64) throw new Error('PDF checksum source was not returned.');
-    const directory=`${FileSystem.documentDirectory}documents/`; await FileSystem.makeDirectoryAsync(directory,{intermediates:true}); const filename=`${bsNumber}.pdf`; const destination=`${directory}${filename}`; const existing=await FileSystem.getInfoAsync(destination); if(existing.exists) await FileSystem.deleteAsync(destination,{idempotent:true}); await FileSystem.moveAsync({from:result.uri,to:destination});
+    const directory=`${FileSystem.documentDirectory}documents/`; await FileSystem.makeDirectoryAsync(directory,{intermediates:true}); const filename=`${bsNumber}.pdf`; const destination=`${directory}${filename}`; const existing=await FileSystem.getInfoAsync(destination); if(existing.exists) await FileSystem.deleteAsync(destination,{idempotent:true}); await FileSystem.copyAsync({from:result.uri,to:destination});
     const checksum=await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,result.base64); const now=new Date().toISOString();
     await db.withExclusiveTransactionAsync(async(tx)=>{const attachment=await tx.getFirstAsync<{id:string}>(`SELECT id FROM document_attachments WHERE owner_type='billing_statement' AND owner_id=? AND attachment_type='generated_pdf'`,statementId); if(attachment){await tx.runAsync('UPDATE document_attachments SET deterministic_filename=?,private_path=?,checksum=?,created_at=? WHERE id=?',filename,destination,checksum,now,attachment.id);}else{await tx.runAsync(`INSERT INTO document_attachments(id,owner_type,owner_id,attachment_type,deterministic_filename,private_path,checksum,created_at) VALUES(?,'billing_statement',?,'generated_pdf',?,?,?,?)`,Crypto.randomUUID(),statementId,filename,destination,checksum,now);} await tx.runAsync("UPDATE billing_statements SET pdf_state='ready' WHERE id=?",statementId);await appendAuditEvent(tx,{eventType:'billing_statement.pdf_rendered',entityType:'billing_statement',entityId:statementId,details:{numberOfPages:result.numberOfPages},createdAt:now});await incrementDatabaseRevision(tx);});
     return destination;
   } catch(error) {
     await db.withExclusiveTransactionAsync(async(tx)=>{const changed=await tx.runAsync("UPDATE billing_statements SET pdf_state='error' WHERE id=? AND document_state='finalized'",statementId);if(changed.changes===1){await appendAuditEvent(tx,{eventType:'billing_statement.pdf_error',entityType:'billing_statement',entityId:statementId,details:{message:error instanceof Error?error.message:String(error)},createdAt:new Date().toISOString()});await incrementDatabaseRevision(tx);}});
     throw error;
+  } finally {
+    if(cacheUri) await FileSystem.deleteAsync(cacheUri,{idempotent:true}).catch(()=>undefined);
   }
 }
