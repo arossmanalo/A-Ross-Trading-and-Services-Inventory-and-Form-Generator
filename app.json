@@ -14,6 +14,14 @@
       "expo-image",
       "expo-status-bar",
       [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow A.Ross Operations to save document preview images to your photo library.",
+          "savePhotosPermission": "Allow A.Ross Operations to save document preview images to your photo library.",
+          "granularPermissions": []
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
@@ -25,6 +33,11 @@
     "android": {
       "package": "com.aross.operations",
       "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#F4F7FB",
         "foregroundImage": "./assets/android-icon-foreground.png",

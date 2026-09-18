@@ -43,6 +43,41 @@ export async function listFinalizedCsrsForCustomer(db: SQLiteDatabase, customerI
   return rows.map((row) => ({ id: row.id, csrNumber: row.csr_number, businessDate: row.business_date, availableLineCount: row.available_line_count }));
 }
 
+export async function listCsrsForBilling(db: SQLiteDatabase, customerId: string): Promise<Array<{
+  id: string;
+  csrNumber: string | null;
+  businessDate: string;
+  documentState: 'draft' | 'finalized';
+  availableLineCount: number;
+}>> {
+  const rows = await db.getAllAsync<{
+    id: string;
+    csr_number: string | null;
+    business_date: string;
+    document_state: 'draft' | 'finalized';
+    available_line_count: number;
+  }>(
+    `SELECT r.id, r.csr_number, r.business_date, r.document_state,
+            COUNT(CASE WHEN r.document_state='finalized' AND u.billable=1
+                        AND NOT EXISTS(SELECT 1 FROM billing_statement_lines l WHERE l.source_csr_usage_id=u.id)
+                       THEN u.id END) AS available_line_count
+     FROM service_reports r
+     LEFT JOIN service_report_item_usage u ON u.service_report_id=r.id
+     WHERE r.customer_id=? AND r.document_state IN ('draft','finalized')
+     GROUP BY r.id
+     ORDER BY CASE r.document_state WHEN 'draft' THEN 0 ELSE 1 END,
+              r.business_date DESC, r.created_at DESC`,
+    customerId,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    csrNumber: row.csr_number,
+    businessDate: row.business_date,
+    documentState: row.document_state,
+    availableLineCount: row.available_line_count,
+  }));
+}
+
 export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; businessDate: string; backdateReason?: string }): Promise<string> {
   validateBusinessDate(input.businessDate, input.backdateReason);
   const id = Crypto.randomUUID(); const now = new Date().toISOString();
@@ -51,7 +86,7 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
     if (!customer || customer.active !== 1 || customer.merged_into_customer_id) throw new Error('Select an active registered customer.');
     if (input.serviceReportId) {
       const report = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM service_reports WHERE id=?', input.serviceReportId);
-      if (!report || report.document_state !== 'finalized' || report.customer_id !== input.customerId) throw new Error('Select a finalized CSR for the same customer.');
+      if (!report || !['draft', 'finalized'].includes(report.document_state) || report.customer_id !== input.customerId) throw new Error('Select a draft or finalized CSR for the same customer.');
     }
     await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,business_date,backdate_reason,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.businessDate, input.backdateReason?.trim() || null, now);
     await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null }, now);
@@ -74,14 +109,14 @@ export async function updateBillingStatementDraft(db: SQLiteDatabase, statementI
 }
 
 export async function listEligibleCsrUsages(db: SQLiteDatabase, statementId: string): Promise<EligibleCsrUsage[]> {
-  const rows = await db.getAllAsync<{ id: string; csr_number: string; item_name: string; quantity_integer: number; unit_label: string; unit_price: number }>(`SELECT u.id,r.csr_number,u.description_snapshot AS item_name,u.quantity_integer,i.unit_label,u.resolved_selling_price_centavos AS unit_price FROM billing_statements b JOIN service_reports r ON r.id=b.service_report_id JOIN service_report_item_usage u ON u.service_report_id=r.id JOIN items i ON i.id=u.item_id WHERE b.id=? AND b.document_state='draft' AND u.billable=1 AND u.resolved_selling_price_centavos IS NOT NULL AND NOT EXISTS(SELECT 1 FROM billing_statement_lines l WHERE l.source_csr_usage_id=u.id) ORDER BY u.created_at`, statementId);
+  const rows = await db.getAllAsync<{ id: string; csr_number: string; item_name: string; quantity_integer: number; unit_label: string; unit_price: number }>(`SELECT u.id,r.csr_number,u.description_snapshot AS item_name,u.quantity_integer,i.unit_label,u.resolved_selling_price_centavos AS unit_price FROM billing_statements b JOIN service_reports r ON r.id=b.service_report_id JOIN service_report_item_usage u ON u.service_report_id=r.id JOIN items i ON i.id=u.item_id WHERE b.id=? AND b.document_state='draft' AND r.document_state='finalized' AND u.billable=1 AND u.resolved_selling_price_centavos IS NOT NULL AND NOT EXISTS(SELECT 1 FROM billing_statement_lines l WHERE l.source_csr_usage_id=u.id) ORDER BY u.created_at`, statementId);
   return rows.map((row) => ({ id: row.id, csrNumber: row.csr_number, itemName: row.item_name, quantity: row.quantity_integer, unitLabel: row.unit_label, unitPriceCentavos: row.unit_price, amountCentavos: safeMultiply(row.unit_price, row.quantity_integer) }));
 }
 
 export async function addCsrUsageLine(db: SQLiteDatabase, statementId: string, usageId: string): Promise<void> {
   const now = new Date().toISOString();
   await db.withExclusiveTransactionAsync(async (tx) => {
-    const row = await tx.getFirstAsync<{ description_snapshot: string; quantity_integer: number; resolved_selling_price_centavos: number; price_source: BillingPriceSource; item_id: string }>(`SELECT u.description_snapshot,u.quantity_integer,u.resolved_selling_price_centavos,u.price_source,u.item_id FROM billing_statements b JOIN service_report_item_usage u ON u.service_report_id=b.service_report_id WHERE b.id=? AND b.document_state='draft' AND u.id=? AND u.billable=1`, statementId, usageId);
+    const row = await tx.getFirstAsync<{ description_snapshot: string; quantity_integer: number; resolved_selling_price_centavos: number; price_source: BillingPriceSource; item_id: string }>(`SELECT u.description_snapshot,u.quantity_integer,u.resolved_selling_price_centavos,u.price_source,u.item_id FROM billing_statements b JOIN service_reports r ON r.id=b.service_report_id JOIN service_report_item_usage u ON u.service_report_id=r.id WHERE b.id=? AND b.document_state='draft' AND r.document_state='finalized' AND u.id=? AND u.billable=1`, statementId, usageId);
     if (!row || row.resolved_selling_price_centavos === null) throw new Error('This CSR line is not eligible for billing.');
     try { await tx.runAsync(`INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_usage_id,item_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at) VALUES(?,?,'item',?,?,?,?,?,?,?,?,?)`, Crypto.randomUUID(), statementId, usageId, row.item_id, row.description_snapshot, row.quantity_integer, row.resolved_selling_price_centavos, safeMultiply(row.resolved_selling_price_centavos,row.quantity_integer), row.price_source, null, now); }
     catch (error) { if (String(error).includes('UNIQUE')) throw new Error('This CSR item has already been billed.'); throw error; }
@@ -156,6 +191,10 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
     if (!row) throw new Error('Billing statement was not found.');
     if (row.document_state === 'finalized') { if (!row.bs_number || !row.content_snapshot_json || !row.render_template_snapshot) throw new Error('Finalized statement snapshot is incomplete.'); result = { bsNumber: row.bs_number, html: row.render_template_snapshot, snapshot: JSON.parse(row.content_snapshot_json) as BillingStatementRenderSnapshot, initialPayment: null }; return; }
     if (row.document_state !== 'draft') throw new Error('Only a draft billing statement can be finalized.'); validateBusinessDate(row.business_date,row.backdate_reason ?? undefined);
+    if (row.service_report_id) {
+      const linkedCsr = await tx.getFirstAsync<{ document_state: string }>('SELECT document_state FROM service_reports WHERE id=?', row.service_report_id);
+      if (!linkedCsr || linkedCsr.document_state !== 'finalized') throw new Error('Finalize the linked CSR before finalizing its Billing Statement.');
+    }
     const lines = await listFinalLines(tx,statementId,row.customer_id); if (!lines.length) throw new Error('Add at least one billable item, service, or expense before finalizing.');
     const changed: string[] = []; const changedIds = new Set<string>(); const required = new Map<string,{name:string,quantity:number,stock:number}>();
     for (const line of lines) {

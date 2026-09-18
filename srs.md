@@ -135,6 +135,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-8.19:** A CSR may contain inventory item usage, service usage, or both. Each selected service has quantity one and stores the catalog rate or an owner-authorized override with its reason.
 - **FR-8.20:** CSR Total Bill shall be read-only and automatically equal the sum of billable item quantities at their resolved selling prices plus all selected service rates. Non-billable item usage is excluded.
 - **FR-8.21:** Draft totals shall recalculate whenever CSR fields, item usage, service usage, or service-rate overrides change. Finalization shall recheck current prices according to the selected policy and freeze the computed total in the CSR snapshot.
+- **FR-8.22:** A CSR draft shall be previewable and exportable as a temporary PDF before finalization. This preview shall use the current saved draft data and shall not allocate a number, post stock movements, or change document state.
 
 ### 4.9 Billing Statements
 
@@ -157,6 +158,8 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-9.17:** The charge table shall use `Description`, `Quantity`, `Unit Price`, and `Amount` columns. Quantity may render the item's unit label while remaining an integer in storage.
 - **FR-9.18:** Item, service, and billable-expense lines shall share the table and remain distinguishable through description/type labels. The totals block shall extend the sample with Discount, VAT display when enabled, Payments Received, and Balance Due as applicable.
 - **FR-9.19:** The sample's `Invoice` number and receipt/VAT footer are visual placeholders only. The generated document shall use its BS number and the fixed internal-document wording from FR-9.1 plus the frozen VAT-display setting.
+- **FR-9.20:** A Billing Statement draft shall be previewable and exportable as a temporary PDF before finalization. This preview shall use current saved draft values and shall not allocate a number, deduct stock, create a payment, or change document state.
+- **FR-9.21:** Billing Statement creation shall allow linking an existing CSR draft. CSR usage lines remain unavailable and the statement cannot be finalized until the linked CSR is finalized.
 
 ### 4.10 Money, discounts, and VAT display
 
@@ -215,7 +218,9 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-14.5:** Sharing failure yields `Not yet shared`; retry does not change finalization.
 - **FR-14.6:** Generated PDFs shall live in persistent app-private storage and may be regenerated from frozen data.
 - **FR-14.7:** The supplied samples define layout hierarchy and proportions. Owner-configured business identity, agreed document titles, and functional additions in this SRS take precedence over sample data and superseded wording.
-- **FR-14.8:** Finalized CSR and Billing Statement detail screens shall provide an offline, scrollable preview of their frozen render-template snapshot. Drafts and records without a frozen snapshot shall not be previewable.
+- **FR-14.8:** CSR and Billing Statement detail screens shall provide an offline preview. Draft previews use current saved draft data and display an unnumbered-draft marker; finalized previews use the frozen render-template snapshot.
+- **FR-14.9:** Opening a PDF preview shall render a temporary local PDF and open the Android PDF/print preview without finalizing or persisting business effects. PDF sharing/export shall be available from the preview flow.
+- **FR-14.10:** The preview flow shall offer PNG image export to the device photo library using write-only photo permission. The image contains the full rendered document as one tall image; when it exceeds the safe image-height limit, PDF remains available and image export is disabled. Saving an image does not change the document or its database revision.
 
 ### 4.15 Reporting
 
@@ -370,6 +375,7 @@ The same document UUID/idempotency key returns the existing result without anoth
 ### 7.3 Linked CSR and Billing Statement
 
 CSR-posted use is referenced, not reposted. Direct statement items use another transaction. Source-line uniqueness blocks duplicate billing across statements.
+An unfinalized CSR may be linked to a statement draft for preparation, but its charges cannot be imported and the statement cannot finalize until the CSR is finalized. A linked CSR draft cannot be deleted until the linked statement draft is deleted.
 
 ### 7.4 Catalog/profile changes
 
@@ -385,7 +391,7 @@ Finalization fails before writes and identifies each item. Negative stock/backor
 
 ### 7.7 Draft editing/deletion
 
-Draft changes need no reversal because drafts have no effects. Draft deletion consumes no number.
+Draft changes need no reversal because drafts have no effects. Draft deletion consumes no number. If a CSR draft is linked to a Billing Statement draft, delete the statement draft first.
 
 ### 7.8 Voiding used stock
 

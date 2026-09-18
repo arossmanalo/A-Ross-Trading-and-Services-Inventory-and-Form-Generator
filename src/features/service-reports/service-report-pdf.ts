@@ -5,7 +5,10 @@ import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
-import { finalizeServiceReport } from '@/features/service-reports/service-report-repository';
+import { getBusinessLogo } from '@/features/settings/settings-repository';
+import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
+import { buildCsrHtml, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
+import { finalizeServiceReport, getServiceReport } from '@/features/service-reports/service-report-repository';
 
 const LEGAL_WIDTH_POINTS = 612;
 const LEGAL_HEIGHT_POINTS = 1008;
@@ -41,7 +44,7 @@ export async function retryServiceReportPdf(
 export async function getServiceReportPreview(
   db: SQLiteDatabase,
   reportId: string,
-): Promise<{ csrNumber: string; html: string }> {
+): Promise<{ csrNumber: string; html: string; isDraft: boolean }> {
   const row = await db.getFirstAsync<{
     csr_number: string | null;
     render_template_snapshot: string | null;
@@ -50,10 +53,78 @@ export async function getServiceReportPreview(
     'SELECT csr_number, render_template_snapshot, document_state FROM service_reports WHERE id = ?',
     reportId,
   );
-  if (!row || row.document_state !== 'finalized' || !row.csr_number || !row.render_template_snapshot) {
-    throw new Error('Only a finalized CSR with a frozen template can be previewed.');
+  if (!row) throw new Error('CSR was not found.');
+  if (row.document_state === 'draft') {
+    const report = await getServiceReport(db, reportId);
+    if (!report) throw new Error('CSR was not found.');
+    const identity = await db.getFirstAsync<{
+      customer_address: string;
+      equipment_model: string;
+      serial_number: string;
+      nickname_or_location: string;
+      business_name: string;
+      business_address: string;
+      contact_details: string;
+    }>(
+      `SELECT c.address AS customer_address, e.model AS equipment_model,
+              e.serial_number, e.nickname_or_location,
+              s.business_name, s.business_address, s.contact_details
+       FROM service_reports r
+       JOIN customers c ON c.id = r.customer_id
+       JOIN customer_equipment e ON e.id = r.equipment_id
+       JOIN settings s ON s.id = 'business'
+       WHERE r.id = ?`,
+      reportId,
+    );
+    if (!identity) throw new Error('CSR preview details could not be loaded.');
+
+    const snapshot: CsrRenderSnapshot = {
+      preparerSignatureHtml: await getPreparerSignatureHtml(db),
+      csrNumber: 'DRAFT — UNNUMBERED',
+      businessDate: report.businessDate,
+      fingerprint: 'DRAFT PREVIEW',
+      business: {
+        name: identity.business_name,
+        address: identity.business_address,
+        contactDetails: identity.contact_details,
+        logoDataUrl: await getBusinessLogo(db),
+      },
+      customer: { name: report.customerName, address: identity.customer_address },
+      equipment: {
+        machineType: report.equipmentName,
+        model: identity.equipment_model,
+        serialNumber: identity.serial_number,
+        nicknameOrLocation: identity.nickname_or_location,
+      },
+      serviceOutcome: report.serviceOutcome,
+      reportedProblem: report.reportedProblem,
+      diagnosis: report.diagnosis,
+      actionTaken: report.actionTaken,
+      recommendations: report.recommendations,
+      billing: report.billing,
+      customerRemarks: report.customerRemarks,
+      machineStatus: report.machineStatus,
+      warrantyText: report.warrantyText,
+      servicedBy: report.servicedBy,
+      acknowledgedBy: report.acknowledgedBy,
+      totalBillCentavos: report.totalBillCentavos,
+      usages: report.usages.map((usage) => ({
+        description: usage.itemName,
+        quantity: usage.quantity,
+        unitLabel: usage.unitLabel,
+        billable: usage.billable,
+      })),
+      services: report.services.map((service) => ({
+        description: service.serviceName,
+        rateCentavos: service.resolvedRateCentavos,
+      })),
+    };
+    return { csrNumber: snapshot.csrNumber, html: buildCsrHtml(snapshot), isDraft: true };
   }
-  return { csrNumber: row.csr_number, html: row.render_template_snapshot };
+  if (row.document_state !== 'finalized' || !row.csr_number || !row.render_template_snapshot) {
+    throw new Error('Only a draft or finalized CSR can be previewed.');
+  }
+  return { csrNumber: row.csr_number, html: row.render_template_snapshot, isDraft: false };
 }
 
 export async function shareServiceReportPdf(db: SQLiteDatabase, reportId: string): Promise<void> {

@@ -5,7 +5,9 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
+import { createBillingStatementDraft } from '@/features/billing-statements/billing-statement-repository';
 import {
   DraftPriceChangedError,
   deleteServiceReportDraft,
@@ -197,6 +199,39 @@ export default function ServiceReportDetailScreen() {
     router.push({ pathname: '/service-reports/new', params: { followsCsrId: report.id, customerId: report.customerId, equipmentId: report.equipmentId } });
   }, [report]);
 
+  const openDraftPreview = useCallback(async () => {
+    if (!reportId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (dirty) await saveDraft();
+      router.push({ pathname: '/service-reports/preview', params: { reportId } });
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : 'Could not save the CSR before previewing.');
+    } finally {
+      setBusy(false);
+    }
+  }, [dirty, reportId, saveDraft]);
+
+  const createBillingDraft = useCallback(async () => {
+    if (!reportId || !report || report.documentState !== 'draft') return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (dirty) await saveDraft();
+      const statementId = await createBillingStatementDraft(db, {
+        customerId: report.customerId,
+        serviceReportId: reportId,
+        businessDate: getLocalBusinessDate(),
+      });
+      router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statementId } });
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Could not create a linked Billing Statement draft.');
+    } finally {
+      setBusy(false);
+    }
+  }, [db, dirty, report, reportId, saveDraft]);
+
   const openVoid = useCallback(() => {
     if (reportId) router.push({ pathname: '/service-reports/void', params: { reportId } });
   }, [reportId]);
@@ -235,12 +270,14 @@ export default function ServiceReportDetailScreen() {
             <FormField label="Serviced By" onChangeText={(v) => setField('servicedBy', v)} value={form.servicedBy} />
             <FormField label="Acknowledged By" onChangeText={(v) => setField('acknowledgedBy', v)} value={form.acknowledgedBy} />
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus selected service rates. Non-billable items are excluded.</Text></View>
+            <ActionButton disabled={busy} variant="secondary" onPress={() => void openDraftPreview()}>Preview PDF before finalizing</ActionButton>
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Items used</Text><ActionButton compact onPress={addItem}>Add item</ActionButton></View>
             {report?.usages.map((usage) => <View key={usage.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{usage.itemName}</Text><Text selectable style={styles.meta}>{usage.quantity} {usage.unitLabel} · {usage.billable ? `Billable ${formatCentavos(usage.resolvedSellingPriceCentavos ?? 0)}` : 'Non-billable'}</Text></View><Pressable onPress={() => removeUsage(usage.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.usages.length ? <Text selectable style={styles.emptyHint}>No inventory items added yet.</Text> : null}
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Services used</Text><ActionButton compact onPress={addService}>Add service</ActionButton></View>
             {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{formatCentavos(service.resolvedRateCentavos)} · quantity 1{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.services.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
+            <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Create linked Billing Statement draft</ActionButton>
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
             <ActionButton disabled={busy} onPress={deleteDraft} variant="danger">Delete draft</ActionButton>
           </>

@@ -30,7 +30,9 @@ The generated financial document is an internal **Billing Statement — Not a Ta
 
 - Registered customers and reusable customer-equipment records.
 - Digital CSRs with drafts, outcomes, finalization, void/reissue, follow-up visits, item usage, acknowledgment state, and PDF output.
-- Finalized CSR and Billing Statement views include offline previews of their frozen document snapshots before PDF generation or sharing.
+- CSR and Billing Statement drafts can be previewed/exported as temporary PDFs before finalization; finalized views preview their frozen snapshots. Neither preview path creates numbering, stock, or payment effects.
+- A Billing Statement draft may be created from the CSR draft screen or linked to an existing CSR draft from Billing. CSR usage lines and statement finalization remain blocked until the linked CSR is finalized.
+- Document previews can be saved as PDF or as a PNG of the full document in the device photo library; image export uses write-only permission and is disabled for documents exceeding the safe image-height limit.
 - CSR drafts can select catalog services and inventory items (or create a missing catalog entry inline); the read-only total is derived from billable item usage and selected service rates.
 - Inventory items, integer stock, Restock and Consumption actions, low-stock thresholds, deactivation, and append-only movements.
 - Base prices, per-customer prices, and owner-authorized one-time overrides.
@@ -60,6 +62,7 @@ The generated financial document is an internal **Billing Statement — Not a Ta
 | App | React Native with Expo development/release builds | Android-focused development with maintained device APIs. |
 | Database | `expo-sqlite` behind repositories | Fully offline; exclusive transactions support atomic business writes. |
 | PDF | `expo-print` with bundled HTML/CSS templates | Maintained on-device offline PDF generation. |
+| Image export | `react-native-view-shot` and Expo Media Library | Capture the document preview as PNG and save with write-only photo-library access. |
 | Files | Expo file-system/document-picker APIs | Persistent private files and external signed-PDF import. |
 | Sharing | Android share sheet through Expo Sharing | Manual email/Drive flow without provider lock-in. |
 | Signatures | Maintained signature canvas using a bundled WebView | Offline in-person signatures. |
@@ -125,9 +128,10 @@ Expo Go is not a production requirement. Phase 0 must verify release builds on t
 
 1. Create an unnumbered autosaved draft for a customer and one equipment record.
 2. Enter the fields and sections shown by the supplied CSR: customer/header grid; Reported Problem; Diagnosis; Action Taken; Status After Service; Recommendations; Machine Status; Billing; Warranty; Customer's Remarks; Total Bill; Serviced By; and Acknowledged By.
-3. Add billable or non-billable item usage.
-4. Finalization rechecks stock, allocates the next CSR number, writes movements atomically, freezes the snapshot, and queues PDF rendering.
-5. PDF failure leaves a finalized `PDF pending` record; rendering/sharing can retry without duplicating stock or numbering.
+3. Add billable or non-billable item usage, then preview/export the current draft as a PDF or PNG without numbering or posting stock.
+4. Optionally start a linked Billing Statement draft from the CSR draft. The statement can be prepared, but cannot import CSR usage or finalize until this CSR is finalized.
+5. Finalization rechecks stock, allocates the next CSR number, writes movements atomically, freezes the snapshot, and queues PDF rendering.
+6. PDF failure leaves a finalized `PDF pending` record; rendering/sharing can retry without duplicating stock or numbering.
 
 ### Pricing
 
@@ -135,8 +139,8 @@ Resolution order is one-time override, then customer price, then base selling pr
 
 ### Billing Statement
 
-1. Select a registered customer and optionally one CSR.
-2. Add eligible unbilled CSR lines and/or direct inventory items.
+1. Select a registered customer and optionally one finalized CSR or CSR draft. A linked draft may be prepared in advance but cannot supply CSR lines yet.
+2. Add eligible finalized CSR lines and/or direct inventory items. A Billing Statement linked to a CSR draft cannot be finalized until that CSR is finalized.
 3. Add services at quantity one with owner-customizable rates.
 4. Add expenses with actual cost, billable flag, and billed amount if billable.
 5. Apply an optional fixed or percentage discount to the combined charge subtotal.
@@ -173,6 +177,9 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - The CSR follows the sample's centered logo/business header, ruled section layout, status choices, total box, and opposing bottom signature blocks.
 - The Billing Statement follows the sample's logo-left/business-block-right header, client/details split, four-column charge table, right-aligned totals, and bottom-left disclaimer, extended with discounts, payments/balance, signatures, services, and expenses required by this specification.
 - Frozen data and a retained render-template snapshot protect historical content even after settings, catalogs, or app templates change.
+- CSR and Billing Statement draft previews use current saved data and visibly say `DRAFT — UNNUMBERED`; opening or exporting these PDFs does not finalize, number, deduct stock, create a payment, or alter revision history.
+- The preview screen can open a temporary PDF in the Android print/PDF preview, share the PDF, or save a single tall PNG of the full rendered document to Photos. PNG export is disabled when the content exceeds the safe capture height; use PDF for very long documents.
+- Saving a PNG asks for write-only photo-library access and places customer and billing information in the device photo library.
 - In-person signatures are drawn on-device.
 - For remote signing, the owner shares an unsigned PDF manually, the customer signs externally, and the owner imports the returned PDF.
 - Signature state may be not required, pending, signed in person, signed attachment received, declined, or no response.

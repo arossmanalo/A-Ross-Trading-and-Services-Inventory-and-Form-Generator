@@ -5,7 +5,10 @@ import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
-import { finalizeBillingStatement } from '@/features/billing-statements/billing-statement-repository';
+import { finalizeBillingStatement, getBillingStatement } from '@/features/billing-statements/billing-statement-repository';
+import { getBusinessLogo } from '@/features/settings/settings-repository';
+import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
+import { buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
 import { renderPaymentAcknowledgment } from '@/features/payments/payment-pdf';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
@@ -28,16 +31,77 @@ export async function retryBillingStatementPdf(db: SQLiteDatabase, statementId: 
 export async function getBillingStatementPreview(
   db: SQLiteDatabase,
   statementId: string,
-): Promise<{ bsNumber: string; html: string }> {
+): Promise<{ bsNumber: string; html: string; isDraft: boolean }> {
   const row = await db.getFirstAsync<{
     bs_number: string | null;
     render_template_snapshot: string | null;
     document_state: string;
   }>('SELECT bs_number,render_template_snapshot,document_state FROM billing_statements WHERE id=?', statementId);
-  if (!row || row.document_state !== 'finalized' || !row.bs_number || !row.render_template_snapshot) {
-    throw new Error('Only a finalized statement with a frozen template can be previewed.');
+  if (!row) throw new Error('Billing statement was not found.');
+  if (row.document_state === 'draft') {
+    const statement = await getBillingStatement(db, statementId);
+    if (!statement) throw new Error('Billing statement was not found.');
+    const business = await db.getFirstAsync<{
+      business_name: string;
+      business_address: string;
+      contact_details: string;
+      vat_display_mode: BillingStatementRenderSnapshot['vatDisplayMode'];
+      vat_rate_basis_points: number;
+    }>(
+      `SELECT business_name, business_address, contact_details,
+              vat_display_mode, vat_rate_basis_points
+       FROM settings WHERE id = 'business'`,
+    );
+    if (!business) throw new Error('Business settings could not be loaded.');
+    const unitRows = await db.getAllAsync<{ id: string; unit_label: string | null }>(
+      `SELECT l.id, i.unit_label
+       FROM billing_statement_lines l
+       LEFT JOIN items i ON i.id = l.item_id
+       WHERE l.billing_statement_id = ?`,
+      statementId,
+    );
+    const unitLabels = new Map(unitRows.map((line) => [line.id, line.unit_label]));
+    const discountCentavos = statement.subtotalCentavos - statement.discountedTotalCentavos;
+    const discountLabel = statement.discountType === 'fixed'
+      ? 'Discount'
+      : statement.discountType === 'percentage'
+        ? `Discount (${(statement.discountValue / 100).toFixed(2).replace(/\.00$/, '')}%)`
+        : null;
+    const snapshot: BillingStatementRenderSnapshot = {
+      preparerSignatureHtml: await getPreparerSignatureHtml(db),
+      bsNumber: 'DRAFT — UNNUMBERED',
+      businessDate: statement.businessDate,
+      fingerprint: 'DRAFT PREVIEW',
+      business: {
+        logoDataUrl: await getBusinessLogo(db),
+        name: business.business_name,
+        address: business.business_address,
+        contactDetails: business.contact_details,
+      },
+      customer: { name: statement.customerName, address: statement.customerAddress },
+      serviceReportNumber: statement.serviceReportNumber,
+      lines: statement.lines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unitLabel: line.lineType === 'item' ? unitLabels.get(line.id) ?? 'item' : line.lineType,
+        unitPriceCentavos: line.unitPriceCentavos,
+        amountCentavos: line.amountCentavos,
+      })),
+      subtotalCentavos: statement.subtotalCentavos,
+      discountLabel,
+      discountCentavos,
+      totalCentavos: statement.discountedTotalCentavos,
+      paymentsReceivedCentavos: 0,
+      balanceDueCentavos: statement.discountedTotalCentavos,
+      vatDisplayMode: business.vat_display_mode,
+      vatRateBasisPoints: business.vat_rate_basis_points,
+    };
+    return { bsNumber: snapshot.bsNumber, html: buildBillingStatementHtml(snapshot), isDraft: true };
   }
-  return { bsNumber: row.bs_number, html: row.render_template_snapshot };
+  if (row.document_state !== 'finalized' || !row.bs_number || !row.render_template_snapshot) {
+    throw new Error('Only a draft or finalized statement can be previewed.');
+  }
+  return { bsNumber: row.bs_number, html: row.render_template_snapshot, isDraft: false };
 }
 
 export async function shareBillingStatementPdf(db: SQLiteDatabase, statementId: string): Promise<void> {
