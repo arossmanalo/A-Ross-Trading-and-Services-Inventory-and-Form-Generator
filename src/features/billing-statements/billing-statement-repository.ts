@@ -86,9 +86,10 @@ export async function listCsrsForBilling(db: SQLiteDatabase, customerId: string)
   }));
 }
 
-export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; businessDate: string; backdateReason?: string }): Promise<string> {
+export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; businessDate: string; backdateReason?: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
   validateBusinessDate(input.businessDate, input.backdateReason);
   const id = Crypto.randomUUID(); const now = new Date().toISOString();
+  let statementId = id;
   await db.withExclusiveTransactionAsync(async (tx) => {
     const customer = await tx.getFirstAsync<{ active: number; merged_into_customer_id: string | null }>('SELECT active,merged_into_customer_id FROM customers WHERE id=?', input.customerId);
     if (!customer || customer.active !== 1 || customer.merged_into_customer_id) throw new Error('Select an active registered customer.');
@@ -98,13 +99,35 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
       if (!report || !['draft', 'finalized'].includes(report.document_state) || report.customer_id !== input.customerId) throw new Error('Select a draft or finalized CSR for the same customer.');
       linkedReportState = report.document_state;
     }
+    if (input.reuseExistingLinkedDraft && input.serviceReportId && linkedReportState === 'draft') {
+      const existing = await tx.getFirstAsync<{ id: string }>(
+        `SELECT b.id FROM billing_statements b
+         WHERE b.service_report_id=? AND b.document_state='draft'
+         ORDER BY (
+           SELECT COUNT(*) FROM billing_statement_lines l
+           WHERE l.billing_statement_id=b.id
+             AND (l.source_csr_usage_id IS NOT NULL OR l.source_csr_service_usage_id IS NOT NULL)
+         ) DESC, b.created_at, b.id
+         LIMIT 1`,
+        input.serviceReportId,
+      );
+      if (existing) {
+        statementId = existing.id;
+        if (await syncLinkedCsrDraftLines(tx, input.serviceReportId, statementId)) {
+          await auditAndRevise(tx, 'billing_statement.csr_draft_charges_synchronized', statementId, {
+            serviceReportId: input.serviceReportId,
+          }, now);
+        }
+        return;
+      }
+    }
     await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,business_date,backdate_reason,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.businessDate, input.backdateReason?.trim() || null, now);
     if (input.serviceReportId && linkedReportState === 'draft') {
       await syncLinkedCsrDraftLines(tx, input.serviceReportId);
     }
     await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null }, now);
   });
-  return id;
+  return statementId;
 }
 
 export async function updateBillingStatementDraft(db: SQLiteDatabase, statementId: string, input: { businessDate: string; backdateReason?: string; discountType: BillingDiscountType; discountValue: number }): Promise<void> {

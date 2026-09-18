@@ -223,6 +223,7 @@ export default function ServiceReportDetailScreen() {
         customerId: report.customerId,
         serviceReportId: reportId,
         businessDate: getLocalBusinessDate(),
+        reuseExistingLinkedDraft: true,
       });
       router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statementId } });
     } catch (createError) {
@@ -277,7 +278,7 @@ export default function ServiceReportDetailScreen() {
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Services used</Text><ActionButton compact onPress={addService}>Add service</ActionButton></View>
             {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{formatCentavos(service.resolvedRateCentavos)} · quantity 1{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.services.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
-            <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Create linked Billing Statement draft</ActionButton>
+            <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Open or create linked Billing Statement draft</ActionButton>
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
             <ActionButton disabled={busy} onPress={deleteDraft} variant="danger">Delete draft</ActionButton>
           </>

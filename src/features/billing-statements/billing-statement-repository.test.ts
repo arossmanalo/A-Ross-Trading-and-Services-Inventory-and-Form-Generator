@@ -34,7 +34,44 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
 
   it('allows starting a linked Billing Statement from a CSR draft but blocks premature finalization',async()=>{const now='2026-09-05T00:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO service_reports(id,customer_id,equipment_id,document_state,service_outcome,business_date,created_at) VALUES('draft-csr','customer','equipment','draft','incomplete','2026-09-05',?)`).run(now);expect(await listCsrsForBilling(db,'customer')).toMatchObject([{id:'draft-csr',documentState:'draft',availableLineCount:0}]);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:'draft-csr',businessDate:'2026-09-05'});await addServiceLine(db,statementId,{serviceId:'service'});await expect(finalizeBillingStatement(db,statementId)).rejects.toThrow(/Finalize the linked CSR/);expect((raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get() as {high_water_mark:number}).high_water_mark).toBe(0);});
 
-  it('copies existing CSR draft items and services into the linked Billing Statement before finalizing',async()=>{const now='2026-09-05T12:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);const reportId=await createServiceReportDraft(db,{customerId:'customer',equipmentId:'equipment',businessDate:'2026-09-05'});await addReportItemUsage(db,reportId,'item',2,true);await addReportServiceUsage(db,reportId,'service');const itemUsageId=(raw.prepare('SELECT id FROM service_report_item_usage WHERE service_report_id=?').get(reportId) as {id:string}).id;const serviceUsageId=(raw.prepare('SELECT id FROM service_report_service_usage WHERE service_report_id=?').get(reportId) as {id:string}).id;expect(await listCsrsForBilling(db,'customer')).toMatchObject([{id:reportId,availableLineCount:2}]);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});const statement=await getBillingStatement(db,statementId);expect(statement?.lines).toEqual(expect.arrayContaining([expect.objectContaining({lineType:'item',sourceCsrUsageId:itemUsageId,description:'Detergent',quantity:2,amountCentavos:240000}),expect.objectContaining({lineType:'service',sourceCsrServiceUsageId:serviceUsageId,description:'Labor',quantity:1,amountCentavos:50000})]));expect(statement?.subtotalCentavos).toBe(290000);await expect(finalizeBillingStatement(db,statementId)).rejects.toThrow(/Finalize the linked CSR/);raw.prepare(`UPDATE service_reports SET document_state='finalized',csr_number='CSR-000001' WHERE id=?`).run(reportId);raw.prepare(`UPDATE services SET base_rate_centavos=90000 WHERE id='service'`).run();const finalized=await finalizeBillingStatement(db,statementId);expect(finalized.snapshot.subtotalCentavos).toBe(290000);expect(finalized.snapshot.lines.map(line=>line.unitPriceCentavos)).toEqual([120000,50000]);expect((raw.prepare(`SELECT COUNT(*) AS count FROM stock_transactions WHERE billing_statement_id=?`).get(statementId) as {count:number}).count).toBe(0);});
+  it('reopens the populated linked draft on repeat and recovers from an older blank duplicate',async()=>{
+    const now='2026-09-05T12:00:00.000Z';
+    raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);
+    const reportId=await createServiceReportDraft(db,{customerId:'customer',equipmentId:'equipment',businessDate:'2026-09-05'});
+    await addReportItemUsage(db,reportId,'item',2,true);
+    await addReportServiceUsage(db,reportId,'service');
+    const itemUsageId=(raw.prepare('SELECT id FROM service_report_item_usage WHERE service_report_id=?').get(reportId) as {id:string}).id;
+    const serviceUsageId=(raw.prepare('SELECT id FROM service_report_service_usage WHERE service_report_id=?').get(reportId) as {id:string}).id;
+    expect(await listCsrsForBilling(db,'customer')).toMatchObject([{id:reportId,availableLineCount:2}]);
+
+    const populatedDraftId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});
+    const populatedDraft=await getBillingStatement(db,populatedDraftId);
+    expect(populatedDraft?.lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({lineType:'item',sourceCsrUsageId:itemUsageId,description:'Detergent',quantity:2,amountCentavos:240000}),
+      expect.objectContaining({lineType:'service',sourceCsrServiceUsageId:serviceUsageId,description:'Labor',quantity:1,amountCentavos:50000}),
+    ]));
+    expect(populatedDraft?.subtotalCentavos).toBe(290000);
+
+    // Simulate the blank duplicate made by the old repeat-tap behavior.
+    const oldBlankDuplicateId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});
+    expect((await getBillingStatement(db,oldBlankDuplicateId))?.lines).toHaveLength(0);
+
+    // The CSR screen's action must reopen the statement holding its lines, not create another one.
+    const reopenedId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05',reuseExistingLinkedDraft:true});
+    const repeatedReopenId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05',reuseExistingLinkedDraft:true});
+    expect(reopenedId).toBe(populatedDraftId);
+    expect(repeatedReopenId).toBe(populatedDraftId);
+    expect((await getBillingStatement(db,reopenedId))?.lines).toHaveLength(2);
+    expect(raw.prepare("SELECT COUNT(*) AS count FROM billing_statements WHERE service_report_id=? AND document_state='draft'").get(reportId)).toEqual({count:2});
+
+    await expect(finalizeBillingStatement(db,reopenedId)).rejects.toThrow(/Finalize the linked CSR/);
+    raw.prepare(`UPDATE service_reports SET document_state='finalized',csr_number='CSR-000001' WHERE id=?`).run(reportId);
+    raw.prepare(`UPDATE services SET base_rate_centavos=90000 WHERE id='service'`).run();
+    const finalized=await finalizeBillingStatement(db,reopenedId);
+    expect(finalized.snapshot.subtotalCentavos).toBe(290000);
+    expect(finalized.snapshot.lines.map(line=>line.unitPriceCentavos)).toEqual([120000,50000]);
+    expect((raw.prepare(`SELECT COUNT(*) AS count FROM stock_transactions WHERE billing_statement_id=?`).get(reopenedId) as {count:number}).count).toBe(0);
+  });
 
   it('deletes linked unnumbered Billing Statement drafts when deleting a CSR draft',async()=>{const now='2026-09-05T12:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);const reportId=await createServiceReportDraft(db,{customerId:'customer',equipmentId:'equipment',businessDate:'2026-09-05'});await addReportItemUsage(db,reportId,'item',1,true);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(1);await deleteServiceReportDraft(db,reportId);expect(raw.prepare('SELECT id FROM service_reports WHERE id=?').get(reportId)).toBeUndefined();expect(raw.prepare('SELECT id FROM billing_statements WHERE id=?').get(statementId)).toBeUndefined();expect(raw.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE entity_id IN (?,?) AND event_type IN (\'csr.draft_deleted\',\'billing_statement.draft_deleted\')').get(reportId,statementId)).toEqual({count:2});expect(raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get()).toEqual({high_water_mark:0});});
 
