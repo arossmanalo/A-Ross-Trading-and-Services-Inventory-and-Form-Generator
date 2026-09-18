@@ -1,4 +1,4 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useRef, useState } from 'react';
 import { ScrollView, Switch, Text, View } from 'react-native';
@@ -12,7 +12,8 @@ import { colors } from '@/theme/colors';
 const STATUSES: Array<{value:Exclude<SignatureStatus,'signed_in_person'|'signed_document_attached'>;label:string}> = [{value:'not_required',label:'Not required'},{value:'pending',label:'Pending'},{value:'declined',label:'Declined'},{value:'no_response',label:'No response'}];
 
 export default function ManageSignaturesScreen() {
-  const {ownerType,ownerId} = useLocalSearchParams<{ownerType:SignableOwnerType;ownerId:string}>();
+  const {ownerType,ownerId,mode} = useLocalSearchParams<{ownerType:SignableOwnerType;ownerId:string;mode?:'sign'|'import'}>();
+  const importing = mode === 'import';
   const db = useSQLiteContext();
   const [document,setDocument] = useState<SignableDocument|null>(null);
   const [captures,setCaptures] = useState<SignatureCapture[]>([]);
@@ -33,32 +34,39 @@ export default function ManageSignaturesScreen() {
   };
   if (!document) return <Text selectable>{error ?? 'Loading signing details…'}</Text>;
   const locked = busy || document.documentState !== 'finalized';
-  return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
+  return <>
+    <Stack.Screen options={{title:importing?'Import Signed PDF':'Sign Document'}} />
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
     <View style={{backgroundColor:colors.brandNavy,padding:18,borderRadius:18,gap:8}}>
       <Text selectable style={{color:'#fff',fontSize:22,fontWeight:'800'}}>{document.documentNumber}</Text>
       <Text selectable style={{color:'#fff'}}>{document.customerName}</Text>
       <Text selectable style={{color:'#fff'}}>Revision 1 · Fingerprint {document.fingerprint}</Text>
       <Text selectable style={{color:'#fff'}}>Current: {document.signatureStatus.replaceAll('_',' ')} · {document.documentState}</Text>
     </View>
-    <Text selectable style={{fontWeight:'700'}}>In-person signing</Text>
-    <Text>Review the original PDF with the signer first. Each capture is retained; signed copies include a separate acknowledgment page and leave the original unchanged.</Text>
-    {(['customer','preparer'] as const).map(role => <ActionButton key={role} disabled={locked} onPress={() => router.push({pathname:'/signatures/capture',params:{ownerType,ownerId,role}})}>Draw {role} signature</ActionButton>)}
-    {captures.map(capture => <View key={capture.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
-      <Text selectable>{capture.signer_name} · {capture.role}</Text>
-      <Text selectable>{new Date(capture.created_at).toLocaleString()} · PDF {capture.pdf_state}</Text>
-      <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {
-        const path = await renderSignaturePdf(db,capture.id);
-        await shareSignedAttachment({id:capture.id,filename:capture.deterministic_filename!,privatePath:path,checksum:capture.checksum??'',createdAt:capture.created_at});
-      })}>Render / share this signed version</ActionButton>
-    </View>)}
-    <Text selectable style={{fontWeight:'700'}}>Manual remote signing</Text>
-    <Text>Share the original PDF from its document screen. Check the returned PDF’s number, revision, and fingerprint above before importing. This is manual matching, not cryptographic signature verification. Original and returned files are kept.</Text>
-    <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Switch accessibilityLabel="I checked the returned document number, revision and fingerprint" disabled={locked} value={matched} onValueChange={setMatched}/><Text style={{flex:1}}>I checked that the returned PDF matches this document.</Text></View>
-    <ActionButton disabled={locked || !matched} onPress={() => void run(async () => {await pickAndAttachSignedPdf(db,ownerType,ownerId,document.fingerprint);setMatched(false);})}>Import returned PDF (up to 25 MB)</ActionButton>
-    {document.attachments.map(attachment => <ActionButton key={attachment.id} disabled={busy} variant="secondary" onPress={() => void run(() => shareSignedAttachment(attachment))}>Share {attachment.filename}</ActionButton>)}
-    <Text selectable style={{fontWeight:'700'}}>Record signing status</Text>
-    <Text>Changing status does not delete signatures or returned files.</Text>
-    <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{STATUSES.map(entry => <ActionButton compact key={entry.value} variant={document.signatureStatus === entry.value ? 'primary' : 'secondary'} disabled={locked} onPress={() => void run(() => setDocumentSignatureStatus(db,ownerType,ownerId,entry.value))}>{entry.label}</ActionButton>)}</View>
+    {importing ? <>
+      <Text selectable style={{fontWeight:'700'}}>Import the customer's signed copy</Text>
+      <Text>Share the original PDF from the document screen, send it to the customer, then import the returned PDF here. Before importing, check its document number, revision, and fingerprint against the details above. This is a manual match, not cryptographic signature verification; the original and returned files are both kept.</Text>
+      <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Switch accessibilityLabel="I checked the returned document number, revision and fingerprint" disabled={locked} value={matched} onValueChange={setMatched}/><Text style={{flex:1}}>I checked that the returned PDF matches this document.</Text></View>
+      <ActionButton disabled={locked || !matched} onPress={() => void run(async () => {await pickAndAttachSignedPdf(db,ownerType,ownerId,document.fingerprint);setMatched(false);})}>Choose signed PDF to import</ActionButton>
+      <Text selectable style={{fontWeight:'700'}}>Previously imported signed PDFs</Text>
+      {document.attachments.length ? document.attachments.map(attachment => <ActionButton key={attachment.id} disabled={busy} variant="secondary" onPress={() => void run(() => shareSignedAttachment(attachment))}>Share {attachment.filename}</ActionButton>) : <Text>No signed PDF has been imported for this document yet.</Text>}
+    </> : <>
+      <Text selectable style={{fontWeight:'700'}}>Capture an in-person signature</Text>
+      <Text>Review the original PDF with the signer first. Each capture is retained; signed copies include a separate acknowledgment page and leave the original unchanged.</Text>
+      {(['customer','preparer'] as const).map(role => <ActionButton key={role} disabled={locked} onPress={() => router.push({pathname:'/signatures/capture',params:{ownerType,ownerId,role}})}>Draw {role} signature</ActionButton>)}
+      {captures.map(capture => <View key={capture.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
+        <Text selectable>{capture.signer_name} · {capture.role}</Text>
+        <Text selectable>{new Date(capture.created_at).toLocaleString()} · PDF {capture.pdf_state}</Text>
+        <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {
+          const path = await renderSignaturePdf(db,capture.id);
+          await shareSignedAttachment({id:capture.id,filename:capture.deterministic_filename!,privatePath:path,checksum:capture.checksum??'',createdAt:capture.created_at});
+        })}>Render / share this signed version</ActionButton>
+      </View>)}
+      <Text selectable style={{fontWeight:'700'}}>Record signing status</Text>
+      <Text>Changing status does not delete signatures or returned files.</Text>
+      <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{STATUSES.map(entry => <ActionButton compact key={entry.value} variant={document.signatureStatus === entry.value ? 'primary' : 'secondary'} disabled={locked} onPress={() => void run(() => setDocumentSignatureStatus(db,ownerType,ownerId,entry.value))}>{entry.label}</ActionButton>)}</View>
+    </>}
     {error ? <Text selectable style={{color:colors.error}}>{error}</Text> : null}
-  </ScrollView>;
+    </ScrollView>
+  </>;
 }
