@@ -166,7 +166,7 @@ export default function ServiceReportDetailScreen() {
 
   const deleteDraft = useCallback(() => {
     if (!reportId) return;
-    Alert.alert('Delete draft?', 'This unnumbered draft and its unposted item rows will be removed.', [
+    Alert.alert('Delete draft?', 'This unnumbered CSR and its unposted item rows will be removed. Any linked unnumbered Billing Statement drafts will be deleted with it. No numbers or stock are affected.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

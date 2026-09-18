@@ -7,7 +7,7 @@ import { allocateDocumentNumber } from '@/db/sequences';
 import { getLocalBusinessDate, validateBusinessDate } from '@/domain/business-date';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { buildCsrHtml, CSR_TEMPLATE_VERSION, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
-import { syncLinkedCsrDraftLines } from '@/features/billing-statements/billing-statement-repository';
+import { deleteLinkedBillingStatementDrafts, syncLinkedCsrDraftLines } from '@/features/billing-statements/billing-statement-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { calculateServiceReportTotal } from '@/features/service-reports/service-report-total';
 import type {
@@ -450,17 +450,14 @@ export async function deleteServiceReportDraft(
   db: SQLiteDatabase,
   reportId: string,
 ): Promise<void> {
+  const now = new Date().toISOString();
   await db.withExclusiveTransactionAsync(async (tx) => {
     const draft = await tx.getFirstAsync<{ id: string }>(
       "SELECT id FROM service_reports WHERE id = ? AND document_state = 'draft'",
       reportId,
     );
     if (!draft) throw new Error('Only an unnumbered draft can be deleted.');
-    const linkedStatement = await tx.getFirstAsync<{ id: string }>(
-      'SELECT id FROM billing_statements WHERE service_report_id = ? LIMIT 1',
-      reportId,
-    );
-    if (linkedStatement) throw new Error('Delete the linked Billing Statement draft before deleting this CSR draft.');
+    await deleteLinkedBillingStatementDrafts(tx, reportId, now);
     await tx.runAsync('DELETE FROM service_report_item_usage WHERE service_report_id = ?', reportId);
     await tx.runAsync('DELETE FROM service_report_service_usage WHERE service_report_id = ?', reportId);
     await tx.runAsync("DELETE FROM service_reports WHERE id = ? AND document_state = 'draft'", reportId);
@@ -468,7 +465,7 @@ export async function deleteServiceReportDraft(
       eventType: 'csr.draft_deleted',
       entityType: 'service_report',
       entityId: reportId,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     });
     await incrementDatabaseRevision(tx);
   });

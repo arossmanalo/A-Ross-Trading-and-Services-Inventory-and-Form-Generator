@@ -375,7 +375,7 @@ The same document UUID/idempotency key returns the existing result without anoth
 ### 7.3 Linked CSR and Billing Statement
 
 CSR-posted use is referenced, not reposted. Direct statement items use another transaction. Source-line uniqueness blocks duplicate billing across statements.
-An unfinalized CSR may be linked to a statement draft. Billable item usages and service usages are automatically reflected there, while non-billable item usages are omitted. Usage changes on the CSR synchronize to the linked statement draft. The statement cannot finalize until the CSR is finalized; its source-linked lines retain finalized CSR prices and CSR-posted stock is not posted again. A source usage cannot be billed through more than one Billing Statement. A linked CSR draft cannot be deleted until the linked statement draft is deleted.
+An unfinalized CSR may be linked to a statement draft. Billable item usages and service usages are automatically reflected there, while non-billable item usages are omitted. Usage changes on the CSR synchronize to the linked statement draft. The statement cannot finalize until the CSR is finalized; its source-linked lines retain finalized CSR prices and CSR-posted stock is not posted again. A source usage cannot be billed through more than one Billing Statement. Deleting a CSR draft atomically deletes any linked unnumbered Billing Statement drafts first; a linked non-draft statement blocks CSR deletion.
 
 ### 7.4 Catalog/profile changes
 
@@ -391,7 +391,7 @@ Finalization fails before writes and identifies each item. Negative stock/backor
 
 ### 7.7 Draft editing/deletion
 
-Draft changes need no reversal because drafts have no effects. Draft deletion consumes no number. If a CSR draft is linked to a Billing Statement draft, delete the statement draft first.
+Draft changes need no reversal because drafts have no effects. Draft deletion consumes no number. Deleting a CSR draft also removes any linked unnumbered Billing Statement drafts in the same transaction; a linked non-draft statement prevents deletion.
 
 ### 7.8 Voiding used stock
 

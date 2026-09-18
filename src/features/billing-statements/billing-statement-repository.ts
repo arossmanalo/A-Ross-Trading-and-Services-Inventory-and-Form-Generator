@@ -138,51 +138,49 @@ export async function syncLinkedCsrDraftLines(db: SQLiteDatabase, serviceReportI
   let changed = false;
 
   for (const statement of statements) {
-    const [items, services, current] = await Promise.all([
-      db.getAllAsync<{
-        id: string; item_id: string; description: string; quantity: number;
-        price: number; price_source: BillingPriceSource; override_reason: string | null; created_at: string;
-      }>(
-        `SELECT u.id,i.id AS item_id,u.description_snapshot AS description,
-                u.quantity_integer AS quantity,u.resolved_selling_price_centavos AS price,
-                u.price_source,u.override_reason,u.created_at
-         FROM service_report_item_usage u
-         JOIN items i ON i.id=u.item_id
-         WHERE u.service_report_id=? AND u.billable=1
-           AND u.resolved_selling_price_centavos IS NOT NULL
-           AND NOT EXISTS(
-             SELECT 1 FROM billing_statement_lines other
-             WHERE other.source_csr_usage_id=u.id AND other.billing_statement_id<>?
-           )
-         ORDER BY u.created_at,u.id`,
-        serviceReportId,
-        statement.id,
-      ),
-      db.getAllAsync<{
-        id: string; service_id: string; description: string; quantity: number;
-        price: number; price_source: BillingPriceSource; override_reason: string | null; created_at: string;
-      }>(
-        `SELECT u.id,s.id AS service_id,u.description_snapshot AS description,
-                u.quantity_integer AS quantity,u.resolved_rate_centavos AS price,
-                u.rate_source AS price_source,u.override_reason,u.created_at
-         FROM service_report_service_usage u
-         JOIN services s ON s.id=u.service_id
-         WHERE u.service_report_id=?
-           AND NOT EXISTS(
-             SELECT 1 FROM billing_statement_lines other
-             WHERE other.source_csr_service_usage_id=u.id AND other.billing_statement_id<>?
-           )
-         ORDER BY u.created_at,u.id`,
-        serviceReportId,
-        statement.id,
-      ),
-      db.getAllAsync<LineRow>(
-        `SELECT * FROM billing_statement_lines
-         WHERE billing_statement_id=?
-           AND (source_csr_usage_id IS NOT NULL OR source_csr_service_usage_id IS NOT NULL)`,
-        statement.id,
-      ),
-    ]);
+    const items = await db.getAllAsync<{
+      id: string; item_id: string; description: string; quantity: number;
+      price: number; price_source: BillingPriceSource; override_reason: string | null; created_at: string;
+    }>(
+      `SELECT u.id,i.id AS item_id,u.description_snapshot AS description,
+              u.quantity_integer AS quantity,u.resolved_selling_price_centavos AS price,
+              u.price_source,u.override_reason,u.created_at
+       FROM service_report_item_usage u
+       JOIN items i ON i.id=u.item_id
+       WHERE u.service_report_id=? AND u.billable=1
+         AND u.resolved_selling_price_centavos IS NOT NULL
+         AND NOT EXISTS(
+           SELECT 1 FROM billing_statement_lines other
+           WHERE other.source_csr_usage_id=u.id AND other.billing_statement_id<>?
+         )
+       ORDER BY u.created_at,u.id`,
+      serviceReportId,
+      statement.id,
+    );
+    const services = await db.getAllAsync<{
+      id: string; service_id: string; description: string; quantity: number;
+      price: number; price_source: BillingPriceSource; override_reason: string | null; created_at: string;
+    }>(
+      `SELECT u.id,s.id AS service_id,u.description_snapshot AS description,
+              u.quantity_integer AS quantity,u.resolved_rate_centavos AS price,
+              u.rate_source AS price_source,u.override_reason,u.created_at
+       FROM service_report_service_usage u
+       JOIN services s ON s.id=u.service_id
+       WHERE u.service_report_id=?
+         AND NOT EXISTS(
+           SELECT 1 FROM billing_statement_lines other
+           WHERE other.source_csr_service_usage_id=u.id AND other.billing_statement_id<>?
+         )
+       ORDER BY u.created_at,u.id`,
+      serviceReportId,
+      statement.id,
+    );
+    const current = await db.getAllAsync<LineRow>(
+      `SELECT * FROM billing_statement_lines
+       WHERE billing_statement_id=?
+         AND (source_csr_usage_id IS NOT NULL OR source_csr_service_usage_id IS NOT NULL)`,
+      statement.id,
+    );
 
     const expected = [
       ...items.map((line) => ({
@@ -366,6 +364,30 @@ export async function removeNonbillableExpense(db: SQLiteDatabase, statementId: 
 
 export async function deleteBillingStatementDraft(db: SQLiteDatabase, statementId: string): Promise<void> {
   await db.withExclusiveTransactionAsync(async (tx) => { const draft = await tx.getFirstAsync<{ id: string }>("SELECT id FROM billing_statements WHERE id=? AND document_state='draft'", statementId); if (!draft) throw new Error('Only an unnumbered draft can be deleted.'); await tx.runAsync('DELETE FROM billing_statement_lines WHERE billing_statement_id=?',statementId); await tx.runAsync('DELETE FROM expenses WHERE billing_statement_id=?',statementId); await tx.runAsync('DELETE FROM billing_statements WHERE id=?',statementId); await auditAndRevise(tx,'billing_statement.draft_deleted',statementId,{},new Date().toISOString()); });
+}
+
+export async function deleteLinkedBillingStatementDrafts(
+  db: SQLiteDatabase,
+  serviceReportId: string,
+  createdAt: string,
+): Promise<void> {
+  const linked = await db.getAllAsync<{ id: string; document_state: BillingDocumentState }>(
+    'SELECT id,document_state FROM billing_statements WHERE service_report_id=? ORDER BY created_at,id',
+    serviceReportId,
+  );
+  if (linked.some((statement) => statement.document_state !== 'draft')) {
+    throw new Error('A CSR draft linked to a non-draft Billing Statement cannot be deleted.');
+  }
+
+  for (const statement of linked) {
+    await db.runAsync('DELETE FROM billing_statement_lines WHERE billing_statement_id=?', statement.id);
+    await db.runAsync('DELETE FROM expenses WHERE billing_statement_id=?', statement.id);
+    await db.runAsync('DELETE FROM billing_statements WHERE id=? AND document_state=\'draft\'', statement.id);
+    await auditAndRevise(db, 'billing_statement.draft_deleted', statement.id, {
+      serviceReportId,
+      deletedWithLinkedCsr: true,
+    }, createdAt);
+  }
 }
 
 export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: string, pricePolicy: 'keep-draft' | 'reject' | 'use-current' = 'reject', paymentSelection: InitialPaymentSelection = { choice: 'pay_later' }): Promise<{ bsNumber: string; html: string; snapshot: BillingStatementRenderSnapshot; initialPayment: PaymentRenderResult | null }> {
