@@ -14,7 +14,7 @@ import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
 type SummaryRow = { id: string; bs_number: string | null; customer_name: string; document_state: BillingDocumentState; business_date: string; discounted_total_centavos: number; pdf_state: BillingStatementSummary['pdfState'] };
-type DetailRow = SummaryRow & { customer_id: string; customer_address: string; service_report_id: string | null; csr_number: string | null; backdate_reason: string | null; subtotal_centavos: number; discount_type: BillingDiscountType; discount_value: number; payment_choice: BillingStatementDetail['paymentChoice']; share_state: 'not_shared' | 'shared'; finalized_at: string | null };
+type DetailRow = SummaryRow & { customer_id: string; customer_address: string; service_report_id: string | null; csr_number: string | null; backdate_reason: string | null; subtotal_centavos: number; discount_type: BillingDiscountType; discount_value: number; payment_choice: BillingStatementDetail['paymentChoice']; signature_status: string; has_signed_version?: number; share_state: 'not_shared' | 'shared'; finalized_at: string | null };
 type LineRow = { id: string; line_type: BillingStatementLine['lineType']; source_csr_usage_id: string | null; source_csr_service_usage_id: string | null; item_id: string | null; service_id: string | null; expense_id: string | null; description_snapshot: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; price_source: BillingPriceSource | null; override_reason: string | null; created_at: string };
 type ExpenseRow = { id: string; description: string; actual_cost_centavos: number; billable: number; billed_amount_centavos: number | null };
 type FinalLineRow = LineRow & { unit_label: string | null; item_active: number | null; current_stock: number | null; base_selling_price_centavos: number | null; customer_price_centavos: number | null; service_active: number | null; base_rate_centavos: number | null };
@@ -33,10 +33,14 @@ export async function listBillingStatements(db: SQLiteDatabase): Promise<Billing
 
 export async function getBillingStatement(db: SQLiteDatabase, statementId: string): Promise<BillingStatementDetail | null> {
   await syncLinkedDraftStatement(db, statementId);
-  const row = await db.getFirstAsync<DetailRow>(`SELECT b.*,c.name AS customer_name,c.address AS customer_address,r.csr_number FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id WHERE b.id=?`, statementId);
+  const row = await db.getFirstAsync<DetailRow>(`SELECT b.*,c.name AS customer_name,c.address AS customer_address,r.csr_number,
+    CASE WHEN EXISTS (SELECT 1 FROM signature_captures sc WHERE sc.owner_type='billing_statement' AND sc.owner_id=b.id)
+      OR EXISTS (SELECT 1 FROM document_attachments da WHERE da.owner_type='billing_statement' AND da.owner_id=b.id AND da.attachment_type='external_signed_pdf')
+      THEN 1 ELSE 0 END AS has_signed_version
+    FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id WHERE b.id=?`, statementId);
   if (!row) return null;
   const [lines, expenses] = await Promise.all([listLines(db, statementId), listExpenses(db, statementId)]);
-  return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, backdateReason: row.backdate_reason, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
+  return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, backdateReason: row.backdate_reason, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, signatureStatus: row.signature_status, hasSignedVersion: row.has_signed_version === 1, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
 }
 
 export async function listFinalizedCsrsForCustomer(db: SQLiteDatabase, customerId: string): Promise<Array<{ id: string; csrNumber: string; businessDate: string; availableLineCount: number }>> {

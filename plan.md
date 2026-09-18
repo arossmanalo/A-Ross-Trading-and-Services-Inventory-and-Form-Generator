@@ -181,6 +181,9 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - The preview screen can open a temporary PDF in the Android print/PDF preview, share the PDF, or save a single tall PNG of the full rendered document to Photos. PNG export is disabled when the content exceeds the safe capture height; use PDF for very long documents.
 - Saving a PNG asks for write-only photo-library access and places customer and billing information in the device photo library.
 - In-person signatures are drawn on-device.
+- Each finalized CSR or Billing Statement accepts at most one customer and one preparer in-person signature. Repeated same-role captures are blocked; legacy duplicates remain in history, while only the latest capture for each role is used in the signed version.
+- The finalized document screen reflects its signature status and provides access to a previewable signed copy. Signed copies and externally returned PDFs are linked to the document without rewriting its original finalized PDF or content snapshot.
+- Once any signed capture or returned signed PDF exists, its signed status cannot be manually changed back to an unsigned status.
 - For remote signing, the owner shares an unsigned PDF manually, the customer signs externally, and the owner imports the returned PDF.
 - Signature state may be not required, pending, signed in person, signed attachment received, declined, or no response.
 - Attaching a signed PDF is append-only and cannot change financial content.

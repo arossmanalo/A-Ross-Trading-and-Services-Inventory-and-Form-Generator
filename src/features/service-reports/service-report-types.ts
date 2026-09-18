@@ -58,6 +58,7 @@ export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   followsCsrId: string | null;
   backdateReason: string | null;
   signatureStatus: string;
+  hasSignedVersion: boolean;
   shareState: 'not_shared' | 'shared';
   finalizedAt: string | null;
   usages: ServiceReportUsage[];

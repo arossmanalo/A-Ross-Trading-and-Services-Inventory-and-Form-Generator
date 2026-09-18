@@ -47,6 +47,8 @@ export type BillingStatementDetail = BillingStatementSummary & {
   discountType: BillingDiscountType;
   discountValue: number;
   paymentChoice: 'paid_in_full' | 'down_payment' | 'pay_later' | null;
+  signatureStatus: string;
+  hasSignedVersion: boolean;
   shareState: 'not_shared' | 'shared';
   finalizedAt: string | null;
   lines: BillingStatementLine[];

@@ -58,11 +58,20 @@ export async function saveSignatureCapture(db: SQLiteDatabase, input: {
       if (!owner?.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
       const snapshot = JSON.parse(owner.content_snapshot_json) as { fingerprint: string };
       const prior = await listSignatureCaptures(tx,input.ownerType,input.ownerId);
+      if (prior.some(capture => capture.role === input.role)) {
+        throw new Error(`Only one ${input.role} signature may be captured for this document.`);
+      }
       const other = prior.find(c => c.role !== input.role);
       const newBlock = signatureBlock({signerName,pngDataUrl:input.pngDataUrl,createdAt:now},input.role === 'customer' ? 'Acknowledged by customer' : 'Prepared / serviced by');
       html = appendSigningPage(owner.render_template_snapshot,[...(other ? [block(other)] : []),newBlock],owner.number,snapshot.fingerprint,input.id);
       filename = `${owner.number}-in-person-${input.id}.pdf`;
-      if (input.role === 'customer') await tx.runAsync(`UPDATE ${table} SET signature_status='signed_in_person' WHERE id=?`,input.ownerId);
+      await tx.runAsync(
+        `UPDATE ${table}
+         SET signature_status=CASE WHEN signature_status='signed_document_attached'
+                                   THEN signature_status ELSE 'signed_in_person' END
+         WHERE id=?`,
+        input.ownerId,
+      );
     }
     await tx.runAsync(`INSERT INTO signature_captures(id,owner_type,owner_id,role,signer_name,png_data_url,created_at,render_template_snapshot,deterministic_filename) VALUES(?,?,?,?,?,?,?,?,?)`,input.id,input.ownerType,input.ownerId,input.role,signerName,input.pngDataUrl,now,html,filename);
     if (input.ownerType === 'settings') await tx.runAsync("UPDATE settings SET owner_signature_asset_id=?,updated_at=? WHERE id='business'",input.id,now);

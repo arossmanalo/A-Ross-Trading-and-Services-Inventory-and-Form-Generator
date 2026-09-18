@@ -200,12 +200,12 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 
 ### 4.13 Signatures and external signing
 
-- **FR-13.1:** In-person customer and preparer signatures shall be drawable and print-legible.
+- **FR-13.1:** In-person customer and preparer signatures shall be drawable and print-legible. A finalized CSR or Billing Statement shall accept at most one customer and one preparer signature capture; repeated captures for the same role shall be blocked.
 - **FR-13.2:** Preparer identity/signature may load from Settings and is snapshotted when issued.
 - **FR-13.3:** Remote signing is manual: share unsigned PDF, customer signs externally, owner imports returned PDF using Android's picker.
 - **FR-13.4:** Financial/inventory content may finalize before a remote signature returns.
-- **FR-13.5:** Signature status is independent: `not_required`, `pending`, `signed_in_person`, `signed_document_attached`, `declined`, `no_response` as applicable.
-- **FR-13.6:** Later attachment is append-only and never unlocks finalized content.
+- **FR-13.5:** Signature status is independent: `not_required`, `pending`, `signed_in_person`, `signed_document_attached`, `declined`, `no_response` as applicable. Once a signed capture or returned signed PDF exists, the record shall retain its signed status and not allow changing it to an unsigned status.
+- **FR-13.6:** A signed version shall be previewable and shareable from its finalized CSR or Billing Statement. Later in-person signed copies and externally returned signed PDFs shall be linked append-only; neither shall rewrite or unlock the original finalized content/PDF.
 - **FR-13.7:** Unsigned PDFs show number, revision ID, and content fingerprint for manual matching.
 - **FR-13.8:** Original and returned files are preserved; the app makes no cryptographic verification claim.
 

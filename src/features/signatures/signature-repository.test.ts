@@ -23,7 +23,7 @@ vi.mock('expo-file-system/legacy',() => ({
 
 import { clearSavedPreparerSignature, getPreparerSignatureHtml, listSignatureCaptures, saveSignatureCapture } from '@/features/signatures/capture-repository';
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
-import { attachSignedPdf, getSignableDocument, shareSignedAttachment } from '@/features/signatures/signature-repository';
+import { attachSignedPdf, getSignableDocument, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
 import { addServiceLine, createBillingStatementDraft, finalizeBillingStatement } from '@/features/billing-statements/billing-statement-repository';
 import { validateSignaturePng } from '@/features/signatures/signature-html';
 import { getBusinessLogo, saveBusinessLogo } from '@/features/settings/settings-repository';
@@ -70,6 +70,7 @@ describe('signature persistence and recovery',() => {
     expect(raw.prepare('SELECT render_template_snapshot FROM billing_statements').get()).toEqual({render_template_snapshot:ORIGINAL});
     expect(raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get()).toEqual({high_water_mark:1});
     expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('signed_in_person');
+    await expect(setDocumentSignatureStatus(db,'billing_statement','statement','pending')).rejects.toThrow(/cannot be changed after a signed version/i);
     expect((await getSignableDocument(db,'billing_statement','statement'))?.customerName).toBe('Frozen name');
     await expect(saveSignatureCapture(db,{...input(),signerName:'Another'})).rejects.toThrow(/already been used/);
   });
@@ -80,6 +81,9 @@ describe('signature persistence and recovery',() => {
     expect(versions).toHaveLength(2);
     expect(versions[0].render_template_snapshot).toContain('Customer &lt;One&gt;');
     expect(versions[0].render_template_snapshot).toContain('Owner');
+    await expect(saveSignatureCapture(db,{...input(),id:'capture-customer-duplicate'})).rejects.toThrow(/only one customer signature/i);
+    await expect(saveSignatureCapture(db,{...input(),id:'capture-preparer-duplicate',role:'preparer',signerName:'Second Owner'})).rejects.toThrow(/only one preparer signature/i);
+    expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('signed_in_person');
     expect(()=>raw.prepare('UPDATE signature_captures SET signer_name=?').run('Tampered')).toThrow(/IMMUTABLE/);
     expect(()=>raw.exec('DELETE FROM signature_captures')).toThrow(/IMMUTABLE/);
   });

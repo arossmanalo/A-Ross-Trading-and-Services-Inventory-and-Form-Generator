@@ -49,6 +49,7 @@ type DetailRow = SummaryRow & {
   acknowledged_by_snapshot: string;
   total_bill_centavos: number;
   signature_status: string;
+  has_signed_version?: number;
   share_state: 'not_shared' | 'shared';
   finalized_at: string | null;
 };
@@ -111,7 +112,15 @@ export async function getServiceReport(
   reportId: string,
 ): Promise<ServiceReportDetail | null> {
   const row = await db.getFirstAsync<DetailRow>(
-    `SELECT r.*, c.name AS customer_name, e.machine_type AS equipment_name
+    `SELECT r.*, c.name AS customer_name, e.machine_type AS equipment_name,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM signature_captures sc
+              WHERE sc.owner_type='service_report' AND sc.owner_id=r.id
+            ) OR EXISTS (
+              SELECT 1 FROM document_attachments da
+              WHERE da.owner_type='service_report' AND da.owner_id=r.id
+                AND da.attachment_type='external_signed_pdf'
+            ) THEN 1 ELSE 0 END AS has_signed_version
      FROM service_reports r
      JOIN customers c ON c.id = r.customer_id
      JOIN customer_equipment e ON e.id = r.equipment_id
@@ -937,6 +946,7 @@ function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'ser
     acknowledgedBy: row.acknowledged_by_snapshot,
     totalBillCentavos: row.total_bill_centavos,
     signatureStatus: row.signature_status,
+    hasSignedVersion: row.has_signed_version === 1,
     shareState: row.share_state,
     finalizedAt: row.finalized_at,
   };
