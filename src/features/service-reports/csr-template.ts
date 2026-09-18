@@ -1,6 +1,7 @@
 import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
+import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v2';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v3';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -96,10 +97,6 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     .usage-table .qty { width: 22%; text-align: right; }
     .total-row { display: flex; justify-content: flex-end; padding: 10px 0; }
     .total-box { width: 240px; padding: 7px 10px; border: 1.5px solid #0b377f; display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; }
-    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 34px; break-inside: avoid; }
-    .signature { padding-top: 6px; border-top: 1px solid #111827; text-align: center; }
-    .signature-name { min-height: 18px; font-weight: 700; }
-    .signature-label { color: #475569; font-size: 8px; text-transform: uppercase; }
     .footer { margin-top: 18px; color: #64748b; font-size: 7px; text-align: center; }
   </style>
 </head>
@@ -132,14 +129,16 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   ${listSection("Customer's Remarks", snapshot.customerRemarks)}
   <div class="total-row"><div class="total-box"><span>Total Bill</span><span>${escapeHtml(PHP_FORMATTER.format(snapshot.totalBillCentavos / 100))}</span></div></div>
   <section class="signatures">
-    <div class="signature"><div class="signature-name">${escapeHtml(snapshot.servicedBy)}</div><div class="signature-label">Serviced By</div></div>
-    <div class="signature"><div class="signature-name">${escapeHtml(snapshot.acknowledgedBy)}</div><div class="signature-label">Acknowledged By</div></div>
+    <div class="signature" data-signature-role="preparer"><div class="signature-writing" data-signature-image-slot="preparer"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="preparer">${escapeHtml(snapshot.servicedBy)}</div><div class="signature-label">Serviced By</div></div>
+    <div class="signature" data-signature-role="customer"><div class="signature-writing" data-signature-image-slot="customer"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="customer">${escapeHtml(snapshot.acknowledgedBy)}</div><div class="signature-label">Acknowledged By</div></div>
   </section>
   <footer class="footer">${escapeHtml(snapshot.csrNumber)} | Revision 1 | Template ${CSR_TEMPLATE_VERSION} | Fingerprint ${escapeHtml(snapshot.fingerprint)}</footer>
 </body>
 </html>`;
-  return html.replace('<footer class="footer">', `${snapshot.preparerSignatureHtml ?? ''}<footer class="footer">`)
-    .replace('</style>', 'body{overflow-wrap:anywhere}tr{break-inside:avoid}thead{display:table-header-group}</style>');
+  return applySignatureCapturesToDocument(
+    html.replace('</style>', 'body{overflow-wrap:anywhere}tr{break-inside:avoid}thead{display:table-header-group}</style>'),
+    [snapshot.preparerSignatureHtml ?? ''],
+  );
 }
 
 function cell(label: string, value: string, full = false): string {

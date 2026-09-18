@@ -30,7 +30,7 @@ import { getBusinessLogo, saveBusinessLogo } from '@/features/settings/settings-
 
 // A tiny raster fixture, not a real person's signature.
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6bOAAAAAASUVORK5CYII=';
-const ORIGINAL = '<html><body><p>Frozen customer charges</p></body></html>';
+const ORIGINAL = '<html><body><p>Frozen customer charges</p><footer>ABC123</footer></body></html>';
 type Params = Array<string|number|null>;
 function adapter(raw:DatabaseSync):SQLiteDatabase {
   const api = {
@@ -67,6 +67,9 @@ describe('signature persistence and recovery',() => {
     expect(captures).toHaveLength(1);
     expect(captures[0].render_template_snapshot).toContain('Customer &lt;One&gt;');
     expect(captures[0].render_template_snapshot).toContain('ABC123');
+    expect(captures[0].render_template_snapshot).toContain('data-signature-image-slot="customer"><img class="signature-image"');
+    expect(captures[0].render_template_snapshot).not.toContain('In-person acknowledgment');
+    expect(captures[0].render_template_snapshot).not.toContain('break-before:page');
     expect(raw.prepare('SELECT render_template_snapshot FROM billing_statements').get()).toEqual({render_template_snapshot:ORIGINAL});
     expect(raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get()).toEqual({high_water_mark:1});
     expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('signed_in_person');
@@ -137,6 +140,19 @@ describe('signature persistence and recovery',() => {
     files.delete(path);
     await renderSignaturePdf(db,'capture-1');
     expect(printer).toHaveBeenCalledTimes(3);
+  });
+  it('moves previously rendered acknowledgment-page signatures onto page one when regenerated',async()=>{
+    const legacyHtml=`<html><head></head><body><p>Frozen customer charges</p><section style="break-before:page"><h2>In-person acknowledgment</h2><p>Document BS-000001</p><section style="break-inside:avoid;margin-top:20px;padding:12px;border-top:1px solid #64748b;text-align:center"><img alt="Drawn signature" src="${PNG}" style="display:block;width:240px;height:90px;object-fit:contain;margin:0 auto"/><strong>Customer One</strong><div>Acknowledged by customer</div><small>Captured today</small></section></section></body></html>`;
+    raw.prepare(`INSERT INTO signature_captures(id,owner_type,owner_id,role,signer_name,png_data_url,created_at,render_template_snapshot,deterministic_filename,pdf_state,private_path) VALUES('legacy-capture','billing_statement','statement','customer','Customer One',?,'now',?,'BS-000001-in-person-legacy-capture.pdf','ready','private/documents/in-person/BS-000001-in-person-legacy-capture.pdf')`).run(PNG,legacyHtml);
+    files.set('private/documents/in-person/BS-000001-in-person-legacy-capture.pdf','JVBERi0xLjQK');
+
+    const path=await renderSignaturePdf(db,'legacy-capture');
+    const renderedHtml=printer.mock.calls[0]?.[0]?.html as string;
+    expect(path).toContain('inline-v1');
+    expect(renderedHtml).toContain('data-signature-image-slot="customer"><img class="signature-image"');
+    expect(renderedHtml).toContain('Customer One');
+    expect(renderedHtml).not.toContain('In-person acknowledgment');
+    expect(renderedHtml).not.toContain('break-before:page');
   });
   it('requires manual matching, checks PDF bytes, and keeps separate returned files',async()=>{
     files.set('source.pdf','JVBERi0xLjQK');

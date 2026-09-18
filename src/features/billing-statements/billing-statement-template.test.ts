@@ -25,6 +25,9 @@ describe('billing statement template', () => {
     expect(html).toContain('Liquid Detergent &lt;Premium&gt;');
     expect(html).toContain('ABC123DEF456');
     expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);
+    expect(html).toContain('data-signature-image-slot="preparer"');
+    expect(html).toContain('data-signature-image-slot="customer"');
+    expect(html).not.toContain('break-before:page');
   });
 
   it('keeps long charge tables paginable with repeated headings', () => {

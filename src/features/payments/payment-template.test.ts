@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildPaymentAcknowledgmentHtml, type PaymentRenderSnapshot } from './payment-template';
 import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
+import { signatureBlock } from '@/features/signatures/signature-html';
 
 const fixture: PaymentRenderSnapshot = {
   paNumber:'PA-000042',businessDate:'2026-09-05',fingerprint:'ABC123DEF456',
@@ -11,4 +12,4 @@ const fixture: PaymentRenderSnapshot = {
   statementTotalCentavos:1327500,totalPaymentsAfterCentavos:500000,remainingBalanceCentavos:827500,
 };
 
-describe('payment acknowledgment template',()=>{it('renders the non-tax title, traceability, method, balance, and default logo',()=>{const html=buildPaymentAcknowledgmentHtml(fixture);expect(html).toContain('Payment Acknowledgment');expect(html).toContain('Not a Tax Receipt');expect(html).toContain('PA-000042');expect(html).toContain('BS-000031');expect(html).toContain('GCash / E-wallet');expect(html).toContain('₱8,275.00');expect(html).toContain('ABC123DEF456');expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);});});
+describe('payment acknowledgment template',()=>{it('renders the non-tax title, traceability, method, balance, and default logo',()=>{const html=buildPaymentAcknowledgmentHtml(fixture);expect(html).toContain('Payment Acknowledgment');expect(html).toContain('Not a Tax Receipt');expect(html).toContain('PA-000042');expect(html).toContain('BS-000031');expect(html).toContain('GCash / E-wallet');expect(html).toContain('₱8,275.00');expect(html).toContain('ABC123DEF456');expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);});it('continues to render the saved preparer signature',()=>{const preparerSignatureHtml=signatureBlock({signerName:'Owner',pngDataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6bOAAAAAASUVORK5CYII=',createdAt:'2026-09-18T08:00:00Z'},'Prepared / serviced by');const html=buildPaymentAcknowledgmentHtml({...fixture,preparerSignatureHtml});expect(html).toContain('alt="Drawn signature"');expect(html).toContain('Owner');});});

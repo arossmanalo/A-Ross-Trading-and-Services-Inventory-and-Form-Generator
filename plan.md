@@ -182,6 +182,7 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - Saving a PNG asks for write-only photo-library access and places customer and billing information in the device photo library.
 - In-person signatures are drawn on-device.
 - Each finalized CSR or Billing Statement accepts at most one customer and one preparer in-person signature. Repeated same-role captures are blocked; legacy duplicates remain in history, while only the latest capture for each role is used in the signed version.
+- Captured customer and preparer signatures are rendered on their matching signature lines in the document body; they do not force a separate acknowledgment page. Normal pagination may move the signature area only when preceding content leaves insufficient page space.
 - The finalized document screen reflects its signature status and provides access to a previewable signed copy. Signed copies and externally returned PDFs are linked to the document without rewriting its original finalized PDF or content snapshot.
 - Once any signed capture or returned signed PDF exists, its signed status cannot be manually changed back to an unsigned status.
 - For remote signing, the owner shares an unsigned PDF manually, the customer signs externally, and the owner imports the returned PDF.

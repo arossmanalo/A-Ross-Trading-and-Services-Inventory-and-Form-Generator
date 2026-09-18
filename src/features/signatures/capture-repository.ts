@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
-import { appendSigningPage, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
+import { applySignatureCapturesToDocument, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
 
 export type SignatureCapture = {
@@ -54,16 +54,15 @@ export async function saveSignatureCapture(db: SQLiteDatabase, input: {
     if (input.ownerType !== 'settings') {
       const table = input.ownerType === 'service_report' ? 'service_reports' : 'billing_statements';
       const numberColumn = input.ownerType === 'service_report' ? 'csr_number' : 'bs_number';
-      const owner = await tx.getFirstAsync<{number:string;render_template_snapshot:string;content_snapshot_json:string}>(`SELECT ${numberColumn} AS number,render_template_snapshot,content_snapshot_json FROM ${table} WHERE id=? AND document_state='finalized'`,input.ownerId);
+      const owner = await tx.getFirstAsync<{number:string;render_template_snapshot:string}>(`SELECT ${numberColumn} AS number,render_template_snapshot FROM ${table} WHERE id=? AND document_state='finalized'`,input.ownerId);
       if (!owner?.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
-      const snapshot = JSON.parse(owner.content_snapshot_json) as { fingerprint: string };
       const prior = await listSignatureCaptures(tx,input.ownerType,input.ownerId);
       if (prior.some(capture => capture.role === input.role)) {
         throw new Error(`Only one ${input.role} signature may be captured for this document.`);
       }
       const other = prior.find(c => c.role !== input.role);
       const newBlock = signatureBlock({signerName,pngDataUrl:input.pngDataUrl,createdAt:now},input.role === 'customer' ? 'Acknowledged by customer' : 'Prepared / serviced by');
-      html = appendSigningPage(owner.render_template_snapshot,[...(other ? [block(other)] : []),newBlock],owner.number,snapshot.fingerprint,input.id);
+      html = applySignatureCapturesToDocument(owner.render_template_snapshot,[...(other ? [block(other)] : []),newBlock]);
       filename = `${owner.number}-in-person-${input.id}.pdf`;
       await tx.runAsync(
         `UPDATE ${table}

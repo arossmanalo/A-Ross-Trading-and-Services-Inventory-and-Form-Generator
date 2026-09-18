@@ -208,6 +208,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-13.6:** A signed version shall be previewable and shareable from its finalized CSR or Billing Statement. Later in-person signed copies and externally returned signed PDFs shall be linked append-only; neither shall rewrite or unlock the original finalized content/PDF.
 - **FR-13.7:** Unsigned PDFs show number, revision ID, and content fingerprint for manual matching.
 - **FR-13.8:** Original and returned files are preserved; the app makes no cryptographic verification claim.
+- **FR-13.9:** In-person customer and preparer marks shall appear on their corresponding signature lines in the document body and shall not force a dedicated acknowledgment page. The signature block may naturally overflow only when earlier content leaves insufficient space on the current page.
 
 ### 4.14 PDF and sharing
 
