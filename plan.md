@@ -31,7 +31,7 @@ The generated financial document is an internal **Billing Statement — Not a Ta
 - Registered customers and reusable customer-equipment records.
 - Digital CSRs with drafts, outcomes, finalization, void/reissue, follow-up visits, item usage, acknowledgment state, and PDF output.
 - CSR and Billing Statement drafts can be previewed/exported as temporary PDFs before finalization; finalized views preview their frozen snapshots. Neither preview path creates numbering, stock, or payment effects.
-- A Billing Statement draft may be created from the CSR draft screen or linked to an existing CSR draft from Billing. CSR usage lines and statement finalization remain blocked until the linked CSR is finalized.
+- A Billing Statement draft may be created from the CSR draft screen or linked to an existing CSR draft from Billing. Its billable CSR item usages and service usages are synchronized into the unnumbered statement draft; non-billable item usages are excluded. Editing usages on the CSR updates linked drafts. The statement cannot be finalized until the linked CSR is finalized.
 - Document previews can be saved as PDF or as a PNG of the full document in the device photo library; image export uses write-only permission and is disabled for documents exceeding the safe image-height limit.
 - CSR drafts can select catalog services and inventory items (or create a missing catalog entry inline); the read-only total is derived from billable item usage and selected service rates.
 - Inventory items, integer stock, Restock and Consumption actions, low-stock thresholds, deactivation, and append-only movements.
@@ -129,7 +129,7 @@ Expo Go is not a production requirement. Phase 0 must verify release builds on t
 1. Create an unnumbered autosaved draft for a customer and one equipment record.
 2. Enter the fields and sections shown by the supplied CSR: customer/header grid; Reported Problem; Diagnosis; Action Taken; Status After Service; Recommendations; Machine Status; Billing; Warranty; Customer's Remarks; Total Bill; Serviced By; and Acknowledged By.
 3. Add billable or non-billable item usage, then preview/export the current draft as a PDF or PNG without numbering or posting stock.
-4. Optionally start a linked Billing Statement draft from the CSR draft. The statement can be prepared, but cannot import CSR usage or finalize until this CSR is finalized.
+4. Optionally start a linked Billing Statement draft from the CSR draft. Existing billable item usages and service usages appear automatically, and later CSR draft usage changes synchronize to the linked statement. The statement remains unnumbered and cannot be finalized until this CSR is finalized.
 5. Finalization rechecks stock, allocates the next CSR number, writes movements atomically, freezes the snapshot, and queues PDF rendering.
 6. PDF failure leaves a finalized `PDF pending` record; rendering/sharing can retry without duplicating stock or numbering.
 
@@ -139,8 +139,8 @@ Resolution order is one-time override, then customer price, then base selling pr
 
 ### Billing Statement
 
-1. Select a registered customer and optionally one finalized CSR or CSR draft. A linked draft may be prepared in advance but cannot supply CSR lines yet.
-2. Add eligible finalized CSR lines and/or direct inventory items. A Billing Statement linked to a CSR draft cannot be finalized until that CSR is finalized.
+1. Select a registered customer and optionally one finalized CSR or CSR draft. Linking a CSR draft automatically includes its eligible billable item usages and service usages in the statement draft.
+2. Add eligible finalized CSR item lines and/or direct inventory items. A Billing Statement linked to a CSR draft cannot be finalized until that CSR is finalized; CSR source lines remain tied to their CSR prices and do not post stock a second time.
 3. Add services at quantity one with owner-customizable rates.
 4. Add expenses with actual cost, billable flag, and billed amount if billable.
 5. Apply an optional fixed or percentage discount to the combined charge subtotal.

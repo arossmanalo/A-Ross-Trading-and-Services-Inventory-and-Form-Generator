@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7 } from '@/db/schema';
 
 const files = vi.hoisted(() => new Map<string,string>());
 const printer = vi.hoisted(() => vi.fn());
@@ -48,7 +48,7 @@ describe('signature persistence and recovery',() => {
     files.clear();printer.mockReset();
     printer.mockImplementation(async()=>{files.set('cache/render.pdf','JVBERi0xLjQK');return{uri:'cache/render.pdf',base64:'JVBERi0xLjQK'};});
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}
       INSERT INTO app_meta VALUES('database_revision','0');
       INSERT INTO sequences VALUES('CSR',0),('BS',1),('PA',0);
       INSERT INTO settings(id,business_name,owner_name,created_at,updated_at) VALUES('business','A.Ross','Owner','now','now');

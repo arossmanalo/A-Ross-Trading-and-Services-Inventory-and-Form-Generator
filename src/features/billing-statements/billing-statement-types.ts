@@ -17,6 +17,7 @@ export type BillingStatementLine = {
   id: string;
   lineType: BillingLineType;
   sourceCsrUsageId: string | null;
+  sourceCsrServiceUsageId: string | null;
   itemId: string | null;
   serviceId: string | null;
   expenseId: string | null;

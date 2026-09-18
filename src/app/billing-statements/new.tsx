@@ -70,7 +70,7 @@ export default function NewBillingStatementScreen() {
       <View style={styles.intro}>
         <Text selectable style={styles.eyebrow}>UNNUMBERED DRAFT</Text>
         <Text selectable style={styles.introText}>
-          Choose a customer. You can link a finalized CSR now, or link a CSR draft and finish billing after that CSR is finalized.
+          Link a CSR to include its available billable items and services. A linked CSR draft can be prepared now, but must be finalized before its Billing Statement.
         </Text>
       </View>
       <Text selectable style={styles.title}>Customer</Text>
@@ -88,7 +88,7 @@ export default function NewBillingStatementScreen() {
               <Choice
                 key={csr.id}
                 label={csr.documentState === 'draft'
-                  ? `Draft CSR · ${csr.businessDate} · finalize before billing CSR items`
+                  ? `Draft CSR · ${csr.businessDate} · ${csr.availableLineCount} item/service charge(s) will be included`
                   : `${csr.csrNumber} · ${csr.businessDate} · ${csr.availableLineCount} unbilled item(s)`}
                 selected={csr.id === csrId}
                 onPress={() => setCsrId(csr.id)}

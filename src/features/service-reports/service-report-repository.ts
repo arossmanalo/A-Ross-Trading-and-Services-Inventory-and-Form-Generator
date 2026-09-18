@@ -7,6 +7,7 @@ import { allocateDocumentNumber } from '@/db/sequences';
 import { getLocalBusinessDate, validateBusinessDate } from '@/domain/business-date';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { buildCsrHtml, CSR_TEMPLATE_VERSION, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
+import { syncLinkedCsrDraftLines } from '@/features/billing-statements/billing-statement-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { calculateServiceReportTotal } from '@/features/service-reports/service-report-total';
 import type {
@@ -299,6 +300,7 @@ export async function addReportItemUsage(
       if (String(error).includes('UNIQUE')) throw new Error('This item is already listed on the CSR.');
       throw error;
     }
+    await syncLinkedCsrDraftLines(tx, reportId);
     await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.item_usage_added',
@@ -318,6 +320,15 @@ export async function removeReportItemUsage(
   usageId: string,
 ): Promise<void> {
   await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.runAsync(
+      `DELETE FROM billing_statement_lines
+       WHERE source_csr_usage_id=?
+         AND billing_statement_id IN (
+           SELECT id FROM billing_statements WHERE service_report_id=? AND document_state='draft'
+         )`,
+      usageId,
+      reportId,
+    );
     const result = await tx.runAsync(
       `DELETE FROM service_report_item_usage
        WHERE id = ? AND service_report_id = ?
@@ -327,6 +338,7 @@ export async function removeReportItemUsage(
       reportId,
     );
     if (result.changes !== 1) throw new Error('Only draft item usage can be removed.');
+    await syncLinkedCsrDraftLines(tx, reportId);
     await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.item_usage_removed',
@@ -384,6 +396,7 @@ export async function addReportServiceUsage(
       if (String(error).includes('UNIQUE')) throw new Error('This service is already listed on the CSR.');
       throw error;
     }
+    await syncLinkedCsrDraftLines(tx, reportId);
     await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.service_usage_added',
@@ -403,6 +416,15 @@ export async function removeReportServiceUsage(
   usageId: string,
 ): Promise<void> {
   await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.runAsync(
+      `DELETE FROM billing_statement_lines
+       WHERE source_csr_service_usage_id=?
+         AND billing_statement_id IN (
+           SELECT id FROM billing_statements WHERE service_report_id=? AND document_state='draft'
+         )`,
+      usageId,
+      reportId,
+    );
     const result = await tx.runAsync(
       `DELETE FROM service_report_service_usage
        WHERE id = ? AND service_report_id = ?
@@ -412,6 +434,7 @@ export async function removeReportServiceUsage(
       reportId,
     );
     if (result.changes !== 1) throw new Error('Only draft service usage can be removed.');
+    await syncLinkedCsrDraftLines(tx, reportId);
     await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.service_usage_removed',
@@ -650,6 +673,7 @@ export async function finalizeServiceReport(
       now,
       reportId,
     );
+    await syncLinkedCsrDraftLines(tx, reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.finalized',
       entityType: 'service_report',

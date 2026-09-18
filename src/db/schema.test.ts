@@ -3,14 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7 } from './schema';
 
 describe('database schema', () => {
   let db: DatabaseSync;
 
   beforeEach(() => {
     db = new DatabaseSync(':memory:');
-    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4} ${SCHEMA_V5} ${SCHEMA_V6}`);
+    db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA_V1} ${SCHEMA_V2} ${SCHEMA_V3} ${SCHEMA_V4} ${SCHEMA_V5} ${SCHEMA_V6} ${SCHEMA_V7}`);
   });
 
   afterEach(() => {

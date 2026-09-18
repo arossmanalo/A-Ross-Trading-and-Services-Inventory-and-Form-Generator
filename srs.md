@@ -159,7 +159,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-9.18:** Item, service, and billable-expense lines shall share the table and remain distinguishable through description/type labels. The totals block shall extend the sample with Discount, VAT display when enabled, Payments Received, and Balance Due as applicable.
 - **FR-9.19:** The sample's `Invoice` number and receipt/VAT footer are visual placeholders only. The generated document shall use its BS number and the fixed internal-document wording from FR-9.1 plus the frozen VAT-display setting.
 - **FR-9.20:** A Billing Statement draft shall be previewable and exportable as a temporary PDF before finalization. This preview shall use current saved draft values and shall not allocate a number, deduct stock, create a payment, or change document state.
-- **FR-9.21:** Billing Statement creation shall allow linking an existing CSR draft. CSR usage lines remain unavailable and the statement cannot be finalized until the linked CSR is finalized.
+- **FR-9.21:** Billing Statement creation shall allow linking an existing CSR draft. Its billable item usages and service usages shall appear as source-linked lines in the unnumbered Billing Statement draft; non-billable item usages shall be excluded. Adding or removing CSR draft usages shall synchronize the linked statement draft. Source-line uniqueness shall prevent the same CSR usage from being billed by multiple statements. The Billing Statement cannot be finalized until the linked CSR is finalized, at which point its source lines use the CSR's finalized prices and do not post stock a second time.
 
 ### 4.10 Money, discounts, and VAT display
 
@@ -375,7 +375,7 @@ The same document UUID/idempotency key returns the existing result without anoth
 ### 7.3 Linked CSR and Billing Statement
 
 CSR-posted use is referenced, not reposted. Direct statement items use another transaction. Source-line uniqueness blocks duplicate billing across statements.
-An unfinalized CSR may be linked to a statement draft for preparation, but its charges cannot be imported and the statement cannot finalize until the CSR is finalized. A linked CSR draft cannot be deleted until the linked statement draft is deleted.
+An unfinalized CSR may be linked to a statement draft. Billable item usages and service usages are automatically reflected there, while non-billable item usages are omitted. Usage changes on the CSR synchronize to the linked statement draft. The statement cannot finalize until the CSR is finalized; its source-linked lines retain finalized CSR prices and CSR-posted stock is not posted again. A source usage cannot be billed through more than one Billing Statement. A linked CSR draft cannot be deleted until the linked statement draft is deleted.
 
 ### 7.4 Catalog/profile changes
 
