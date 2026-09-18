@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Asset, requestPermissionsAsync } from 'expo-media-library';
+import { requestPermissionsAsync, saveToLibraryAsync } from 'expo-media-library/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
@@ -141,7 +141,7 @@ export function DocumentPreviewScreen({ documentId, kind }: { documentId: string
         result: 'tmpfile',
       });
       const localUri = captureUri.startsWith('file://') ? captureUri : `file://${captureUri}`;
-      await Asset.create(localUri);
+      await saveToLibraryAsync(localUri);
       setNotice('Document image saved to Photos. It contains the customer information shown in this preview.');
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not save the document image.');
