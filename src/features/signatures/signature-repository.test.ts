@@ -24,7 +24,7 @@ vi.mock('expo-file-system/legacy',() => ({
 import { clearSavedPreparerSignature, getPreparerSignatureHtml, listSignatureCaptures, saveSignatureCapture } from '@/features/signatures/capture-repository';
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
 import { attachSignedPdf, getSignableDocument, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
-import { addServiceLine, createBillingStatementDraft, finalizeBillingStatement } from '@/features/billing-statements/billing-statement-repository';
+import { addServiceLine, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement } from '@/features/billing-statements/billing-statement-repository';
 import { validateSignaturePng } from '@/features/signatures/signature-html';
 import { getBusinessLogo, saveBusinessLogo } from '@/features/settings/settings-repository';
 
@@ -70,6 +70,9 @@ describe('signature persistence and recovery',() => {
     expect(raw.prepare('SELECT render_template_snapshot FROM billing_statements').get()).toEqual({render_template_snapshot:ORIGINAL});
     expect(raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get()).toEqual({high_water_mark:1});
     expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('signed_in_person');
+    const detail=await getBillingStatement(db,'statement');
+    expect(detail?.hasSignedVersion).toBe(true);
+    expect(detail?.signatureStatus).toBe('signed_in_person');
     await expect(setDocumentSignatureStatus(db,'billing_statement','statement','pending')).rejects.toThrow(/cannot be changed after a signed version/i);
     expect((await getSignableDocument(db,'billing_statement','statement'))?.customerName).toBe('Frozen name');
     await expect(saveSignatureCapture(db,{...input(),signerName:'Another'})).rejects.toThrow(/already been used/);

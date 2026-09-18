@@ -945,7 +945,9 @@ function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'ser
     servicedBy: row.serviced_by_snapshot,
     acknowledgedBy: row.acknowledged_by_snapshot,
     totalBillCentavos: row.total_bill_centavos,
-    signatureStatus: row.signature_status,
+    signatureStatus: row.signature_status === 'signed_document_attached'
+      ? row.signature_status
+      : row.has_signed_version === 1 ? 'signed_in_person' : row.signature_status,
     hasSignedVersion: row.has_signed_version === 1,
     shareState: row.share_state,
     finalizedAt: row.finalized_at,

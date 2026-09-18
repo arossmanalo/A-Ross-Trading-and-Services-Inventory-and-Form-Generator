@@ -40,7 +40,7 @@ export async function getBillingStatement(db: SQLiteDatabase, statementId: strin
     FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id WHERE b.id=?`, statementId);
   if (!row) return null;
   const [lines, expenses] = await Promise.all([listLines(db, statementId), listExpenses(db, statementId)]);
-  return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, backdateReason: row.backdate_reason, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, signatureStatus: row.signature_status, hasSignedVersion: row.has_signed_version === 1, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
+  return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, backdateReason: row.backdate_reason, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, signatureStatus: row.signature_status === 'signed_document_attached' ? row.signature_status : row.has_signed_version === 1 ? 'signed_in_person' : row.signature_status, hasSignedVersion: row.has_signed_version === 1, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
 }
 
 export async function listFinalizedCsrsForCustomer(db: SQLiteDatabase, customerId: string): Promise<Array<{ id: string; csrNumber: string; businessDate: string; availableLineCount: number }>> {
