@@ -4,8 +4,21 @@ import { DATABASE_VERSION, SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5
 
 type UserVersionRow = { user_version: number };
 
-export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
-  await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+let activeMigration: Promise<void> | null = null;
+
+export function migrateDatabase(db: SQLiteDatabase): Promise<void> {
+  if (activeMigration) return activeMigration;
+  activeMigration = migrateDatabaseOnce(db).finally(() => {
+    activeMigration = null;
+  });
+  return activeMigration;
+}
+
+async function migrateDatabaseOnce(db: SQLiteDatabase): Promise<void> {
+  // Do not change journal mode during provider startup. On Android, that is a
+  // write against the database header and can race a second provider opened by
+  // Expo Fast Refresh. A busy timeout lets a separate reader/writer finish.
+  await db.execAsync('PRAGMA busy_timeout = 10000; PRAGMA foreign_keys = ON;');
 
   const row = await db.getFirstAsync<UserVersionRow>('PRAGMA user_version');
   const currentVersion = row?.user_version ?? 0;
