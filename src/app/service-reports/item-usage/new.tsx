@@ -16,7 +16,7 @@ export default function NewReportItemUsageScreen() {
   const db = useSQLiteContext();
   const [items, setItems] = useState<InventoryItemSummary[]>([]);
   const [selectedItem, setSelectedItem] = useState<InventoryItemSummary | null>(null);
-  const [quantity, setQuantity] = useState('1');
+  const [quantity, setQuantity] = useState('');
   const [billable, setBillable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -70,7 +70,7 @@ export default function NewReportItemUsageScreen() {
         >
           <View style={styles.itemCopy}>
             <Text selectable style={styles.itemName}>{item.name}</Text>
-            <Text selectable style={styles.itemMeta}>{formatCentavos(item.baseSellingPriceCentavos)} · {item.currentStock} {item.unitLabel} available</Text>
+          <Text selectable style={styles.itemMeta}>{formatCentavos(item.baseSellingPriceCentavos)} · Stock available: {item.currentStock} {item.unitLabel}</Text>
           </View>
           <Text selectable style={styles.selectLabel}>{selectedItem?.id === item.id ? 'SELECTED' : 'SELECT'}</Text>
         </Pressable>
@@ -84,7 +84,7 @@ export default function NewReportItemUsageScreen() {
           {selectedItem ? (
             <View style={styles.editor}>
               <Text selectable style={styles.selectedName}>{selectedItem.name}</Text>
-              <FormField keyboardType="number-pad" label="Quantity" onChangeText={setQuantity} value={quantity} />
+              <FormField keyboardType="number-pad" label="Quantity used" hint="Enter the number of units used for this CSR." onChangeText={setQuantity} placeholder="Enter a whole number" value={quantity} />
               <View style={styles.switchRow}>
                 <View style={styles.itemCopy}>
                   <Text selectable style={styles.switchTitle}>Billable to customer</Text>

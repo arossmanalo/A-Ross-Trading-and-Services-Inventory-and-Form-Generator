@@ -80,7 +80,7 @@ export default function InventoryMovementScreen() {
             <Text selectable style={styles.eyebrow}>{title.toUpperCase()}</Text>
             <Text selectable style={styles.itemName}>{item?.name ?? 'Loading item…'}</Text>
             <Text selectable style={styles.available}>
-              Available: {item?.currentStock ?? '—'} {item?.unitLabel ?? ''}
+              Current stock: {item?.currentStock ?? '—'} {item?.unitLabel ?? ''}
             </Text>
             {!item?.active && item ? (
               <Text selectable style={styles.inactiveNote}>
@@ -91,9 +91,10 @@ export default function InventoryMovementScreen() {
 
           <FormField
             keyboardType="number-pad"
-            label="Quantity"
+            label={movementType === 'restock' ? 'Quantity to add' : 'Quantity to consume'}
+            hint={movementType === 'restock' ? 'Enter the number of units being added to stock.' : 'Enter the number of units being consumed.'}
             onChangeText={setQuantity}
-            placeholder="1"
+            placeholder="Enter a whole number"
             value={quantity}
           />
           <FormField
