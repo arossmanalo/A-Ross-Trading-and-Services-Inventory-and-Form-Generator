@@ -16,6 +16,7 @@ export default function CaptureScreen() {
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState<string | null>(null);
   const [target,setTarget] = useState<string | null>(null);
+  const [scrollEnabled,setScrollEnabled] = useState(true);
   const requestId = useRef(Crypto.randomUUID());
   const saving = useRef(false);
   useEffect(() => {
@@ -27,11 +28,11 @@ export default function CaptureScreen() {
     }).catch((e:unknown) => setError(e instanceof Error ? e.message : 'Could not load signing target.'));
   },[db,ownerType,ownerId]);
   if (!['settings','service_report','billing_statement'].includes(ownerType) || !['customer','preparer'].includes(role) || !ownerId) return <Text>Invalid signing target.</Text>;
-  return <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
+  return <ScrollView scrollEnabled={scrollEnabled} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
     <Text selectable style={{fontWeight:'700'}}>{target ?? 'Loading document…'}</Text>
     <Text selectable>{ownerType === 'settings' ? 'Saved preparer signature: automatically included in future issued documents. Existing documents are unchanged.' : `Capture the ${role} signature after they review the finalized document. A separate signed version preserves the original PDF.`}</Text>
     <FormField label="Signer’s full name" value={name} onChangeText={setName} editable={!busy} maxLength={200} />
-    <SignaturePad disabled={busy || !target} onCapture={data => {
+    <SignaturePad disabled={busy || !target} onInteractionStart={() => setScrollEnabled(false)} onInteractionEnd={() => setScrollEnabled(true)} onCapture={data => {
       if (saving.current) return;
       saving.current=true;setBusy(true);setError(null);
       void saveSignatureCapture(db,{id:requestId.current,ownerType:ownerType as 'settings'|'service_report'|'billing_statement',ownerId,role:role as 'customer'|'preparer',signerName:name,pngDataUrl:data})

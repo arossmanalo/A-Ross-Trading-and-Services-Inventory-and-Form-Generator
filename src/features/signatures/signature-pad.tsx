@@ -19,18 +19,24 @@ window.clearSignature=function(){strokes=[];active=null;redraw();send({type:'cha
 window.exportSignature=function(){if(!strokes.length){send({type:'error',message:'Draw a signature first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};redraw();
 </script></body></html>`;
 
-export function SignaturePad({ disabled, onCapture }: { disabled: boolean; onCapture: (data: string) => void }) {
+export function SignaturePad({ disabled, onCapture, onInteractionStart, onInteractionEnd }: { disabled: boolean; onCapture: (data: string) => void; onInteractionStart?: () => void; onInteractionEnd?: () => void }) {
   const webview = useRef<WebView>(null);
   const [hasInk, setHasInk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <View style={{gap:12}}>
     <Text>Draw inside the white box. Saving records this signature permanently.</Text>
-    <View pointerEvents={disabled ? 'none' : 'auto'} style={{aspectRatio:2,borderWidth:1,borderColor:'#64748b',backgroundColor:'#fff'}}>
+    <View
+      pointerEvents={disabled ? 'none' : 'auto'}
+      onTouchStart={onInteractionStart}
+      onTouchEnd={onInteractionEnd}
+      onTouchCancel={onInteractionEnd}
+      style={{height:168,width:'100%',borderWidth:1,borderColor:'#64748b',backgroundColor:'#fff'}}
+    >
       <WebView ref={webview} source={{html:SIGNATURE_PAD_HTML}} originWhitelist={['*']}
         onShouldStartLoadWithRequest={request => request.url === 'about:blank'}
         javaScriptEnabled domStorageEnabled={false} allowFileAccess={false}
         allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}
-        mixedContentMode="never" setSupportMultipleWindows={false} scrollEnabled={false}
+        mixedContentMode="never" setSupportMultipleWindows={false} scrollEnabled={false} nestedScrollEnabled={false}
         onError={() => setError('Signature pad could not load. Reopen this screen to retry.')}
         onMessage={event => {
           try {
