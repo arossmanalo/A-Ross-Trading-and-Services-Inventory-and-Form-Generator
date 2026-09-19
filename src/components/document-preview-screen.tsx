@@ -4,7 +4,7 @@ import { requestPermissionsAsync, saveToLibraryAsync } from 'expo-media-library/
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -26,6 +26,19 @@ type CaptureView = View & { measure?: unknown };
 
 const MAX_IMAGE_HEIGHT = 6_000;
 
+/**
+ * The generated document HTML uses a one-to-one viewport by default so that
+ * printed output is stable. The on-device preview needs a wider range so a
+ * user can pinch back out after zooming in, especially on tablets.
+ */
+function withPreviewViewport(html: string): string {
+  const viewport = '<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.5, maximum-scale=4, user-scalable=yes" />';
+  const viewportTag = /<meta\s+name=["']viewport["'][^>]*>/i;
+  return viewportTag.test(html)
+    ? html.replace(viewportTag, viewport)
+    : html.replace(/<head>/i, `<head>${viewport}`);
+}
+
 export function DocumentPreviewScreen({ documentId, kind }: { documentId: string; kind: DocumentKind }) {
   const db = useSQLiteContext();
   const { width: windowWidth } = useWindowDimensions();
@@ -37,6 +50,7 @@ export function DocumentPreviewScreen({ documentId, kind }: { documentId: string
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const previewHtml = useMemo(() => withPreviewViewport(preview?.html ?? ''), [preview?.html]);
 
   useEffect(() => {
     let active = true;
@@ -191,7 +205,7 @@ export function DocumentPreviewScreen({ documentId, kind }: { documentId: string
                 javaScriptEnabled
                 showsVerticalScrollIndicator={false}
                 scrollEnabled={documentHeight === null}
-                source={{ html: preview.html }}
+                source={{ html: previewHtml }}
                 onLoadEnd={() => webViewRef.current?.injectJavaScript(
                   'window.ReactNativeWebView.postMessage(String(document.documentElement.scrollHeight || document.body.scrollHeight)); true;',
                 )}

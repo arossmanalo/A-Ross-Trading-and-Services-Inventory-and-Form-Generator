@@ -159,7 +159,7 @@ function textSection(title: string, value: string): string {
 
 function usageSection(usages: CsrRenderSnapshot['usages']): string {
   if (!usages.length) return '';
-  return `<section class="section"><div class="section-title">Items Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Quantity</th></tr></thead><tbody>${usages
+  return `<section class="section"><div class="section-title">Items Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Qty used</th></tr></thead><tbody>${usages
     .map((usage) => `<tr><td>${escapeHtml(usage.description)}${usage.billable ? '' : ' (non-billable)'}</td><td class="qty">${usage.quantity} ${escapeHtml(usage.unitLabel)}</td></tr>`)
     .join('')}</tbody></table></section>`;
 }

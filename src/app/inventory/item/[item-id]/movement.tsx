@@ -21,7 +21,7 @@ export default function InventoryMovementScreen() {
   const movementType = rawMovementType === 'consumption' ? 'consumption' : 'restock';
   const db = useSQLiteContext();
   const [item, setItem] = useState<InventoryItemDetail | null>(null);
-  const [quantity, setQuantity] = useState('1');
+  const [quantity, setQuantity] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
