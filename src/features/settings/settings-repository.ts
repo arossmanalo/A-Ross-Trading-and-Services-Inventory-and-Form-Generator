@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import type { BusinessSettings } from '@/features/settings/settings-types';
+import { normalizeContactDetails } from '@/features/settings/contact-details';
 
 type SettingsRow = {
   business_name: string;
@@ -58,7 +59,7 @@ export async function updateBusinessSettings(
        WHERE id = 'business'`,
       businessName,
       input.businessAddress.trim(),
-      input.contactDetails.trim(),
+      normalizeContactDetails(input.contactDetails),
       input.ownerName.trim(),
       input.lowStockNotificationsEnabled ? 1 : 0,
       now,

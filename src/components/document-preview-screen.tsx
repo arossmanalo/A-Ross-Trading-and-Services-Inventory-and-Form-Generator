@@ -18,6 +18,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { ActionButton } from '@/components/action-button';
 import { getBillingStatementPreview } from '@/features/billing-statements/billing-statement-pdf';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
+import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { colors } from '@/theme/colors';
 
 type DocumentKind = 'csr' | 'billing_statement';
@@ -39,7 +40,7 @@ function withPreviewViewport(html: string): string {
     : html.replace(/<head>/i, `<head>${viewport}`);
 }
 
-export function DocumentPreviewScreen({ documentId, kind }: { documentId: string; kind: DocumentKind }) {
+export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { documentId: string; kind: DocumentKind; signedCaptureId?: string }) {
   const db = useSQLiteContext();
   const { width: windowWidth } = useWindowDimensions();
   const captureView = useRef<CaptureView>(null);
@@ -58,7 +59,9 @@ export function DocumentPreviewScreen({ documentId, kind }: { documentId: string
     setError(null);
     setDocumentHeight(null);
     setImageTooLong(false);
-    const load = kind === 'csr'
+    const load = signedCaptureId
+      ? getSignatureCapturePreview(db, signedCaptureId).then((value) => ({ number: value.number, html: value.html, isDraft: false }))
+      : kind === 'csr'
       ? getServiceReportPreview(db, documentId).then((value) => ({
           number: value.csrNumber,
           html: value.html,
@@ -75,7 +78,7 @@ export function DocumentPreviewScreen({ documentId, kind }: { documentId: string
         if (active) setError(loadError instanceof Error ? loadError.message : 'Could not load this document preview.');
       });
     return () => { active = false; };
-  }, [db, documentId, kind]);
+  }, [db, documentId, kind, signedCaptureId]);
 
   const onDocumentMessage = useCallback((event: WebViewMessageEvent) => {
     const height = Number(event.nativeEvent.data);
@@ -165,7 +168,7 @@ export function DocumentPreviewScreen({ documentId, kind }: { documentId: string
     }
   }, [documentHeight, imageTooLong, kind, preview?.number]);
 
-  const heading = kind === 'csr' ? 'CSR PDF Preview' : 'Billing Statement PDF Preview';
+  const heading = signedCaptureId ? 'Signed PDF Preview' : kind === 'csr' ? 'CSR PDF Preview' : 'Billing Statement PDF Preview';
   const pageTitle = preview?.number ? `${preview.number} Preview` : heading;
 
   return (

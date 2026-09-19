@@ -4,10 +4,12 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { assertOptionalEmail, normalizeCustomerName } from '@/domain/customer';
 import type {
+  CreateCustomerMemberInput,
   CreateCustomerInput,
   CreateEquipmentInput,
   CustomerDetail,
   CustomerEquipment,
+  CustomerMember,
   CustomerSummary,
 } from '@/features/customers/customer-types';
 
@@ -19,6 +21,8 @@ type CustomerRow = {
   email: string;
   active: number;
   equipment_count: number;
+  customer_type: 'individual' | 'company';
+  member_count: number;
 };
 
 type EquipmentRow = {
@@ -29,6 +33,15 @@ type EquipmentRow = {
   serial_number: string;
   nickname_or_location: string;
   notes: string;
+  active: number;
+};
+
+type MemberRow = {
+  id: string;
+  customer_id: string;
+  name: string;
+  contact_number: string;
+  email: string;
   active: number;
 };
 
@@ -48,7 +61,9 @@ export async function listCustomers(db: SQLiteDatabase): Promise<CustomerSummary
        c.contact_number,
        c.email,
        c.active,
-       COUNT(e.id) AS equipment_count
+       COUNT(DISTINCT e.id) AS equipment_count,
+       c.customer_type,
+       (SELECT COUNT(*) FROM customer_members cm WHERE cm.customer_id = c.id AND cm.active = 1) AS member_count
      FROM customers c
      LEFT JOIN customer_equipment e
        ON e.customer_id = c.id AND e.active = 1
@@ -72,7 +87,9 @@ export async function getCustomerDetail(
        c.contact_number,
        c.email,
        c.active,
-       COUNT(e.id) AS equipment_count
+       COUNT(DISTINCT e.id) AS equipment_count,
+       c.customer_type,
+       (SELECT COUNT(*) FROM customer_members cm WHERE cm.customer_id = c.id AND cm.active = 1) AS member_count
      FROM customers c
      LEFT JOIN customer_equipment e
        ON e.customer_id = c.id AND e.active = 1
@@ -98,10 +115,17 @@ export async function getCustomerDetail(
      ORDER BY active DESC, machine_type COLLATE NOCASE ASC, created_at DESC`,
     customerId,
   );
+  const memberRows = await db.getAllAsync<MemberRow>(
+    `SELECT id, customer_id, name, contact_number, email, active
+     FROM customer_members WHERE customer_id = ?
+     ORDER BY active DESC, name COLLATE NOCASE ASC`,
+    customerId,
+  );
 
   return {
     ...mapCustomerRow(customer),
     equipment: equipmentRows.map(mapEquipmentRow),
+    members: memberRows.map(mapMemberRow),
   };
 }
 
@@ -113,8 +137,10 @@ export async function createCustomer(
   const address = input.address?.trim() ?? '';
   const contactNumber = input.contactNumber?.trim() ?? '';
   const email = input.email?.trim() ?? '';
+  const customerType = input.customerType ?? 'individual';
 
   if (!name) throw new Error('Customer name is required.');
+  if (customerType !== 'individual' && customerType !== 'company') throw new Error('Customer type is invalid.');
   assertOptionalEmail(email);
 
   const customerId = Crypto.randomUUID();
@@ -137,16 +163,29 @@ export async function createCustomer(
 
     await tx.runAsync(
       `INSERT INTO customers
-        (id, name, address, contact_number, email, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+        (id, name, address, contact_number, email, customer_type, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       customerId,
       name,
       address,
       contactNumber,
       email,
+      customerType,
       now,
       now,
     );
+
+    if (customerType === 'company' && input.initialMember?.name.trim()) {
+      const memberName = input.initialMember.name.trim();
+      const memberEmail = input.initialMember.email?.trim() ?? '';
+      assertOptionalEmail(memberEmail);
+      await tx.runAsync(
+        `INSERT INTO customer_members
+          (id, customer_id, name, contact_number, email, active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+        Crypto.randomUUID(), customerId, memberName, input.initialMember.contactNumber?.trim() ?? '', memberEmail, now, now,
+      );
+    }
 
     await appendAuditEvent(tx, {
       eventType: usedDuplicateNameOverride
@@ -154,13 +193,42 @@ export async function createCustomer(
         : 'customer.created',
       entityType: 'customer',
       entityId: customerId,
-      details: { name },
+      details: { name, customerType },
       createdAt: now,
     });
     await incrementDatabaseRevision(tx);
   });
 
   return customerId;
+}
+
+export async function createCustomerMember(
+  db: SQLiteDatabase,
+  input: CreateCustomerMemberInput,
+): Promise<string> {
+  const name = input.name.trim();
+  const email = input.email?.trim() ?? '';
+  if (!name) throw new Error('Member name is required.');
+  assertOptionalEmail(email);
+  const memberId = Crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const customer = await tx.getFirstAsync<{ active: number; customer_type: string }>(
+      'SELECT active, customer_type FROM customers WHERE id = ?', input.customerId,
+    );
+    if (!customer) throw new Error('Customer was not found.');
+    if (customer.customer_type !== 'company') throw new Error('Only company customers can have members.');
+    if (customer.active !== 1) throw new Error('Reactivate the customer before adding a member.');
+    await tx.runAsync(
+      `INSERT INTO customer_members
+        (id, customer_id, name, contact_number, email, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      memberId, input.customerId, name, input.contactNumber?.trim() ?? '', email, now, now,
+    );
+    await appendAuditEvent(tx, { eventType: 'customer.member_created', entityType: 'customer_member', entityId: memberId, details: { customerId: input.customerId }, createdAt: now });
+    await incrementDatabaseRevision(tx);
+  });
+  return memberId;
 }
 
 export async function createEquipment(
@@ -274,6 +342,19 @@ function mapCustomerRow(row: CustomerRow): CustomerSummary {
     email: row.email,
     active: row.active === 1,
     equipmentCount: row.equipment_count,
+    customerType: row.customer_type,
+    memberCount: row.member_count,
+  };
+}
+
+function mapMemberRow(row: MemberRow): CustomerMember {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    name: row.name,
+    contactNumber: row.contact_number,
+    email: row.email,
+    active: row.active === 1,
   };
 }
 

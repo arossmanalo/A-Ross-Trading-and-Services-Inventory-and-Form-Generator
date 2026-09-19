@@ -9,6 +9,7 @@ import type {
   InventoryItemSummary,
   InventoryMovementInput,
   InventoryMovementSummary,
+  UpdateInventoryItemInput,
 } from '@/features/inventory/inventory-types';
 
 type InventoryItemRow = {
@@ -213,6 +214,58 @@ export async function createInventoryItemWithOpeningStock(
   });
 
   return itemId;
+}
+
+export async function updateInventoryItem(
+  db: SQLiteDatabase,
+  itemId: string,
+  input: UpdateInventoryItemInput,
+): Promise<void> {
+  const name = input.name.trim();
+  const sku = input.sku?.trim() || null;
+  const unitLabel = input.unitLabel.trim();
+  const description = input.description?.trim() ?? '';
+  if (!name) throw new Error('Item name is required.');
+  if (!unitLabel) throw new Error('Unit label is required.');
+  assertNonNegativeInteger(input.baseSellingPriceCentavos, 'Selling price');
+  assertNonNegativeInteger(input.lowStockThreshold, 'Low-stock threshold');
+
+  const now = new Date().toISOString();
+  let usedDuplicateSkuOverride = false;
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const existing = await tx.getFirstAsync<{ id: string }>('SELECT id FROM items WHERE id = ?', itemId);
+    if (!existing) throw new Error('Inventory item was not found.');
+    if (sku) {
+      const duplicate = await tx.getFirstAsync<{ id: string }>(
+        `SELECT id FROM items WHERE id <> ? AND upper(trim(sku)) = upper(trim(?)) LIMIT 1`,
+        itemId,
+        sku,
+      );
+      if (duplicate && !input.allowDuplicateSku) throw new DuplicateSkuError(sku);
+      usedDuplicateSkuOverride = Boolean(duplicate && input.allowDuplicateSku);
+    }
+    await tx.runAsync(
+      `UPDATE items SET name = ?, sku = ?, description = ?, unit_label = ?,
+       base_selling_price_centavos = ?, low_stock_threshold = ?, updated_at = ?
+       WHERE id = ?`,
+      name,
+      sku,
+      description,
+      unitLabel,
+      input.baseSellingPriceCentavos,
+      input.lowStockThreshold,
+      now,
+      itemId,
+    );
+    await appendAuditEvent(tx, {
+      eventType: usedDuplicateSkuOverride ? 'item.updated_duplicate_sku_override' : 'item.updated',
+      entityType: 'item',
+      entityId: itemId,
+      details: { name, sku },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
 }
 
 export async function restockInventoryItem(

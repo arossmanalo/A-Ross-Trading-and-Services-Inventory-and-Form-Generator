@@ -79,7 +79,7 @@ export async function getServiceReportPreview(
     if (!identity) throw new Error('CSR preview details could not be loaded.');
 
     const snapshot: CsrRenderSnapshot = {
-      preparerSignatureHtml: await getPreparerSignatureHtml(db),
+      includeSignatureLines: false,
       csrNumber: 'DRAFT — UNNUMBERED',
       businessDate: report.businessDate,
       fingerprint: 'DRAFT PREVIEW',

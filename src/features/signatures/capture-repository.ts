@@ -31,6 +31,26 @@ export async function listSignatureCaptures(db: SQLiteDatabase, ownerType: Signa
   return db.getAllAsync<SignatureCapture>('SELECT * FROM signature_captures WHERE owner_type=? AND owner_id=? ORDER BY created_at DESC,rowid DESC', ownerType, ownerId);
 }
 
+export async function getSignatureCapturePreview(
+  db: SQLiteDatabase,
+  captureId: string,
+): Promise<{ ownerType: SignableOwnerType; ownerId: string; number: string; html: string }> {
+  const capture = await db.getFirstAsync<SignatureCapture>('SELECT * FROM signature_captures WHERE id = ?', captureId);
+  if (!capture || capture.owner_type === 'settings' || !capture.render_template_snapshot) {
+    throw new Error('No signed document preview is available for this capture.');
+  }
+  const table = capture.owner_type === 'service_report' ? 'service_reports' : 'billing_statements';
+  const numberColumn = capture.owner_type === 'service_report' ? 'csr_number' : 'bs_number';
+  const row = await db.getFirstAsync<{ number: string | null }>(`SELECT ${numberColumn} AS number FROM ${table} WHERE id = ?`, capture.owner_id);
+  if (!row?.number) throw new Error('The signed document number is missing.');
+  return {
+    ownerType: capture.owner_type,
+    ownerId: capture.owner_id,
+    number: row.number,
+    html: applySignatureCapturesToDocument(capture.render_template_snapshot, []),
+  };
+}
+
 export async function saveSignatureCapture(db: SQLiteDatabase, input: {
   id: string; ownerType: 'settings' | SignableOwnerType; ownerId: string;
   role: 'customer' | 'preparer'; signerName: string; pngDataUrl: string;

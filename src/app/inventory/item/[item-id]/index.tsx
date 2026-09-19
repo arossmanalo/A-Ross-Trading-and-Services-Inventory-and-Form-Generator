@@ -157,6 +157,13 @@ export default function InventoryItemDetailScreen() {
                   {item.sku ? <Text selectable style={styles.description}>SKU: {item.sku}</Text> : null}
                   {item.description ? <Text selectable style={styles.description}>{item.description}</Text> : null}
                   <View style={styles.actionRow}>
+                    <ActionButton
+                      onPress={() => router.push({ pathname: '/inventory/item/[item-id]/edit', params: { 'item-id': item.id } })}
+                      style={styles.actionButton}
+                      variant="secondary"
+                    >
+                      Edit item
+                    </ActionButton>
                     <ActionButton onPress={() => openMovement('restock')} style={styles.actionButton}>
                       Restock
                     </ActionButton>

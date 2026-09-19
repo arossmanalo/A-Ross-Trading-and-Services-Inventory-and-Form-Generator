@@ -35,6 +35,16 @@ export type CreateInventoryItemInput = {
   allowDuplicateSku?: boolean;
 };
 
+export type UpdateInventoryItemInput = {
+  name: string;
+  sku?: string;
+  description?: string;
+  unitLabel: string;
+  baseSellingPriceCentavos: number;
+  lowStockThreshold: number;
+  allowDuplicateSku?: boolean;
+};
+
 export type InventoryMovementInput = {
   itemId: string;
   quantity: number;

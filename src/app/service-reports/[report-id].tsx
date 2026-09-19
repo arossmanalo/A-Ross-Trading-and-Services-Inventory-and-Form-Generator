@@ -269,7 +269,10 @@ export default function ServiceReportDetailScreen() {
             <Multiline label="Warranty" value={form.warrantyText} onChange={(v) => setField('warrantyText', v)} />
             <Multiline label="Customer's Remarks" value={form.customerRemarks} onChange={(v) => setField('customerRemarks', v)} />
             <FormField label="Serviced By" onChangeText={(v) => setField('servicedBy', v)} value={form.servicedBy} />
-            <FormField label="Acknowledged By" onChangeText={(v) => setField('acknowledgedBy', v)} value={form.acknowledgedBy} />
+            {report.customerType === 'company' && report.acknowledgmentOptions.length > 1 ? <View style={styles.acknowledgmentPicker}>
+              <Text selectable style={styles.pickerLabel}>Acknowledged By</Text>
+              <View style={styles.outcomes}>{report.acknowledgmentOptions.map((name) => <Pressable key={name} onPress={() => setField('acknowledgedBy', name)} style={[styles.outcome, form.acknowledgedBy === name ? styles.outcomeSelected : null]}><Text selectable style={styles.outcomeText}>{name}</Text></Pressable>)}</View>
+            </View> : <FormField label="Acknowledged By" onChangeText={(v) => setField('acknowledgedBy', v)} value={form.acknowledgedBy} />}
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus selected service rates. Non-billable items are excluded.</Text></View>
             <ActionButton disabled={busy} variant="secondary" onPress={() => void openDraftPreview()}>Preview PDF before finalizing</ActionButton>
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Items used</Text><ActionButton compact onPress={addItem}>Add item</ActionButton></View>
@@ -353,6 +356,8 @@ const styles = StyleSheet.create({
   outcomeSelected: { borderColor: colors.brandBlue, backgroundColor: '#eaf2ff' },
   outcomeText: { color: colors.label, fontSize: 12, fontWeight: '700' },
   multiline: { minHeight: 88 },
+  acknowledgmentPicker: { gap: 8 },
+  pickerLabel: { color: colors.label, fontSize: 13, fontWeight: '700' },
   usage: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderWidth: 1, borderColor: colors.separator, borderRadius: 14, borderCurve: 'continuous' },
   usageCopy: { flex: 1, gap: 4 },
   usageName: { color: colors.label, fontSize: 14, fontWeight: '800' },

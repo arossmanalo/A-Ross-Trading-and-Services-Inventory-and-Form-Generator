@@ -54,6 +54,7 @@ export function parseBackupPackage(bytes: Uint8Array): ParsedBackupPackage {
   const legacyMissing = [
     ...(manifest.schemaVersion < 6 ? ['service_report_service_usage'] : []),
     ...(manifest.schemaVersion < 5 ? ['signature_captures'] : []),
+    ...(manifest.schemaVersion < 8 ? ['customer_members'] : []),
   ];
   if (tableKeys.some(table => !DATA_TABLES.includes(table as BackupTableName)) || DATA_TABLES.some(table => !tableKeys.includes(table) && !legacyMissing.includes(table))) {
     throw new Error('Backup table set does not match the supported schema.');
@@ -266,6 +267,7 @@ function parseManifest(value: unknown): BackupFileManifest {
   const expectedCountTables = DATA_TABLES.filter((table) => {
     if (table === 'service_report_service_usage') return value.schemaVersion >= 6;
     if (table === 'signature_captures') return value.schemaVersion >= 5;
+    if (table === 'customer_members') return value.schemaVersion >= 8;
     return true;
   });
   if (countKeys.some(table => !expectedCountTables.includes(table as BackupTableName)) || expectedCountTables.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
@@ -304,6 +306,10 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
   }
   if (parsed.manifest.schemaVersion < 6) {
     tables.service_report_service_usage = [];
+  }
+  if (parsed.manifest.schemaVersion < 8) {
+    tables.customers = tables.customers.map(row => ({ customer_type: 'individual', ...row }));
+    tables.customer_members = [];
   }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };

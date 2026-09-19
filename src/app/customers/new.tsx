@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
@@ -17,6 +17,10 @@ export default function NewCustomerScreen() {
   const [address, setAddress] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
+  const [customerType, setCustomerType] = useState<'individual' | 'company'>('individual');
+  const [memberName, setMemberName] = useState('');
+  const [memberContact, setMemberContact] = useState('');
+  const [memberEmail, setMemberEmail] = useState('');
   const [duplicateName, setDuplicateName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -30,6 +34,8 @@ export default function NewCustomerScreen() {
         address,
         contactNumber,
         email,
+        customerType,
+        initialMember: customerType === 'company' && memberName.trim() ? { name: memberName, contactNumber: memberContact, email: memberEmail } : undefined,
         allowDuplicateName,
       });
       router.replace({
@@ -44,7 +50,7 @@ export default function NewCustomerScreen() {
     } finally {
       setSaving(false);
     }
-  }, [address, contactNumber, db, email, name]);
+  }, [address, contactNumber, customerType, db, email, memberContact, memberEmail, memberName, name]);
 
   return (
     <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
@@ -96,6 +102,22 @@ export default function NewCustomerScreen() {
           placeholder="customer@example.com"
           value={email}
         />
+        <View style={styles.typePicker}>
+          <Text selectable style={styles.typeLabel}>Customer type</Text>
+          <View style={styles.typeRow}>
+            {(['individual', 'company'] as const).map((type) => (
+              <Pressable key={type} accessibilityRole="radio" accessibilityState={{ selected: customerType === type }} onPress={() => setCustomerType(type)} style={[styles.typeOption, customerType === type ? styles.typeOptionSelected : null]}>
+                <Text style={customerType === type ? styles.typeOptionTextSelected : styles.typeOptionText}>{type === 'individual' ? 'Individual' : 'Company'}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        {customerType === 'company' ? <View style={styles.memberCard}>
+          <Text selectable style={styles.memberTitle}>First company member (optional)</Text>
+          <FormField label="Member name" onChangeText={setMemberName} placeholder="Contact person" value={memberName} />
+          <FormField keyboardType="phone-pad" label="Member phone (optional)" onChangeText={setMemberContact} value={memberContact} />
+          <FormField autoCapitalize="none" keyboardType="email-address" label="Member email (optional)" onChangeText={setMemberEmail} value={memberEmail} />
+        </View> : null}
 
         {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
 
@@ -143,6 +165,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   multiline: { minHeight: 84 },
+  typePicker: { gap: 8 },
+  typeLabel: { color: colors.label, fontSize: 13, fontWeight: '700' },
+  typeRow: { flexDirection: 'row', gap: 10 },
+  typeOption: { flex: 1, padding: 13, borderWidth: 1, borderColor: colors.separator, borderRadius: 12, alignItems: 'center' },
+  typeOptionSelected: { backgroundColor: '#eaf2ff', borderColor: colors.brandBlue },
+  typeOptionText: { color: colors.label, fontWeight: '700' },
+  typeOptionTextSelected: { color: colors.brandBlue, fontWeight: '900' },
+  memberCard: { gap: 12, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 16, backgroundColor: colors.surface },
+  memberTitle: { color: colors.label, fontWeight: '800' },
   actions: { gap: 10, paddingTop: 4 },
   errorText: {
     color: colors.error,

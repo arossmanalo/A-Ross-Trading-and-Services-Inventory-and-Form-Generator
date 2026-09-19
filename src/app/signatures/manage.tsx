@@ -67,11 +67,7 @@ export default function ManageSignaturesScreen() {
       {latestInPersonVersion ? <>
         <Text>The latest signed copy is linked to this finalized document. It includes the most recent customer and preparer captures, if present. The original finalized PDF remains unchanged.</Text>
         <Text selectable>{latestInPersonVersion.signer_name} · {latestInPersonVersion.role} · PDF {latestInPersonVersion.pdf_state}</Text>
-        <ActionButton disabled={busy} onPress={() => void run(async () => {
-          const path = await renderSignaturePdf(db,latestInPersonVersion.id);
-          await Print.printAsync({uri:path});
-          setNotice('Signed version preview opened.');
-        })}>Preview signed version</ActionButton>
+        <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/signatures/preview', params: { captureId: latestInPersonVersion.id, kind: document.ownerType === 'service_report' ? 'csr' : 'billing_statement' } })}>Preview signed version</ActionButton>
         <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {
           const path = await renderSignaturePdf(db,latestInPersonVersion.id);
           await shareSignedAttachment({id:latestInPersonVersion.id,filename:latestInPersonVersion.deterministic_filename!,privatePath:path,checksum:latestInPersonVersion.checksum??'',createdAt:latestInPersonVersion.created_at});

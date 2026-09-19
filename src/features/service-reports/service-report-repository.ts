@@ -52,6 +52,7 @@ type DetailRow = SummaryRow & {
   has_signed_version?: number;
   share_state: 'not_shared' | 'shared';
   finalized_at: string | null;
+  customer_type: 'individual' | 'company';
 };
 
 type UsageRow = {
@@ -112,7 +113,7 @@ export async function getServiceReport(
   reportId: string,
 ): Promise<ServiceReportDetail | null> {
   const row = await db.getFirstAsync<DetailRow>(
-    `SELECT r.*, c.name AS customer_name, e.machine_type AS equipment_name,
+    `SELECT r.*, c.name AS customer_name, c.customer_type, e.machine_type AS equipment_name,
             CASE WHEN EXISTS (
               SELECT 1 FROM signature_captures sc
               WHERE sc.owner_type='service_report' AND sc.owner_id=r.id
@@ -131,6 +132,10 @@ export async function getServiceReport(
   const usages = await listReportUsages(db, reportId);
   const services = await listReportServices(db, reportId);
   const detail = mapDetailRow(row);
+  const memberRows = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM customer_members WHERE customer_id = ? AND active = 1 ORDER BY name COLLATE NOCASE ASC`,
+    row.customer_id,
+  );
   return {
     ...detail,
     totalBillCentavos: row.document_state === 'draft'
@@ -138,6 +143,7 @@ export async function getServiceReport(
       : detail.totalBillCentavos,
     usages,
     services,
+    acknowledgmentOptions: row.customer_type === 'individual' ? [row.customer_name] : memberRows.map((member) => member.name),
   };
 }
 
@@ -154,8 +160,10 @@ export async function createServiceReportDraft(
       customer_id: string;
       customer_active: number;
       equipment_active: number;
+      customer_name: string;
+      customer_type: 'individual' | 'company';
     }>(
-      `SELECT e.customer_id, c.active AS customer_active, e.active AS equipment_active
+      `SELECT e.customer_id, c.name AS customer_name, c.customer_type, c.active AS customer_active, e.active AS equipment_active
        FROM customer_equipment e
        JOIN customers c ON c.id = e.customer_id
        WHERE e.id = ? AND c.merged_into_customer_id IS NULL`,
@@ -167,6 +175,14 @@ export async function createServiceReportDraft(
     if (equipment.customer_active !== 1 || equipment.equipment_active !== 1) {
       throw new Error('Customer and equipment must be active for new service work.');
     }
+
+    const settings = await tx.getFirstAsync<{ owner_name: string }>("SELECT owner_name FROM settings WHERE id = 'business'");
+    const memberRows = equipment.customer_type === 'company'
+      ? await tx.getAllAsync<{ name: string }>('SELECT name FROM customer_members WHERE customer_id = ? AND active = 1 ORDER BY name COLLATE NOCASE ASC', input.customerId)
+      : [];
+    const acknowledgedBy = equipment.customer_type === 'individual'
+      ? equipment.customer_name
+      : memberRows.length === 1 ? memberRows[0].name : '';
 
     if (input.followsCsrId) {
       const previous = await tx.getFirstAsync<{ customer_id: string; equipment_id: string; document_state: string }>(
@@ -184,14 +200,17 @@ export async function createServiceReportDraft(
     await tx.runAsync(
       `INSERT INTO service_reports
         (id, customer_id, equipment_id, follows_csr_id, business_date,
-         backdate_reason, document_state, service_outcome, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
+         backdate_reason, serviced_by_snapshot, acknowledged_by_snapshot,
+         document_state, service_outcome, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
       reportId,
       input.customerId,
       input.equipmentId,
       input.followsCsrId ?? null,
       input.businessDate,
       input.backdateReason?.trim() || null,
+      settings?.owner_name?.trim() ?? '',
+      acknowledgedBy,
       now,
     );
     await appendAuditEvent(tx, {
@@ -951,6 +970,8 @@ function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'ser
     hasSignedVersion: row.has_signed_version === 1,
     shareState: row.share_state,
     finalizedAt: row.finalized_at,
+    customerType: row.customer_type,
+    acknowledgmentOptions: [],
   };
 }
 

@@ -96,7 +96,7 @@ export default function SettingsScreen() {
           label="Contact details"
           multiline
           onChangeText={setContactDetails}
-          placeholder="Phone, email, or other contact lines"
+          placeholder="One phone or contact detail per line; email is always kept last"
           style={styles.multiline}
           textAlignVertical="top"
           value={contactDetails}

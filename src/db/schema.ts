@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 7;
+export const DATABASE_VERSION = 8;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -393,4 +393,22 @@ ALTER TABLE billing_statement_lines
 CREATE UNIQUE INDEX IF NOT EXISTS billing_statement_lines_source_csr_service_unique
   ON billing_statement_lines(source_csr_service_usage_id)
   WHERE source_csr_service_usage_id IS NOT NULL;
+`;
+
+export const SCHEMA_V8 = `
+ALTER TABLE customers ADD COLUMN customer_type TEXT NOT NULL DEFAULT 'individual'
+  CHECK (customer_type IN ('individual', 'company'));
+
+CREATE TABLE customer_members (
+  id TEXT PRIMARY KEY NOT NULL,
+  customer_id TEXT NOT NULL REFERENCES customers(id),
+  name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  contact_number TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX customer_members_customer_idx ON customer_members(customer_id, active, name);
 `;

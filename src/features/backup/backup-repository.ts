@@ -60,6 +60,7 @@ export const DATA_TABLES = [
   'sequences',
   'settings',
   'customers',
+  'customer_members',
   'customer_equipment',
   'items',
   'customer_item_prices',

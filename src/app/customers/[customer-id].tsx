@@ -81,6 +81,11 @@ export default function CustomerDetailScreen() {
     router.push({ pathname: '/customers/equipment/new', params: { customerId } });
   }, [customerId]);
 
+  const addMember = useCallback(() => {
+    if (!customerId) return;
+    router.push({ pathname: '/customers/member/new', params: { customerId } });
+  }, [customerId]);
+
   const openPricing = useCallback(() => {
     if (!customerId) return;
     router.push({
@@ -171,6 +176,7 @@ export default function CustomerDetailScreen() {
                     </Text>
                   </View>
                   <Text selectable style={styles.customerName}>{customer.name}</Text>
+                  <Text selectable style={styles.typeBadge}>{customer.customerType === 'company' ? 'COMPANY' : 'INDIVIDUAL'}</Text>
                   <Detail label="Address" value={customer.address} />
                   <Detail label="Phone" value={customer.contactNumber} />
                   <Detail label="Email" value={customer.email} />
@@ -179,6 +185,11 @@ export default function CustomerDetailScreen() {
                     {customer.active ? 'Deactivate customer' : 'Reactivate customer'}
                   </ActionButton>
                 </View>
+
+                {customer.customerType === 'company' ? <View style={styles.membersCard}>
+                  <View style={styles.sectionHeader}><View style={styles.flexCopy}><Text selectable style={styles.sectionTitle}>Company members</Text><Text selectable style={styles.sectionCaption}>Members appear in the CSR acknowledgement selector.</Text></View><ActionButton compact onPress={addMember}>Add</ActionButton></View>
+                  {customer.members.length ? customer.members.map((member) => <Text selectable key={member.id} style={styles.memberLine}>{member.name}{member.email ? ` · ${member.email}` : ''}</Text>) : <Text selectable style={styles.sectionCaption}>No members registered yet.</Text>}
+                </View> : null}
 
                 <View style={styles.sectionHeader}>
                   <View style={styles.flexCopy}>
@@ -262,6 +273,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   customerName: { color: colors.label, fontSize: 24, fontWeight: '900' },
+  typeBadge: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  membersCard: { gap: 10, padding: 16, backgroundColor: colors.surface, borderRadius: 17, borderWidth: 1, borderColor: colors.separator },
+  memberLine: { color: colors.label, fontSize: 14, fontWeight: '700' },
   detailRow: { gap: 3 },
   detailLabel: {
     color: colors.secondaryLabel,

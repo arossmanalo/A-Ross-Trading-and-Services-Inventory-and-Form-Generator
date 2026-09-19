@@ -1,10 +1,12 @@
 import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
+import { normalizeContactDetails } from '@/features/settings/contact-details';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
 export const CSR_TEMPLATE_VERSION = 'csr-legal-v3';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
+  includeSignatureLines?: boolean;
   csrNumber: string;
   businessDate: string;
   fingerprint: string;
@@ -74,8 +76,9 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     @page { size: 8.5in 14in; margin: 0.35in; }
     * { box-sizing: border-box; }
     body { margin: 0; color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 10px; line-height: 1.35; }
-    .header { text-align: center; padding-bottom: 10px; border-bottom: 1.5px solid #0b377f; }
-    .mark { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 42px; margin-bottom: 4px; color: #0b377f; font-size: 25px; font-weight: 900; font-style: italic; }
+    .header { display: flex; align-items: center; gap: 24px; padding-bottom: 10px; border-bottom: 1.5px solid #0b377f; }
+    .mark { display: flex; align-items: center; justify-content: center; flex: 0 0 190px; height: 78px; }
+    .business-block { flex: 1; min-width: 0; text-align: left; }
     .business { font-size: 16px; font-weight: 800; }
     .contact { color: #374151; font-size: 9px; white-space: pre-line; }
     h1 { margin: 10px 0 8px; color: #0b377f; font-size: 16px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
@@ -103,8 +106,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
 <body>
   <header class="header">
     <div class="mark">${logoHtml(snapshot.business.logoDataUrl)}</div>
-    <div class="business">${escapeHtml(snapshot.business.name)}</div>
-    <div class="contact">${escapeHtml([snapshot.business.address, snapshot.business.contactDetails].filter(Boolean).join('\n'))}</div>
+    <div class="business-block"><div class="business">${escapeHtml(snapshot.business.name)}</div><div class="contact">${escapeHtml([snapshot.business.address, normalizeContactDetails(snapshot.business.contactDetails)].filter(Boolean).join('\n'))}</div></div>
   </header>
   <h1>Customer Service Report</h1>
   <section class="grid">
@@ -128,17 +130,17 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   ${textSection('Warranty', snapshot.warrantyText)}
   ${listSection("Customer's Remarks", snapshot.customerRemarks)}
   <div class="total-row"><div class="total-box"><span>Total Bill</span><span>${escapeHtml(PHP_FORMATTER.format(snapshot.totalBillCentavos / 100))}</span></div></div>
-  <section class="signatures">
+  ${snapshot.includeSignatureLines === false ? '' : `<section class="signatures">
     <div class="signature" data-signature-role="preparer"><div class="signature-writing" data-signature-image-slot="preparer"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="preparer">${escapeHtml(snapshot.servicedBy)}</div><div class="signature-label">Serviced By</div></div>
     <div class="signature" data-signature-role="customer"><div class="signature-writing" data-signature-image-slot="customer"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="customer">${escapeHtml(snapshot.acknowledgedBy)}</div><div class="signature-label">Acknowledged By</div></div>
-  </section>
+  </section>`}
   <footer class="footer">${escapeHtml(snapshot.csrNumber)} | Revision 1 | Template ${CSR_TEMPLATE_VERSION} | Fingerprint ${escapeHtml(snapshot.fingerprint)}</footer>
 </body>
 </html>`;
-  return applySignatureCapturesToDocument(
-    html.replace('</style>', 'body{overflow-wrap:anywhere}tr{break-inside:avoid}thead{display:table-header-group}</style>'),
-    [snapshot.preparerSignatureHtml ?? ''],
-  );
+  const preparedHtml = html.replace('</style>', 'body{overflow-wrap:anywhere}tr{break-inside:avoid}thead{display:table-header-group}</style>');
+  return snapshot.includeSignatureLines === false
+    ? preparedHtml
+    : applySignatureCapturesToDocument(preparedHtml, [snapshot.preparerSignatureHtml ?? '']);
 }
 
 function cell(label: string, value: string, full = false): string {

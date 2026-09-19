@@ -63,6 +63,8 @@ export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   finalizedAt: string | null;
   usages: ServiceReportUsage[];
   services: ServiceReportServiceUsage[];
+  customerType: 'individual' | 'company';
+  acknowledgmentOptions: string[];
 };
 
 export type CreateServiceReportDraftInput = {
