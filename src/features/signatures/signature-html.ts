@@ -5,8 +5,8 @@ type SignatureMark = { role: SignatureRole; signerNameHtml: string; pngDataUrl: 
 const SIGNATURE_LAYOUT_CSS = `
 .signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px;break-inside:avoid;page-break-inside:avoid}
 .signature{min-width:0;border:0!important;padding:0!important;text-align:center;break-inside:avoid;page-break-inside:avoid}
-.signature-writing{height:54px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
-.signature-image{display:block;width:90%;max-width:240px;height:50px;object-fit:contain;object-position:center bottom}
+.signature-writing{height:100px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+.signature-image{display:block;width:90%;max-width:300px;height:96px;object-fit:contain;object-position:center bottom}
 .signature-line{display:none!important}
 .signature-name{min-height:14px;padding-top:3px;font-size:8px;font-weight:700;overflow-wrap:anywhere}
 .signature-label{color:#475569;font-size:8px;text-transform:uppercase}

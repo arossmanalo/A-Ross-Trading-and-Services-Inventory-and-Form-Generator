@@ -23,7 +23,7 @@ vi.mock('expo-file-system/legacy',() => ({
 
 import { clearSavedPreparerSignature, getPreparerSignatureHtml, listSignatureCaptures, saveSignatureCapture } from '@/features/signatures/capture-repository';
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
-import { finalizeSignatureDrafts, getSignatureDraftPreview, listSignatureDrafts, saveSignatureDraft } from '@/features/signatures/signature-draft-repository';
+import { finalizeSignatureDrafts, getSignatureCanvasDocument, getSignatureDraftPreview, listSignatureDrafts, saveSignatureDraft } from '@/features/signatures/signature-draft-repository';
 import { attachSignedPdf, getSignableDocument, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
 import { addServiceLine, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement } from '@/features/billing-statements/billing-statement-repository';
 import { validateSignaturePng } from '@/features/signatures/signature-html';
@@ -62,6 +62,21 @@ describe('signature persistence and recovery',() => {
   });
   afterEach(()=>raw.close());
   const input = () => ({id:'capture-1',ownerType:'billing_statement' as const,ownerId:'statement',role:'customer' as const,signerName:'Customer <One>',pngDataUrl:PNG});
+
+  it('places the signing canvas directly in the selected signature box on the frozen document preview',async()=>{
+    const frozen = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><p>Original billing statement</p><section class="signatures"><div class="signature" data-signature-role="preparer"><div class="signature-writing" data-signature-image-slot="preparer"></div><div class="signature-name" data-signature-name-slot="preparer">Owner</div><div class="signature-label">Prepared By</div></div><div class="signature" data-signature-role="customer"><div class="signature-writing" data-signature-image-slot="customer"></div><div class="signature-name" data-signature-name-slot="customer">Customer</div><div class="signature-label">Customer</div></div></section><footer>BS-000001</footer></body></html>';
+    raw.prepare('UPDATE billing_statements SET render_template_snapshot=? WHERE id=?').run(frozen,'statement');
+
+    const preview = await getSignatureCanvasDocument(db,'billing_statement','statement','customer');
+
+    expect(preview.html).toContain('Original billing statement');
+    expect(preview.html).toContain('<div class="signature-writing signature-input" data-signature-image-slot="customer"><canvas id="signature-canvas"');
+    expect(preview.html).toContain('data-signature-image-slot="preparer"></div>');
+    expect(preview.html).toContain('signature-canvas-preview-style');
+    expect(preview.html).toContain('window.updateSignerName');
+    expect(preview.html).not.toContain('Original billing statement<canvas');
+    expect(raw.prepare('SELECT render_template_snapshot FROM billing_statements WHERE id=?').get('statement')).toEqual({render_template_snapshot:frozen});
+  });
 
   it('lets a signature draft be redrawn and reviewed without marking the document signed',async()=>{
     const draft = {ownerType:'billing_statement' as const,ownerId:'statement',role:'customer' as const,signerName:'First drawing',pngDataUrl:PNG};

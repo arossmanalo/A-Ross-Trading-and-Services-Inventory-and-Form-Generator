@@ -78,6 +78,42 @@ export async function getSignatureDraftPreview(db: SQLiteDatabase, ownerType: Si
   return { number: owner.number, html: signedHtml(owner.render_template_snapshot, captures, drafts) };
 }
 
+/** Adds an interactive canvas directly to the chosen signature block in the document preview. */
+export async function getSignatureCanvasDocument(
+  db: SQLiteDatabase,
+  ownerType: SignableOwnerType,
+  ownerId: string,
+  role: SignatureDraft['role'],
+): Promise<{ number: string; html: string }> {
+  const owner = await db.getFirstAsync<OwnerSnapshot>(ownerSql(ownerType), ownerId);
+  if (!owner?.number || !owner.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
+  const captures = await listSignatureCaptures(db, ownerType, ownerId);
+  if (captures.some(capture => capture.role === role)) throw new Error(`The ${role} signature is already finalized.`);
+  const drafts = await listSignatureDrafts(db, ownerType, ownerId);
+  const html = signedHtml(owner.render_template_snapshot, captures, drafts.filter(draft => draft.role !== role));
+  const slot = new RegExp(`<div class="signature-writing" data-signature-image-slot="${role}">[\\s\\S]*?<\\/div>`);
+  const replacement = `<div class="signature-writing signature-input" data-signature-image-slot="${role}"><canvas id="signature-canvas" aria-label="Draw ${role} signature"></canvas></div>`;
+  if (!slot.test(html)) throw new Error('The document is missing its signature area.');
+  const styles = `<style id="signature-canvas-preview-style">.signature-input{height:132px!important;min-height:132px!important;position:relative;background:#fff;border:2px dashed #0755ad;border-radius:6px;touch-action:none;overflow:hidden}.signature-input:after{content:'SIGN HERE';position:absolute;inset:0;display:grid;place-items:center;color:#94a3b8;font:700 13px Arial;letter-spacing:2px;pointer-events:none}.signature-input.has-ink:after{display:none}#signature-canvas{display:block;width:100%;height:100%;touch-action:none}</style>`;
+  const script = `<script>
+(()=>{const canvas=document.getElementById('signature-canvas');if(!canvas)return;const box=canvas.parentElement,ctx=canvas.getContext('2d');let strokes=[],active=null;
+function send(v){window.ReactNativeWebView.postMessage(JSON.stringify(v));}
+function setup(){canvas.width=1200;canvas.height=480;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#111827';ctx.lineWidth=6;ctx.lineCap='round';ctx.lineJoin='round';for(const stroke of strokes){ctx.beginPath();stroke.forEach((p,i)=>i?ctx.lineTo(p.x*canvas.width,p.y*canvas.height):ctx.moveTo(p.x*canvas.width,p.y*canvas.height));ctx.stroke();if(stroke.length===1){ctx.beginPath();ctx.arc(stroke[0].x*canvas.width,stroke[0].y*canvas.height,3,0,Math.PI*2);ctx.fillStyle='#111827';ctx.fill();}}}
+function point(e){const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
+canvas.addEventListener('pointerdown',e=>{if(active)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);active={id:e.pointerId,points:[point(e)]};strokes.push(active.points);box.classList.add('has-ink');setup();send({type:'changed',hasInk:true});});
+canvas.addEventListener('pointermove',e=>{if(!active||e.pointerId!==active.id)return;e.preventDefault();active.points.push(point(e));setup();});
+function end(e){if(active&&active.id===e.pointerId)active=null;}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
+window.clearSignature=()=>{strokes=[];active=null;box.classList.remove('has-ink');setup();send({type:'changed',hasInk:false});};
+window.updateSignerName=(value)=>{const slot=document.querySelector('.signature-name[data-signature-name-slot="${role}"]');if(slot)slot.textContent=value;};
+window.exportSignature=()=>{if(!strokes.length){send({type:'error',message:'Draw your signature in the document’s signature area first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};setup();send({type:'ready'});
+})();
+</script>`;
+  return {
+    number: owner.number,
+    html: html.replace(slot, replacement).replace('</head>', `${styles}</head>`).replace('</body>', `${script}</body>`),
+  };
+}
+
 /** Commits all staged marks together, leaving the frozen original document untouched. */
 export async function finalizeSignatureDrafts(db: SQLiteDatabase, ownerType: SignableOwnerType, ownerId: string): Promise<string> {
   let latestId = '';
