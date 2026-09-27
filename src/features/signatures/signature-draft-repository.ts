@@ -1,0 +1,108 @@
+import * as Crypto from 'expo-crypto';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
+import { listSignatureCaptures, type SignatureCapture } from '@/features/signatures/capture-repository';
+import { applySignatureCapturesToDocument, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
+import type { SignableOwnerType } from '@/features/signatures/signature-types';
+
+export type SignatureDraft = {
+  owner_type: SignableOwnerType;
+  owner_id: string;
+  role: 'customer' | 'preparer';
+  signer_name: string;
+  png_data_url: string;
+  updated_at: string;
+};
+
+type OwnerSnapshot = { number: string | null; render_template_snapshot: string | null };
+
+function ownerSql(ownerType: SignableOwnerType): string {
+  if (ownerType === 'service_report') return "SELECT csr_number AS number, render_template_snapshot FROM service_reports WHERE id=? AND document_state='finalized'";
+  if (ownerType === 'billing_statement') return "SELECT bs_number AS number, render_template_snapshot FROM billing_statements WHERE id=? AND document_state='finalized'";
+  throw new Error('Invalid signing target.');
+}
+
+export async function listSignatureDrafts(db: SQLiteDatabase, ownerType: SignableOwnerType, ownerId: string): Promise<SignatureDraft[]> {
+  return db.getAllAsync<SignatureDraft>('SELECT * FROM signature_drafts WHERE owner_type=? AND owner_id=? ORDER BY role', ownerType, ownerId);
+}
+
+export async function saveSignatureDraft(db: SQLiteDatabase, input: {
+  ownerType: SignableOwnerType; ownerId: string; role: SignatureDraft['role']; signerName: string; pngDataUrl: string;
+}): Promise<void> {
+  validateSignaturePng(input.pngDataUrl);
+  if (!['customer', 'preparer'].includes(input.role)) throw new Error('Invalid signature role.');
+  const signerName = input.signerName.trim();
+  if (!signerName || signerName.length > 200) throw new Error('Enter the signer’s name (up to 200 characters).');
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async tx => {
+    const owner = await tx.getFirstAsync<OwnerSnapshot>(ownerSql(input.ownerType), input.ownerId);
+    if (!owner?.number || !owner.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
+    const previous = await tx.getFirstAsync<{ id: string }>(
+      'SELECT id FROM signature_captures WHERE owner_type=? AND owner_id=? AND role=? LIMIT 1',
+      input.ownerType, input.ownerId, input.role,
+    );
+    if (previous) throw new Error(`The ${input.role} signature is already finalized and cannot be redrawn.`);
+    await tx.runAsync(
+      `INSERT INTO signature_drafts(owner_type,owner_id,role,signer_name,png_data_url,updated_at)
+       VALUES(?,?,?,?,?,?) ON CONFLICT(owner_type,owner_id,role) DO UPDATE SET
+       signer_name=excluded.signer_name,png_data_url=excluded.png_data_url,updated_at=excluded.updated_at`,
+      input.ownerType, input.ownerId, input.role, signerName, input.pngDataUrl, now,
+    );
+    await appendAuditEvent(tx, { eventType: 'signature.draft_saved', entityType: input.ownerType, entityId: input.ownerId, details: { role: input.role }, createdAt: now });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
+function asBlock(mark: Pick<SignatureDraft, 'role' | 'signer_name' | 'png_data_url'> & { created_at?: string; updated_at?: string }): string {
+  return signatureBlock(
+    { signerName: mark.signer_name, pngDataUrl: mark.png_data_url, createdAt: mark.updated_at ?? mark.created_at ?? '' },
+    mark.role === 'customer' ? 'Acknowledged by customer' : 'Prepared / serviced by',
+  );
+}
+
+function signedHtml(original: string, captures: SignatureCapture[], drafts: SignatureDraft[]): string {
+  const latestByRole = new Map<SignatureCapture['role'], SignatureCapture>();
+  for (const capture of captures) if (!latestByRole.has(capture.role)) latestByRole.set(capture.role, capture);
+  return applySignatureCapturesToDocument(original, [
+    ...[...latestByRole.values()].map(asBlock),
+    ...drafts.map(asBlock),
+  ]);
+}
+
+export async function getSignatureDraftPreview(db: SQLiteDatabase, ownerType: SignableOwnerType, ownerId: string): Promise<{ number: string; html: string }> {
+  const owner = await db.getFirstAsync<OwnerSnapshot>(ownerSql(ownerType), ownerId);
+  if (!owner?.number || !owner.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
+  const drafts = await listSignatureDrafts(db, ownerType, ownerId);
+  if (!drafts.length) throw new Error('Draw a signature before previewing it.');
+  const captures = await listSignatureCaptures(db, ownerType, ownerId);
+  return { number: owner.number, html: signedHtml(owner.render_template_snapshot, captures, drafts) };
+}
+
+/** Commits all staged marks together, leaving the frozen original document untouched. */
+export async function finalizeSignatureDrafts(db: SQLiteDatabase, ownerType: SignableOwnerType, ownerId: string): Promise<string> {
+  let latestId = '';
+  await db.withExclusiveTransactionAsync(async tx => {
+    const owner = await tx.getFirstAsync<OwnerSnapshot>(ownerSql(ownerType), ownerId);
+    if (!owner?.number || !owner.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
+    const drafts = await listSignatureDrafts(tx, ownerType, ownerId);
+    if (!drafts.length) throw new Error('Draw a signature before finalizing it.');
+    const captures = await listSignatureCaptures(tx, ownerType, ownerId);
+    if (drafts.some(draft => captures.some(capture => capture.role === draft.role))) throw new Error('A signature for this role was already finalized.');
+    const html = signedHtml(owner.render_template_snapshot, captures, drafts);
+    const now = new Date().toISOString();
+    for (const draft of drafts) {
+      latestId = Crypto.randomUUID();
+      await tx.runAsync(
+        `INSERT INTO signature_captures(id,owner_type,owner_id,role,signer_name,png_data_url,created_at,render_template_snapshot,deterministic_filename)
+         VALUES(?,?,?,?,?,?,?,?,?)`,
+        latestId, ownerType, ownerId, draft.role, draft.signer_name, draft.png_data_url, now, html, `${owner.number}-in-person-${latestId}.pdf`,
+      );
+    }
+    await tx.runAsync('DELETE FROM signature_drafts WHERE owner_type=? AND owner_id=?', ownerType, ownerId);
+    const table = ownerType === 'service_report' ? 'service_reports' : 'billing_statements';
+    await tx.runAsync(`UPDATE ${table} SET signature_status=CASE WHEN signature_status='signed_document_attached' THEN signature_status ELSE 'signed_in_person' END WHERE id=?`, ownerId);
+    await appendAuditEvent(tx, { eventType: 'signature.finalized', entityType: ownerType, entityId: ownerId, details: { roles: drafts.map(draft => draft.role).join(','), captureId: latestId }, createdAt: now });
+    await incrementDatabaseRevision(tx);
+  });
+  return latestId;
+}

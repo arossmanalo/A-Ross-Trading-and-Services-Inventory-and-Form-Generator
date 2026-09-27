@@ -7,6 +7,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { getBusinessLogo } from '@/features/settings/settings-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
+import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { buildCsrHtml, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
 import { finalizeServiceReport, getServiceReport } from '@/features/service-reports/service-report-repository';
 
@@ -123,6 +124,15 @@ export async function getServiceReportPreview(
   }
   if (row.document_state !== 'finalized' || !row.csr_number || !row.render_template_snapshot) {
     throw new Error('Only a draft or finalized CSR can be previewed.');
+  }
+  const signed = await db.getFirstAsync<{ id: string }>(
+    `SELECT id FROM signature_captures
+     WHERE owner_type='service_report' AND owner_id=?
+     ORDER BY created_at DESC,rowid DESC LIMIT 1`, reportId,
+  );
+  if (signed) {
+    const preview = await getSignatureCapturePreview(db, signed.id);
+    return { csrNumber: preview.number, html: preview.html, isDraft: false };
   }
   return { csrNumber: row.csr_number, html: row.render_template_snapshot, isDraft: false };
 }

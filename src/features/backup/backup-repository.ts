@@ -78,6 +78,7 @@ export const DATA_TABLES = [
   'audit_events',
   'backup_manifests',
   'signature_captures',
+  'signature_drafts',
 ] as const;
 
 export type BackupTableName = typeof DATA_TABLES[number];

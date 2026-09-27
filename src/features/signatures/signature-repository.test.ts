@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9 } from '@/db/schema';
 
 const files = vi.hoisted(() => new Map<string,string>());
 const printer = vi.hoisted(() => vi.fn());
@@ -23,10 +23,12 @@ vi.mock('expo-file-system/legacy',() => ({
 
 import { clearSavedPreparerSignature, getPreparerSignatureHtml, listSignatureCaptures, saveSignatureCapture } from '@/features/signatures/capture-repository';
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
+import { finalizeSignatureDrafts, getSignatureDraftPreview, listSignatureDrafts, saveSignatureDraft } from '@/features/signatures/signature-draft-repository';
 import { attachSignedPdf, getSignableDocument, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
 import { addServiceLine, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement } from '@/features/billing-statements/billing-statement-repository';
 import { validateSignaturePng } from '@/features/signatures/signature-html';
 import { getBusinessLogo, saveBusinessLogo } from '@/features/settings/settings-repository';
+import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
 
 // A tiny raster fixture, not a real person's signature.
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6bOAAAAAASUVORK5CYII=';
@@ -48,7 +50,7 @@ describe('signature persistence and recovery',() => {
     files.clear();printer.mockReset();
     printer.mockImplementation(async()=>{files.set('cache/render.pdf','JVBERi0xLjQK');return{uri:'cache/render.pdf',base64:'JVBERi0xLjQK'};});
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}
       INSERT INTO app_meta VALUES('database_revision','0');
       INSERT INTO sequences VALUES('CSR',0),('BS',1),('PA',0);
       INSERT INTO settings(id,business_name,owner_name,created_at,updated_at) VALUES('business','A.Ross','Owner','now','now');
@@ -60,6 +62,51 @@ describe('signature persistence and recovery',() => {
   });
   afterEach(()=>raw.close());
   const input = () => ({id:'capture-1',ownerType:'billing_statement' as const,ownerId:'statement',role:'customer' as const,signerName:'Customer <One>',pngDataUrl:PNG});
+
+  it('lets a signature draft be redrawn and reviewed without marking the document signed',async()=>{
+    const draft = {ownerType:'billing_statement' as const,ownerId:'statement',role:'customer' as const,signerName:'First drawing',pngDataUrl:PNG};
+    await saveSignatureDraft(db,draft);
+    await saveSignatureDraft(db,{...draft,signerName:'Corrected drawing'});
+    expect(await listSignatureDrafts(db,'billing_statement','statement')).toHaveLength(1);
+    expect((await getSignatureDraftPreview(db,'billing_statement','statement')).html).toContain('Corrected drawing');
+    expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('not_required');
+    expect(await listSignatureCaptures(db,'billing_statement','statement')).toHaveLength(0);
+    const captureId = await finalizeSignatureDrafts(db,'billing_statement','statement');
+    expect(captureId).toBeTruthy();
+    expect(await listSignatureDrafts(db,'billing_statement','statement')).toHaveLength(0);
+    expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('signed_in_person');
+    expect((await listSignatureCaptures(db,'billing_statement','statement'))[0].render_template_snapshot).toContain('Corrected drawing');
+    await expect(saveSignatureDraft(db,draft)).rejects.toThrow(/already finalized/);
+  });
+
+  it('finalizes both roles atomically and keeps drafts if finalization rolls back',async()=>{
+    const draft = {ownerType:'billing_statement' as const,ownerId:'statement',role:'customer' as const,signerName:'Customer',pngDataUrl:PNG};
+    await saveSignatureDraft(db,draft);
+    await saveSignatureDraft(db,{...draft,role:'preparer',signerName:'Owner'});
+    raw.exec("DELETE FROM app_meta WHERE key='database_revision'");
+    await expect(finalizeSignatureDrafts(db,'billing_statement','statement')).rejects.toThrow(/revision/);
+    expect(await listSignatureDrafts(db,'billing_statement','statement')).toHaveLength(2);
+    expect(await listSignatureCaptures(db,'billing_statement','statement')).toHaveLength(0);
+    raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','0')");
+    await finalizeSignatureDrafts(db,'billing_statement','statement');
+    const captures = await listSignatureCaptures(db,'billing_statement','statement');
+    expect(captures).toHaveLength(2);
+    expect(captures[0].render_template_snapshot).toContain('Customer');
+    expect(captures[0].render_template_snapshot).toContain('Owner');
+    expect((await getSignableDocument(db,'billing_statement','statement'))?.signatureStatus).toBe('signed_in_person');
+  });
+
+  it('uses a finalized in-person signature in the ordinary CSR PDF preview',async()=>{
+    raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now')");
+    raw.prepare("INSERT INTO service_reports(id,csr_number,customer_id,equipment_id,business_date,document_state,render_template_snapshot,created_at) VALUES('csr','CSR-000001','customer','equipment','2026-09-05','finalized',?,'now')").run(ORIGINAL);
+    await saveSignatureDraft(db,{ownerType:'service_report',ownerId:'csr',role:'customer',signerName:'Signed Customer',pngDataUrl:PNG});
+    expect((await getServiceReportPreview(db,'csr')).html).toBe(ORIGINAL);
+    await finalizeSignatureDrafts(db,'service_report','csr');
+    const preview = await getServiceReportPreview(db,'csr');
+    expect(preview.html).toContain('Signed Customer');
+    expect(preview.html).toContain('data-signature-image-slot="customer"');
+    expect(raw.prepare("SELECT render_template_snapshot FROM service_reports WHERE id='csr'").get()).toEqual({render_template_snapshot:ORIGINAL});
+  });
 
   it('saves idempotently and never changes original content, numbering, or stock',async()=>{
     await saveSignatureCapture(db,input());await saveSignatureCapture(db,input());

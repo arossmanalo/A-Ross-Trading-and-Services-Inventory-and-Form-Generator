@@ -7,6 +7,7 @@ import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +20,9 @@ import { ActionButton } from '@/components/action-button';
 import { getBillingStatementPreview } from '@/features/billing-statements/billing-statement-pdf';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
+import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
+import { finalizeSignatureDrafts, getSignatureDraftPreview } from '@/features/signatures/signature-draft-repository';
+import type { SignableOwnerType } from '@/features/signatures/signature-types';
 import { colors } from '@/theme/colors';
 
 type DocumentKind = 'csr' | 'billing_statement';
@@ -40,7 +44,7 @@ function withPreviewViewport(html: string): string {
     : html.replace(/<head>/i, `<head>${viewport}`);
 }
 
-export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { documentId: string; kind: DocumentKind; signedCaptureId?: string }) {
+export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signatureDraft = false }: { documentId: string; kind: DocumentKind; signedCaptureId?: string; signatureDraft?: boolean }) {
   const db = useSQLiteContext();
   const { width: windowWidth } = useWindowDimensions();
   const captureView = useRef<CaptureView>(null);
@@ -51,6 +55,10 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [finalizedCaptureId, setFinalizedCaptureId] = useState<string | null>(null);
+  const activeCaptureId = finalizedCaptureId ?? signedCaptureId;
+  const reviewingSignature = signatureDraft && !finalizedCaptureId;
+  const ownerType: SignableOwnerType = kind === 'csr' ? 'service_report' : 'billing_statement';
   const previewHtml = useMemo(() => withPreviewViewport(preview?.html ?? ''), [preview?.html]);
 
   useEffect(() => {
@@ -59,8 +67,10 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
     setError(null);
     setDocumentHeight(null);
     setImageTooLong(false);
-    const load = signedCaptureId
-      ? getSignatureCapturePreview(db, signedCaptureId).then((value) => ({ number: value.number, html: value.html, isDraft: false }))
+    const load = activeCaptureId
+      ? getSignatureCapturePreview(db, activeCaptureId).then((value) => ({ number: value.number, html: value.html, isDraft: false }))
+      : reviewingSignature
+      ? getSignatureDraftPreview(db, ownerType, documentId).then((value) => ({ number: value.number, html: value.html, isDraft: false }))
       : kind === 'csr'
       ? getServiceReportPreview(db, documentId).then((value) => ({
           number: value.csrNumber,
@@ -78,7 +88,27 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
         if (active) setError(loadError instanceof Error ? loadError.message : 'Could not load this document preview.');
       });
     return () => { active = false; };
-  }, [db, documentId, kind, signedCaptureId]);
+  }, [db, documentId, kind, activeCaptureId, reviewingSignature, ownerType]);
+
+  const finalizeSignature = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    setNotice('');
+    try {
+      const captureId = await finalizeSignatureDrafts(db, ownerType, documentId);
+      setFinalizedCaptureId(captureId);
+      try {
+        await renderSignaturePdf(db, captureId);
+        setNotice('Signature finalized. The signed version now appears in the CSR PDF preview.');
+      } catch (renderError) {
+        setError(`Signature finalized, but its PDF file could not be generated yet: ${renderError instanceof Error ? renderError.message : 'Unknown error'}. The in-app signed preview is still available.`);
+      }
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Could not finalize the signature.');
+    } finally {
+      setBusy(false);
+    }
+  }, [db, documentId, ownerType]);
 
   const onDocumentMessage = useCallback((event: WebViewMessageEvent) => {
     const height = Number(event.nativeEvent.data);
@@ -112,13 +142,13 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
     try {
       const uri = await generatePdf();
       await Print.printAsync({ uri });
-      setNotice('PDF preview opened. This does not finalize or number the document.');
+      setNotice(reviewingSignature ? 'Signature preview opened. It is not finalized yet.' : 'PDF preview opened.');
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not open the PDF preview.');
     } finally {
       setBusy(false);
     }
-  }, [generatePdf]);
+  }, [generatePdf, reviewingSignature]);
 
   const sharePdf = useCallback(async () => {
     setBusy(true);
@@ -132,13 +162,13 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
         mimeType: 'application/pdf',
         UTI: 'com.adobe.pdf',
       });
-      setNotice('PDF export opened. The document remains a draft until you finalize it.');
+      setNotice(preview?.isDraft ? 'PDF export opened. The document remains a draft until you finalize it.' : 'PDF export opened.');
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not export the PDF.');
     } finally {
       setBusy(false);
     }
-  }, [generatePdf, kind]);
+  }, [generatePdf, kind, preview?.isDraft]);
 
   const saveImage = useCallback(async () => {
     setBusy(true);
@@ -168,7 +198,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
     }
   }, [documentHeight, imageTooLong, kind, preview?.number]);
 
-  const heading = signedCaptureId ? 'Signed PDF Preview' : kind === 'csr' ? 'CSR PDF Preview' : 'Billing Statement PDF Preview';
+  const heading = activeCaptureId || reviewingSignature ? 'Signed PDF Preview' : kind === 'csr' ? 'CSR PDF Preview' : 'Billing Statement PDF Preview';
   const pageTitle = preview?.number ? `${preview.number} Preview` : heading;
 
   return (
@@ -180,16 +210,22 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId }: { d
             <ActionButton disabled={busy} onPress={() => void openPdfPreview()}>
               {busy ? 'Preparing…' : 'Open PDF preview'}
             </ActionButton>
-            <View style={styles.secondaryActions}>
+            {reviewingSignature ? <ActionButton disabled={busy} onPress={() => Alert.alert(
+              'Finalize signature?',
+              'After finalizing, this customer or preparer signature cannot be redrawn for this document.',
+              [{ text: 'Keep editing', style: 'cancel' }, { text: 'Finalize signature', onPress: () => void finalizeSignature() }],
+            )}>
+              {busy ? 'Finalizing…' : 'Finalize signature'}
+            </ActionButton> : <View style={styles.secondaryActions}>
               <ActionButton compact disabled={busy} variant="secondary" onPress={() => void sharePdf()}>
                 Save / share PDF
               </ActionButton>
               <ActionButton compact disabled={busy || !documentHeight || imageTooLong} variant="secondary" onPress={() => void saveImage()}>
                 Save image to Photos
               </ActionButton>
-            </View>
+            </View>}
             <Text selectable style={styles.help}>
-              {preview.isDraft ? 'Draft preview only — no number, stock movement, or payment is created.' : 'Finalized document preview.'}
+              {reviewingSignature ? 'Signature review only. Return to Sign Document to redraw it before finalizing.' : preview.isDraft ? 'Draft preview only — no number, stock movement, or payment is created.' : activeCaptureId ? 'Finalized signed document preview.' : 'Finalized document preview.'}
               {' '}Image export saves the full preview as one PNG; PDF keeps normal page breaks.
             </Text>
           </View>

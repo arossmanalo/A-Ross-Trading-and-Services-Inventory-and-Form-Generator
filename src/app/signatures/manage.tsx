@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ScrollView, Switch, Text, View } from 'react-native';
 import { ActionButton } from '@/components/action-button';
 import { listSignatureCaptures, type SignatureCapture } from '@/features/signatures/capture-repository';
-import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
+import { listSignatureDrafts, type SignatureDraft } from '@/features/signatures/signature-draft-repository';
 import { getSignableDocument, pickAndAttachSignedPdf, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
 import type { SignableDocument, SignableOwnerType, SignatureStatus } from '@/features/signatures/signature-types';
 import { colors } from '@/theme/colors';
@@ -19,6 +19,7 @@ export default function ManageSignaturesScreen() {
   const db = useSQLiteContext();
   const [document,setDocument] = useState<SignableDocument|null>(null);
   const [captures,setCaptures] = useState<SignatureCapture[]>([]);
+  const [drafts,setDrafts] = useState<SignatureDraft[]>([]);
   const [matched,setMatched] = useState(false);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState<string|null>(null);
@@ -28,6 +29,7 @@ export default function ManageSignaturesScreen() {
     if (!ownerId || !['service_report','billing_statement'].includes(ownerType)) throw new Error('Invalid signing target.');
     setDocument(await getSignableDocument(db,ownerType,ownerId));
     setCaptures(await listSignatureCaptures(db,ownerType,ownerId));
+    setDrafts(await listSignatureDrafts(db,ownerType,ownerId));
   },[db,ownerType,ownerId]);
   useFocusEffect(useCallback(() => {setMatched(false);void load().catch((e:unknown) => setError(e instanceof Error ? e.message : 'Could not load document.'));},[load]));
   const run = async (action:()=>Promise<unknown>) => {
@@ -64,14 +66,13 @@ export default function ManageSignaturesScreen() {
       </View>) : <Text>No signed PDF has been imported for this document yet.</Text>}
     </> : previewing ? <>
       <Text selectable style={{fontWeight:'700'}}>In-person signed version</Text>
-      {latestInPersonVersion ? <>
+      {drafts.length ? <>
+        <Text>Review the staged signature{drafts.length > 1 ? 's' : ''} before committing. You can return to Sign Document and redraw either draft.</Text>
+        <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/signatures/preview', params: { ownerType, ownerId, kind: document.ownerType === 'service_report' ? 'csr' : 'billing_statement', pending: 'true' } })}>Preview and finalize signature</ActionButton>
+      </> : latestInPersonVersion ? <>
         <Text>The latest signed copy is linked to this finalized document. It includes the most recent customer and preparer captures, if present. The original finalized PDF remains unchanged.</Text>
         <Text selectable>{latestInPersonVersion.signer_name} · {latestInPersonVersion.role} · PDF {latestInPersonVersion.pdf_state}</Text>
         <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/signatures/preview', params: { captureId: latestInPersonVersion.id, kind: document.ownerType === 'service_report' ? 'csr' : 'billing_statement' } })}>Preview signed version</ActionButton>
-        <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {
-          const path = await renderSignaturePdf(db,latestInPersonVersion.id);
-          await shareSignedAttachment({id:latestInPersonVersion.id,filename:latestInPersonVersion.deterministic_filename!,privatePath:path,checksum:latestInPersonVersion.checksum??'',createdAt:latestInPersonVersion.created_at});
-        })}>Share signed version</ActionButton>
       </> : <Text>No in-person signature has been captured for this document yet.</Text>}
       <Text selectable style={{fontWeight:'700'}}>Customer-returned signed PDFs</Text>
       {document.attachments.length ? document.attachments.map(attachment => <View key={attachment.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
@@ -82,16 +83,20 @@ export default function ManageSignaturesScreen() {
       {!latestInPersonVersion && !document.attachments.length ? <Text>No signed version is available yet.</Text> : null}
     </> : <>
       <Text selectable style={{fontWeight:'700'}}>Capture an in-person signature</Text>
-      <Text>Only one customer and one preparer signature can be captured for this document. Signed copies are append-only and do not alter the original finalized PDF.</Text>
+      <Text>Only one customer and one preparer signature can be finalized for this document. Drafts can be redrawn before finalization. The original finalized PDF remains unchanged.</Text>
       {(['customer','preparer'] as const).map(role => {
         const capture = currentCaptures.get(role);
+        const draft = drafts.find(entry => entry.role === role);
         return capture ? <View key={role} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
           <Text selectable>{role === 'customer' ? 'Customer signature captured' : 'Preparer signature captured'}</Text>
           <Text selectable>{capture.signer_name} · {new Date(capture.created_at).toLocaleString()}</Text>
-        </View> : <ActionButton key={role} disabled={locked} onPress={() => router.push({pathname:'/signatures/capture',params:{ownerType,ownerId,role}})}>Draw {role} signature</ActionButton>;
+        </View> : <View key={role} style={{gap:8}}>
+          {draft ? <Text selectable>{draft.signer_name} · {role} signature draft saved</Text> : null}
+          <ActionButton disabled={locked} onPress={() => router.push({pathname:'/signatures/capture',params:{ownerType,ownerId,role}})}>{draft ? `Redraw ${role} signature` : `Draw ${role} signature`}</ActionButton>
+        </View>;
       })}
       {legacyDuplicateCount > 0 ? <Text selectable style={{color:colors.secondaryLabel}}>There are {legacyDuplicateCount} older duplicate capture(s) from before the one-per-role limit. They remain in the audit history; only the latest signature for each role is used in the signed version.</Text> : null}
-      {latestInPersonVersion ? <ActionButton variant="secondary" disabled={busy} onPress={() => router.push({pathname:'/signatures/manage',params:{ownerType,ownerId,mode:'preview'}})}>Preview signed version</ActionButton> : null}
+      {drafts.length ? <ActionButton variant="secondary" disabled={busy} onPress={() => router.push({ pathname: '/signatures/preview', params: { ownerType, ownerId, kind: document.ownerType === 'service_report' ? 'csr' : 'billing_statement', pending: 'true' } })}>Preview and finalize signature</ActionButton> : latestInPersonVersion ? <ActionButton variant="secondary" disabled={busy} onPress={() => router.push({pathname:'/signatures/manage',params:{ownerType,ownerId,mode:'preview'}})}>Preview signed version</ActionButton> : null}
       {!hasSignedArtifact ? <>
         <Text selectable style={{fontWeight:'700'}}>Record signing status</Text>
         <Text>Changing status does not delete signatures or returned files.</Text>

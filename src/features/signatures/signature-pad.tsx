@@ -19,14 +19,14 @@ window.clearSignature=function(){strokes=[];active=null;redraw();send({type:'cha
 window.exportSignature=function(){if(!strokes.length){send({type:'error',message:'Draw a signature first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};redraw();
 </script></body></html>`;
 
-export function SignaturePad({ disabled, onCapture, onInteractionStart, onInteractionEnd }: { disabled: boolean; onCapture: (data: string) => void; onInteractionStart?: () => void; onInteractionEnd?: () => void }) {
+export function SignaturePad({ disabled, onCapture, onInteractionStart, onInteractionEnd, saveLabel = 'Save this signature' }: { disabled: boolean; onCapture: (data: string) => void; onInteractionStart?: () => void; onInteractionEnd?: () => void; saveLabel?: string }) {
   const { width, height } = useWindowDimensions();
   const padHeight = Math.min(width >= 600 ? 340 : 280, Math.max(220, Math.round(height * 0.43)));
   const webview = useRef<WebView>(null);
   const [hasInk, setHasInk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return <View style={{gap:12}}>
-    <Text>Draw inside the white box. Saving records this signature permanently.</Text>
+    <Text>Draw inside the white box. Use Redraw signature to start again before saving.</Text>
     <View
       pointerEvents={disabled ? 'none' : 'auto'}
       onTouchStart={onInteractionStart}
@@ -49,8 +49,8 @@ export function SignaturePad({ disabled, onCapture, onInteractionStart, onIntera
           } catch { setError('Could not read signature. Clear it and try again.'); }
         }} />
     </View>
-    <ActionButton variant="secondary" disabled={disabled} onPress={() => {setError(null);webview.current?.injectJavaScript('window.clearSignature();true;');}}>Clear drawing</ActionButton>
-    <ActionButton disabled={disabled || !hasInk} onPress={() => webview.current?.injectJavaScript('window.exportSignature();true;')}>{disabled ? 'Saving…' : 'Save this signature'}</ActionButton>
+    <ActionButton variant="secondary" disabled={disabled} onPress={() => {setError(null);webview.current?.injectJavaScript('window.clearSignature();true;');}}>Redraw signature</ActionButton>
+    <ActionButton disabled={disabled || !hasInk} onPress={() => webview.current?.injectJavaScript('window.exportSignature();true;')}>{disabled ? 'Saving…' : saveLabel}</ActionButton>
     {error ? <Text selectable style={{color:'#b91c1c'}}>{error}</Text> : null}
   </View>;
 }

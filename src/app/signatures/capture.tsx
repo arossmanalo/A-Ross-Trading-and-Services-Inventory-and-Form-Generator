@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text } from 'react-native';
 import { FormField } from '@/components/form-field';
 import { saveSignatureCapture } from '@/features/signatures/capture-repository';
+import { listSignatureDrafts, saveSignatureDraft } from '@/features/signatures/signature-draft-repository';
 import { SignaturePad } from '@/features/signatures/signature-pad';
 import { getSignableDocument } from '@/features/signatures/signature-repository';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
@@ -25,17 +26,24 @@ export default function CaptureScreen() {
     void getSignableDocument(db,ownerType as SignableOwnerType,ownerId).then(document => {
       if (!document || document.documentState !== 'finalized') throw new Error('Only finalized documents can be signed.');
       setTarget(`${document.documentNumber} · ${document.customerName}\nRevision 1 · ${document.fingerprint}`);
+      return listSignatureDrafts(db,ownerType as SignableOwnerType,ownerId);
+    }).then(drafts => {
+      const existing = drafts.find(draft => draft.role === role);
+      if (existing) setName(existing.signer_name);
     }).catch((e:unknown) => setError(e instanceof Error ? e.message : 'Could not load signing target.'));
-  },[db,ownerType,ownerId]);
+  },[db,ownerType,ownerId,role]);
   if (!['settings','service_report','billing_statement'].includes(ownerType) || !['customer','preparer'].includes(role) || !ownerId) return <Text>Invalid signing target.</Text>;
   return <ScrollView scrollEnabled={scrollEnabled} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
     <Text selectable style={{fontWeight:'700'}}>{target ?? 'Loading document…'}</Text>
-    <Text selectable>{ownerType === 'settings' ? 'Saved preparer signature: automatically included in future issued documents. Existing documents are unchanged.' : `Capture the ${role} signature after they review the finalized document. A separate signed version preserves the original PDF.`}</Text>
+    <Text selectable>{ownerType === 'settings' ? 'Saved preparer signature: automatically included in future issued documents. Existing documents are unchanged.' : `Draw the ${role} signature after they review the document. You can redraw and review it before finalizing. The original PDF remains unchanged.`}</Text>
     <FormField label="Signer’s full name" value={name} onChangeText={setName} editable={!busy} maxLength={200} />
-    <SignaturePad disabled={busy || !target} onInteractionStart={() => setScrollEnabled(false)} onInteractionEnd={() => setScrollEnabled(true)} onCapture={data => {
+    <SignaturePad disabled={busy || !target} saveLabel={ownerType === 'settings' ? 'Save default signature' : 'Save signature draft'} onInteractionStart={() => setScrollEnabled(false)} onInteractionEnd={() => setScrollEnabled(true)} onCapture={data => {
       if (saving.current) return;
       saving.current=true;setBusy(true);setError(null);
-      void saveSignatureCapture(db,{id:requestId.current,ownerType:ownerType as 'settings'|'service_report'|'billing_statement',ownerId,role:role as 'customer'|'preparer',signerName:name,pngDataUrl:data})
+      const save = ownerType === 'settings'
+        ? saveSignatureCapture(db,{id:requestId.current,ownerType:'settings',ownerId,role:role as 'customer'|'preparer',signerName:name,pngDataUrl:data})
+        : saveSignatureDraft(db,{ownerType:ownerType as SignableOwnerType,ownerId,role:role as 'customer'|'preparer',signerName:name,pngDataUrl:data});
+      void save
         .then(() => router.back())
         .catch((e:unknown) => setError(e instanceof Error ? e.message : 'Could not save signature.'))
         .finally(() => {saving.current=false;setBusy(false);});

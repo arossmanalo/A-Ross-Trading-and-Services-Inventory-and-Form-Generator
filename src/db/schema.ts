@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 8;
+export const DATABASE_VERSION = 9;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -411,4 +411,16 @@ CREATE TABLE customer_members (
 );
 
 CREATE INDEX customer_members_customer_idx ON customer_members(customer_id, active, name);
+`;
+
+export const SCHEMA_V9 = `
+CREATE TABLE signature_drafts (
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('service_report','billing_statement')),
+  owner_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('customer','preparer')),
+  signer_name TEXT NOT NULL CHECK (length(trim(signer_name)) > 0),
+  png_data_url TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (owner_type, owner_id, role)
+);
 `;

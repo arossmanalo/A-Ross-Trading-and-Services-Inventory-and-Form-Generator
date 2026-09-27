@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { DATABASE_VERSION, SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8 } from '@/db/schema';
+import { DATABASE_VERSION, SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9 } from '@/db/schema';
 
 type UserVersionRow = { user_version: number };
 
@@ -90,6 +90,13 @@ async function migrateDatabaseOnce(db: SQLiteDatabase): Promise<void> {
     await db.withExclusiveTransactionAsync(async (tx) => {
       await tx.execAsync(SCHEMA_V8);
       await tx.execAsync('PRAGMA user_version = 8;');
+    });
+  }
+
+  if (currentVersion < 9) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      await tx.execAsync(SCHEMA_V9);
+      await tx.execAsync('PRAGMA user_version = 9;');
     });
   }
 
