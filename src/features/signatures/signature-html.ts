@@ -5,9 +5,9 @@ type SignatureMark = { role: SignatureRole; signerNameHtml: string; pngDataUrl: 
 const SIGNATURE_LAYOUT_CSS = `
 .signatures{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px;break-inside:avoid;page-break-inside:avoid}
 .signature{min-width:0;border:0!important;padding:0!important;text-align:center;break-inside:avoid;page-break-inside:avoid}
-.signature-writing{height:38px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
-.signature-image{display:block;width:78%;max-width:180px;height:34px;object-fit:contain;object-position:center bottom}
-.signature-line{height:0;border-top:1px solid #111827}
+.signature-writing{height:54px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+.signature-image{display:block;width:90%;max-width:240px;height:50px;object-fit:contain;object-position:center bottom}
+.signature-line{display:none!important}
 .signature-name{min-height:14px;padding-top:3px;font-size:8px;font-weight:700;overflow-wrap:anywhere}
 .signature-label{color:#475569;font-size:8px;text-transform:uppercase}
 `;
@@ -25,7 +25,7 @@ export function signatureBlock(signature: CapturedSignature, label: string): str
 }
 
 /**
- * Places captured signature marks on the existing first-page signature lines.
+ * Places captured signature marks in the document's existing signature blocks.
  * It also normalizes older saved snapshots that appended a forced acknowledgment page.
  */
 export function applySignatureCapturesToDocument(originalHtml: string, blocks: string[]): string {
@@ -44,6 +44,7 @@ export function applySignatureCapturesToDocument(originalHtml: string, blocks: s
 
   html = normalizeSignatureSlots(html);
   html = ensureSignatureSlots(html);
+  html = html.replaceAll('<div class="signature-line"></div>', '');
 
   // Later captures override the saved default signature and older duplicate legacy entries.
   const latestByRole = new Map<SignatureRole, SignatureMark>();
@@ -146,7 +147,7 @@ function ensureSignatureSlots(html: string): string {
 }
 
 function signatureSlot(role: SignatureRole, signerNameHtml: string, label: string): string {
-  return `<div class="signature" data-signature-role="${role}"><div class="signature-writing" data-signature-image-slot="${role}"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="${role}">${signerNameHtml}</div><div class="signature-label">${label}</div></div>`;
+  return `<div class="signature" data-signature-role="${role}"><div class="signature-writing" data-signature-image-slot="${role}"></div><div class="signature-name" data-signature-name-slot="${role}">${signerNameHtml}</div><div class="signature-label">${label}</div></div>`;
 }
 
 function applyMarkToSlot(html: string, mark: SignatureMark): string {
@@ -159,8 +160,8 @@ function applyMarkToSlot(html: string, mark: SignatureMark): string {
 }
 
 function addSignatureStyles(html: string): string {
-  const styleTag = `<style id="signature-layout-inline-v1">${SIGNATURE_LAYOUT_CSS}</style>`;
-  if (html.includes('id="signature-layout-inline-v1"')) return html;
+  const styleTag = `<style id="signature-layout-inline-v2">${SIGNATURE_LAYOUT_CSS}</style>`;
+  if (html.includes('id="signature-layout-inline-v2"')) return html;
   if (html.includes('</head>')) return html.replace('</head>', `${styleTag}</head>`);
   return html.replace('</body>', `${styleTag}</body>`);
 }

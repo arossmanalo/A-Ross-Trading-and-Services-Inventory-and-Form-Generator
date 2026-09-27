@@ -2,7 +2,7 @@ import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-busi
 import { normalizeContactDetails } from '@/features/settings/contact-details';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v3';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v4';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -131,8 +131,8 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   ${listSection("Customer's Remarks", snapshot.customerRemarks)}
   <div class="total-row"><div class="total-box"><span>Total Bill</span><span>${escapeHtml(PHP_FORMATTER.format(snapshot.totalBillCentavos / 100))}</span></div></div>
   ${snapshot.includeSignatureLines === false ? '' : `<section class="signatures">
-    <div class="signature" data-signature-role="preparer"><div class="signature-writing" data-signature-image-slot="preparer"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="preparer">${escapeHtml(snapshot.servicedBy)}</div><div class="signature-label">Serviced By</div></div>
-    <div class="signature" data-signature-role="customer"><div class="signature-writing" data-signature-image-slot="customer"></div><div class="signature-line"></div><div class="signature-name" data-signature-name-slot="customer">${escapeHtml(snapshot.acknowledgedBy)}</div><div class="signature-label">Acknowledged By</div></div>
+    <div class="signature" data-signature-role="preparer"><div class="signature-writing" data-signature-image-slot="preparer"></div><div class="signature-name" data-signature-name-slot="preparer">${escapeHtml(snapshot.servicedBy)}</div><div class="signature-label">Serviced By</div></div>
+    <div class="signature" data-signature-role="customer"><div class="signature-writing" data-signature-image-slot="customer"></div><div class="signature-name" data-signature-name-slot="customer">${escapeHtml(snapshot.acknowledgedBy)}</div><div class="signature-label">Acknowledged By</div></div>
   </section>`}
   <footer class="footer">${escapeHtml(snapshot.csrNumber)} | Revision 1 | Template ${CSR_TEMPLATE_VERSION} | Fingerprint ${escapeHtml(snapshot.fingerprint)}</footer>
 </body>

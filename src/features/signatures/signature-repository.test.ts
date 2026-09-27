@@ -148,8 +148,10 @@ describe('signature persistence and recovery',() => {
 
     const path=await renderSignaturePdf(db,'legacy-capture');
     const renderedHtml=printer.mock.calls[0]?.[0]?.html as string;
-    expect(path).toContain('inline-v1');
+    expect(path).toContain('inline-v2');
     expect(renderedHtml).toContain('data-signature-image-slot="customer"><img class="signature-image"');
+    expect(renderedHtml).toContain('signature-layout-inline-v2');
+    expect(renderedHtml).not.toContain('<div class="signature-line"></div>');
     expect(renderedHtml).toContain('Customer One');
     expect(renderedHtml).not.toContain('In-person acknowledgment');
     expect(renderedHtml).not.toContain('break-before:page');

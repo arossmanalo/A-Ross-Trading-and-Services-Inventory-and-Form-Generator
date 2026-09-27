@@ -35,6 +35,7 @@ describe('CSR template', () => {
     expect(html).toContain('Acknowledged By');
     expect(html).toContain('data-signature-image-slot="preparer"');
     expect(html).toContain('data-signature-image-slot="customer"');
+    expect(html).not.toContain('<div class="signature-line"></div>');
     expect(html).not.toContain('break-before:page');
     expect(html).toContain('CSR-000001');
     expect(html).toContain('Services Used');

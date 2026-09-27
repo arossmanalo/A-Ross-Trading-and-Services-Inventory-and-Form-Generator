@@ -208,7 +208,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-13.6:** A signed version shall be previewable and shareable from its finalized CSR or Billing Statement. Later in-person signed copies and externally returned signed PDFs shall be linked append-only; neither shall rewrite or unlock the original finalized content/PDF.
 - **FR-13.7:** Unsigned PDFs show number, revision ID, and content fingerprint for manual matching.
 - **FR-13.8:** Original and returned files are preserved; the app makes no cryptographic verification claim.
-- **FR-13.9:** In-person customer and preparer marks shall appear on their corresponding signature lines in the document body and shall not force a dedicated acknowledgment page. The signature block may naturally overflow only when earlier content leaves insufficient space on the current page.
+- **FR-13.9:** In-person customer and preparer marks shall appear in larger, line-free signature blocks above their names in the document body and shall not force a dedicated acknowledgment page. The signature block may naturally overflow only when earlier content leaves insufficient space on the current page.
 
 ### 4.14 PDF and sharing
 
@@ -225,7 +225,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 
 ### 4.15 Reporting
 
-- **FR-15.1:** Dashboard shall show active low-stock items, recent CSRs/statements/movements/payments, and backup status.
+- **FR-15.1:** Home shall show active-item, low-stock, and customer totals plus navigation to records, reports, and Backup. Backup revision details and seven-day notices remain on the Backup screen. Database self-check and recent activity are not shown on Home.
 - **FR-15.2:** Sales reports use statement business dates and exclude voided statements from ordinary totals.
 - **FR-15.3:** Collection reports use Payment business dates and exclude voided payments.
 - **FR-15.4:** Audit reports show business/operational dates, backdate/override/void reasons, SKU bypasses, and voided records.

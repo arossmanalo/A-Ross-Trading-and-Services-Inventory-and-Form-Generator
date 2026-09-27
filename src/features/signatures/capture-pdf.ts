@@ -7,7 +7,7 @@ import type { SignatureCapture } from '@/features/signatures/capture-repository'
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
 const pendingRenders = new Map<string, Promise<string>>();
-const SIGNED_PDF_LAYOUT_VERSION = 'inline-v1';
+const SIGNED_PDF_LAYOUT_VERSION = 'inline-v2';
 export function renderSignaturePdf(db: SQLiteDatabase, captureId: string): Promise<string> {
   const pending = pendingRenders.get(captureId);
   if (pending) return pending;

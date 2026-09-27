@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, View, useWindowDimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ActionButton } from '@/components/action-button';
 
@@ -20,6 +20,8 @@ window.exportSignature=function(){if(!strokes.length){send({type:'error',message
 </script></body></html>`;
 
 export function SignaturePad({ disabled, onCapture, onInteractionStart, onInteractionEnd }: { disabled: boolean; onCapture: (data: string) => void; onInteractionStart?: () => void; onInteractionEnd?: () => void }) {
+  const { width, height } = useWindowDimensions();
+  const padHeight = Math.min(width >= 600 ? 340 : 280, Math.max(220, Math.round(height * 0.43)));
   const webview = useRef<WebView>(null);
   const [hasInk, setHasInk] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export function SignaturePad({ disabled, onCapture, onInteractionStart, onIntera
       onTouchStart={onInteractionStart}
       onTouchEnd={onInteractionEnd}
       onTouchCancel={onInteractionEnd}
-      style={{height:168,width:'100%',borderWidth:1,borderColor:'#64748b',backgroundColor:'#fff'}}
+      style={{height:padHeight,width:'100%',borderWidth:1,borderColor:'#64748b',backgroundColor:'#fff'}}
     >
       <WebView ref={webview} source={{html:SIGNATURE_PAD_HTML}} originWhitelist={['*']}
         onShouldStartLoadWithRequest={request => request.url === 'about:blank'}

@@ -27,6 +27,7 @@ describe('billing statement template', () => {
     expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);
     expect(html).toContain('data-signature-image-slot="preparer"');
     expect(html).toContain('data-signature-image-slot="customer"');
+    expect(html).not.toContain('<div class="signature-line"></div>');
     expect(html).not.toContain('break-before:page');
   });
 

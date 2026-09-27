@@ -3,7 +3,6 @@ import { Image } from 'expo-image';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,9 +13,8 @@ import {
 
 import { ActionButton } from '@/components/action-button';
 import { MetricCard } from '@/components/metric-card';
-import { runDatabaseSelfCheck, type DatabaseSelfCheck } from '@/db/phase-zero-check';
 import type { BackupStatus } from '@/features/backup/backup-repository';
-import { getDashboardSummary, type DashboardActivity } from '@/features/reports/dashboard-summary';
+import { getDashboardSummary } from '@/features/reports/dashboard-summary';
 import { colors } from '@/theme/colors';
 
 type DashboardCounts = {
@@ -24,7 +22,6 @@ type DashboardCounts = {
   lowStockItems: number;
   customers: number;
   backupStatus: BackupStatus;
-  recentActivity: DashboardActivity[];
 };
 
 const EMPTY_COUNTS: DashboardCounts = {
@@ -38,7 +35,6 @@ const EMPTY_COUNTS: DashboardCounts = {
     finalizedRecordCount: 0,
     noticeDue: false,
   },
-  recentActivity: [],
 };
 
 export default function DashboardScreen() {
@@ -46,9 +42,6 @@ export default function DashboardScreen() {
   const db = useSQLiteContext();
   const [counts, setCounts] = useState(EMPTY_COUNTS);
   const [countsError, setCountsError] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [checkResult, setCheckResult] = useState<DatabaseSelfCheck | null>(null);
-  const [checkError, setCheckError] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -69,19 +62,6 @@ export default function DashboardScreen() {
       active = false;
     };
   }, [db]));
-
-  const runSelfCheck = useCallback(async () => {
-    setChecking(true);
-    setCheckError(null);
-    try {
-      setCheckResult(await runDatabaseSelfCheck(db));
-    } catch (error) {
-      setCheckResult(null);
-      setCheckError(error instanceof Error ? error.message : 'Database self-check failed.');
-    } finally {
-      setChecking(false);
-    }
-  }, [db]);
 
   return (
     <ScrollView
@@ -215,54 +195,6 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
         </Pressable>
-      </View>
-
-      <View style={styles.section}>
-        <Text selectable style={styles.sectionTitle}>Backup</Text>
-        <View style={styles.activityCard}>
-          <Text selectable style={styles.activityEvent}>
-            {counts.backupStatus.revisionsNotExported === 0 ? 'Latest export is current' : `${counts.backupStatus.revisionsNotExported} revision(s) need export`}
-          </Text>
-          <Text selectable style={[styles.featureBody, counts.backupStatus.noticeDue ? styles.warningText : null]}>
-            {counts.backupStatus.noticeDue ? 'Seven-day backup notice is due.' : 'Manual private Drive upload after export.'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text selectable style={styles.sectionTitle}>Recent activity</Text>
-        {counts.recentActivity.length > 0 ? counts.recentActivity.map(activity => (
-          <View key={activity.id} style={styles.activityCard}>
-            <Text selectable style={styles.activityEvent}>{activity.eventType}</Text>
-            <Text selectable style={styles.featureBody}>
-              {formatEntity(activity.entityType)} - {activity.createdAt}
-            </Text>
-          </View>
-        )) : (
-          <Text selectable style={styles.featureBody}>No activity recorded yet.</Text>
-        )}
-      </View>
-
-      <View style={styles.diagnostic}>
-        <View style={styles.diagnosticHeader}>
-          <View style={styles.diagnosticCopy}>
-            <Text selectable style={styles.sectionTitle}>Phase 0 database check</Text>
-            <Text selectable style={styles.featureBody}>
-              Verifies schema migration and rollback on the actual device.
-            </Text>
-          </View>
-          {checking ? <ActivityIndicator color={colors.brandBlue} /> : null}
-        </View>
-        <ActionButton disabled={checking} onPress={runSelfCheck} variant="secondary">
-          {checking ? 'Checking…' : 'Run database self-check'}
-        </ActionButton>
-        {checkResult ? (
-          <Text selectable style={styles.successText}>
-            SQLite {checkResult.sqliteVersion} · schema {checkResult.schemaVersion} · rollback{' '}
-            {checkResult.rollbackVerified ? 'verified' : 'FAILED'}
-          </Text>
-        ) : null}
-        {checkError ? <Text selectable style={styles.errorText}>{checkError}</Text> : null}
       </View>
     </ScrollView>
   );
@@ -400,58 +332,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.8,
   },
-  activityCard: {
-    padding: 14,
-    gap: 4,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surface,
-  },
-  activityEvent: {
-    color: colors.label,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  diagnostic: {
-    gap: 14,
-    padding: 17,
-    borderWidth: 1,
-    borderColor: colors.separator,
-    borderRadius: 18,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surface,
-  },
-  diagnosticHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  diagnosticCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  successText: {
-    color: colors.success,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
   errorText: {
     color: colors.error,
     fontSize: 13,
     lineHeight: 18,
-  },
-  warningText: {
-    color: colors.warning,
-    fontWeight: '700',
   },
   pressed: {
     opacity: 0.72,
     transform: [{ scale: 0.995 }],
   },
 });
-
-function formatEntity(entityType: string): string {
-  return entityType.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
-}
