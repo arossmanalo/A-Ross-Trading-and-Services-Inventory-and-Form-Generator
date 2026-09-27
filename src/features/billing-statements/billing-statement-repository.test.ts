@@ -13,7 +13,7 @@ afterEach(() => vi.useRealTimers());
 
 import { addCsrUsageLine, addDirectItemLine, addServiceLine, addStatementExpense, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement, listCsrsForBilling, updateBillingStatementDraft, voidBillingStatement } from './billing-statement-repository';
 import { createLaterPayment, listPaymentsForStatement, voidPayment } from '@/features/payments/payment-repository';
-import { addReportItemUsage, addReportServiceUsage, createServiceReportDraft, deleteServiceReportDraft, removeReportItemUsage } from '@/features/service-reports/service-report-repository';
+import { addReportItemUsage, addReportServiceUsage, createServiceReportDraft, deleteServiceReportDraft, finalizeServiceReport, removeReportItemUsage } from '@/features/service-reports/service-report-repository';
 
 type Params=Array<string|number|null>;
 function adapter(database:DatabaseSync):SQLiteDatabase {
@@ -33,6 +33,22 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
   it('bills a CSR item without deducting its already-posted stock again',async()=>{const now='2026-09-05T00:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO service_reports(id,csr_number,customer_id,equipment_id,document_state,service_outcome,business_date,created_at,finalized_at) VALUES('csr','CSR-000001','customer','equipment','finalized','completed','2026-09-05',?,?)`).run(now,now);raw.prepare(`INSERT INTO service_report_item_usage(id,service_report_id,item_id,quantity_integer,billable,resolved_selling_price_centavos,price_source,description_snapshot,created_at) VALUES('usage','csr','item',1,1,120000,'base','Detergent',?)`).run(now);raw.prepare(`INSERT INTO inventory_movements(id,item_id,movement_type,quantity_delta_integer,service_report_id,description,created_at) VALUES('csr-use','item','sale',-1,'csr','CSR use',?)`).run(now);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:'csr',businessDate:'2026-09-05'});await addCsrUsageLine(db,statementId,'usage');await finalizeBillingStatement(db,statementId);expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(9);expect((raw.prepare("SELECT COUNT(*) AS count FROM stock_transactions WHERE billing_statement_id=? AND transaction_type='sale'").get(statementId) as {count:number}).count).toBe(0);});
 
   it('allows starting a linked Billing Statement from a CSR draft but blocks premature finalization',async()=>{const now='2026-09-05T00:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO service_reports(id,customer_id,equipment_id,document_state,service_outcome,business_date,created_at) VALUES('draft-csr','customer','equipment','draft','incomplete','2026-09-05',?)`).run(now);expect(await listCsrsForBilling(db,'customer')).toMatchObject([{id:'draft-csr',documentState:'draft',availableLineCount:0}]);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:'draft-csr',businessDate:'2026-09-05'});await addServiceLine(db,statementId,{serviceId:'service'});await expect(finalizeBillingStatement(db,statementId)).rejects.toThrow(/Finalize the linked CSR/);expect((raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get() as {high_water_mark:number}).high_water_mark).toBe(0);});
+
+  it('finalizes a CSR after its billable items and service are linked to a statement draft',async()=>{
+    const now='2026-09-05T00:00:00.000Z';
+    raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);
+    const reportId=await createServiceReportDraft(db,{customerId:'customer',equipmentId:'equipment',businessDate:'2026-09-05'});
+    await addReportItemUsage(db,reportId,'item',2,true);
+    await addReportServiceUsage(db,reportId,'service');
+    const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});
+
+    const finalized=await finalizeServiceReport(db,reportId);
+
+    expect(finalized.csrNumber).toBe('CSR-000002');
+    expect(raw.prepare('SELECT document_state FROM service_reports WHERE id=?').get(reportId)).toEqual({document_state:'finalized'});
+    expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(8);
+    expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(2);
+  });
 
   it('reopens the populated linked draft on repeat and recovers from an older blank duplicate',async()=>{
     const now='2026-09-05T12:00:00.000Z';

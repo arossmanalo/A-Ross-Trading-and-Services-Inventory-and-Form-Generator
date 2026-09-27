@@ -1,6 +1,6 @@
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
@@ -54,6 +54,8 @@ export default function ServiceReportDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const editVersion = useRef(0);
+  const pendingSave = useRef<Promise<void>>(Promise.resolve());
 
   const loadReport = useCallback(async () => {
     if (!reportId) return;
@@ -74,15 +76,23 @@ export default function ServiceReportDetailScreen() {
 
   useFocusEffect(useCallback(() => { void loadReport(); }, [loadReport]));
 
-  const saveDraft = useCallback(async () => {
-    if (!reportId || report?.documentState !== 'draft') return;
-    await updateServiceReportDraft(db, reportId, toDraftInput(form));
-    setDirty(false);
-    setStatus('Draft saved');
+  const saveDraft = useCallback((): Promise<void> => {
+    if (!reportId || report?.documentState !== 'draft') return Promise.resolve();
+    const input = toDraftInput(form);
+    const version = editVersion.current;
+    const next = pendingSave.current.catch(() => undefined).then(async () => {
+      await updateServiceReportDraft(db, reportId, input);
+      if (editVersion.current === version) {
+        setDirty(false);
+        setStatus('Draft saved');
+      }
+    });
+    pendingSave.current = next;
+    return next;
   }, [db, form, report?.documentState, reportId]);
 
   useEffect(() => {
-    if (!dirty || report?.documentState !== 'draft') return;
+    if (!dirty || busy || report?.documentState !== 'draft') return;
     setStatus('Saving…');
     const timer = setTimeout(() => {
       void saveDraft().catch((saveError: unknown) => {
@@ -91,9 +101,10 @@ export default function ServiceReportDetailScreen() {
       });
     }, 900);
     return () => clearTimeout(timer);
-  }, [dirty, report?.documentState, saveDraft]);
+  }, [busy, dirty, report?.documentState, saveDraft]);
 
   const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    editVersion.current += 1;
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
     setStatus('Unsaved changes');
@@ -139,6 +150,7 @@ export default function ServiceReportDetailScreen() {
     setError(null);
     try {
       if (dirty) await saveDraft();
+      else await pendingSave.current;
       await finalizeAndRenderServiceReport(db, reportId, policy);
       await loadReport();
     } catch (finalizeError) {
@@ -149,8 +161,11 @@ export default function ServiceReportDetailScreen() {
           { text: 'Use current prices', onPress: () => void runFinalize('use-current') },
         ]);
       } else {
+        // A PDF can fail after finalization has committed. Refresh only then;
+        // a rejected draft must keep its unsaved form values for correction.
+        const latest = await getServiceReport(db, reportId).catch(() => null);
+        if (latest && latest.documentState !== 'draft') await loadReport();
         setError(finalizeError instanceof Error ? finalizeError.message : 'Could not finalize CSR.');
-        await loadReport();
       }
     } finally {
       setBusy(false);
@@ -282,6 +297,7 @@ export default function ServiceReportDetailScreen() {
             {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{formatCentavos(service.resolvedRateCentavos)} · quantity 1{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.services.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
             <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Open or create linked Billing Statement draft</ActionButton>
+            {error ? <Text accessibilityLiveRegion="polite" selectable style={styles.errorText}>{error}</Text> : null}
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
             <ActionButton disabled={busy} onPress={deleteDraft} variant="danger">Delete draft</ActionButton>
           </>
