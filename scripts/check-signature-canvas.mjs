@@ -6,6 +6,9 @@ const runtimeRequire = createRequire(process.env.AROSS_RUNTIME_PACKAGE_JSON || i
 const { chromium } = runtimeRequire('playwright');
 const source = readFileSync('src/features/signatures/signature-pad.tsx','utf8');
 const html = source.match(/export const SIGNATURE_PAD_HTML = `([\s\S]*?)`;/)[1];
+const repository = readFileSync('src/features/signatures/signature-draft-repository.ts','utf8');
+const documentScript = repository.match(/const script = `([\s\S]*?)`;/)[1];
+const documentStyle = repository.match(/const styles = `([\s\S]*?)`;/)[1];
 const browser = await chromium.launch({channel:'msedge',headless:true});
 try {
   const context = await browser.newContext({viewport:{width:600,height:300},offline:true});
@@ -30,5 +33,38 @@ try {
   await page.evaluate(()=>{window.clearSignature();window.exportSignature();});
   assert.equal(await page.evaluate(()=>window.messages.at(-1).type),'error');
   assert.deepEqual(requests,[]);
-  console.log('Canvas: blank rejection, drawing, stable resize, PNG export, clear, and offline checks passed.');
+  // Exercise the actual document-canvas script too, including interruption
+  // while drawing and controls outside the canvas. This is not a native UI test.
+  for (const role of ['customer','preparer']) {
+    const bridge = `<script>window.messages=[];window.outsideClicks=0;window.ReactNativeWebView={postMessage:m=>window.messages.push(JSON.parse(m))};</script>`;
+    await page.setContent(`<!DOCTYPE html><html><head>${bridge}${documentStyle}</head><body>
+      <div class="signature-input" style="width:400px"><canvas id="signature-canvas"></canvas></div>
+      <div class="signature-name" data-signature-name-slot="${role}">Test</div>
+      <button id="outside" onclick="window.outsideClicks=(window.outsideClicks||0)+1">Outside canvas</button>
+      ${documentScript.replaceAll('${role}',role)}</body></html>`);
+    const canvas = page.locator('#signature-canvas');
+    const box = await canvas.boundingBox();
+    for (const interruption of ['lift','clear','export','blur','lostcapture']) {
+      await page.mouse.move(box.x+30,box.y+50);await page.mouse.down();
+      await page.mouse.move(box.x+150,box.y+90,{steps:5});
+      assert.equal(await canvas.evaluate(c => c.hasPointerCapture(1)),true);
+      if (interruption === 'clear') await page.evaluate(()=>window.clearSignature());
+      if (interruption === 'export') await page.evaluate(()=>window.exportSignature());
+      if (interruption === 'blur') await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+      if (interruption === 'lostcapture') await canvas.evaluate(c=>c.releasePointerCapture(1));
+      await page.mouse.up();
+      assert.equal(await canvas.evaluate(c => c.hasPointerCapture(1)),false);
+      await page.locator('#outside').click();
+      // A new stroke and export must work without reopening the document.
+      const count = await page.evaluate(()=>window.messages.filter(m=>m.type==='changed'&&m.hasInk).length);
+      await page.mouse.move(box.x+50,box.y+60);await page.mouse.down();
+      await page.mouse.move(box.x+200,box.y+80,{steps:4});await page.mouse.up();
+      assert.equal(await page.evaluate(()=>window.messages.filter(m=>m.type==='changed'&&m.hasInk).length),count+1);
+      await page.evaluate(()=>window.exportSignature());
+      assert.ok(await page.evaluate(()=>window.messages.at(-1).data.startsWith('data:image/png;base64,')));
+    }
+    assert.equal(await page.evaluate(()=>window.outsideClicks),5);
+  }
+  assert.deepEqual(requests,[]);
+  console.log('Canvas: drawing, stable resize, PNG export, redraw, interrupted-pointer recovery, repeated outside controls, both document roles, and offline checks passed.');
 } finally {await browser.close();}

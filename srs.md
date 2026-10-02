@@ -214,6 +214,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-13.8:** Original and returned files are preserved; the app makes no cryptographic verification claim.
 - **FR-13.9:** In-person customer and preparer marks shall appear in larger, line-free signature blocks above their names in the document body and shall not force a dedicated acknowledgment page. The signature block may naturally overflow only when earlier content leaves insufficient space on the current page.
 - **FR-13.10:** Finalize Signature shall expose an explicit, tappable confirmation for both CSR and Billing Statement previews. Button labels shall not intercept touch for text selection. Successful signature persistence shall be visible without waiting for derived PDF generation; failures shall display an error and allow retry. Retrying an already committed signature finalization shall return the existing signed version without additional captures or business effects.
+- **FR-13.11:** Drawing either signature role shall leave redraw/save and navigation controls responsive without an app restart. The document signing canvas shall own its scrolling without toggling an ancestor native ScrollView during touches. Signature pointer capture shall be released on stroke end/cancel, lost capture, interruption, redraw, and export; signature content shall survive an interrupted stroke until explicitly redrawn.
 
 ### 4.14 PDF and sharing
 

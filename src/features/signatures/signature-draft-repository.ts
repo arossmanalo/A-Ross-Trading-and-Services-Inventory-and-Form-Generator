@@ -103,10 +103,13 @@ function setup(){canvas.width=1200;canvas.height=480;ctx.fillStyle='#fff';ctx.fi
 function point(e){const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
 canvas.addEventListener('pointerdown',e=>{if(active)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);active={id:e.pointerId,points:[point(e)]};strokes.push(active.points);box.classList.add('has-ink');setup();send({type:'changed',hasInk:true});});
 canvas.addEventListener('pointermove',e=>{if(!active||e.pointerId!==active.id)return;e.preventDefault();active.points.push(point(e));setup();});
-function end(e){if(active&&active.id===e.pointerId)active=null;}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
-window.clearSignature=()=>{strokes=[];active=null;box.classList.remove('has-ink');setup();send({type:'changed',hasInk:false});};
+function release(){if(!active)return;const id=active.id;active=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);}
+function end(e){if(active&&active.id===e.pointerId)release();}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
+window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);window.addEventListener('blur',release);window.addEventListener('pagehide',release);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});window.cancelSignatureInteraction=release;
+window.clearSignature=()=>{release();strokes=[];box.classList.remove('has-ink');setup();send({type:'changed',hasInk:false});};
 window.updateSignerName=(value)=>{const slot=document.querySelector('.signature-name[data-signature-name-slot="${role}"]');if(slot)slot.textContent=value;};
-window.exportSignature=()=>{if(!strokes.length){send({type:'error',message:'Draw your signature in the document’s signature area first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};setup();send({type:'ready'});
+window.exportSignature=()=>{release();if(!strokes.length){send({type:'error',message:'Draw your signature in the document’s signature area first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};setup();send({type:'ready'});
 })();
 </script>`;
   return {

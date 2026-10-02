@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ActionButton } from '@/components/action-button';
 
@@ -13,28 +13,32 @@ function redraw(){canvas.width=900;canvas.height=450;paint(ctx,900,450);}
 function point(e){var r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
 canvas.addEventListener('pointerdown',function(e){if(active)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);active={id:e.pointerId,points:[point(e)]};strokes.push(active.points);redraw();send({type:'changed',hasInk:true});});
 canvas.addEventListener('pointermove',function(e){if(!active||e.pointerId!==active.id)return;e.preventDefault();active.points.push(point(e));redraw();});
-function end(e){if(active&&active.id===e.pointerId)active=null;}
-canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
-window.clearSignature=function(){strokes=[];active=null;redraw();send({type:'changed',hasInk:false});};
-window.exportSignature=function(){if(!strokes.length){send({type:'error',message:'Draw a signature first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};redraw();
+function release(){if(!active)return;var id=active.id;active=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);}
+function end(e){if(active&&active.id===e.pointerId)release();}
+canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
+window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);window.addEventListener('blur',release);window.addEventListener('pagehide',release);
+document.addEventListener('visibilitychange',function(){if(document.hidden)release();});
+window.cancelSignatureInteraction=release;
+window.clearSignature=function(){release();strokes=[];redraw();send({type:'changed',hasInk:false});};
+window.exportSignature=function(){release();if(!strokes.length){send({type:'error',message:'Draw a signature first.'});return;}send({type:'signature',data:canvas.toDataURL('image/png')});};redraw();
 </script></body></html>`;
 
-export function SignaturePad({ disabled, onCapture, onInteractionStart, onInteractionEnd, saveLabel = 'Save this signature' }: { disabled: boolean; onCapture: (data: string) => void; onInteractionStart?: () => void; onInteractionEnd?: () => void; saveLabel?: string }) {
-  const { width, height } = useWindowDimensions();
-  const padHeight = Math.min(width >= 600 ? 340 : 280, Math.max(220, Math.round(height * 0.43)));
+const PAD_SOURCE = { html: SIGNATURE_PAD_HTML };
+
+export function SignaturePad({ disabled, onCapture, saveLabel = 'Save this signature' }: { disabled: boolean; onCapture: (data: string) => void; saveLabel?: string }) {
   const webview = useRef<WebView>(null);
   const [hasInk, setHasInk] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  return <View style={{gap:12}}>
+  useEffect(() => {
+    if (disabled) webview.current?.injectJavaScript('window.cancelSignatureInteraction?.();true;');
+  }, [disabled]);
+  return <View style={{flex:1,gap:12}}>
     <Text>Draw inside the white box. Use Redraw signature to start again before saving.</Text>
     <View
       pointerEvents={disabled ? 'none' : 'auto'}
-      onTouchStart={onInteractionStart}
-      onTouchEnd={onInteractionEnd}
-      onTouchCancel={onInteractionEnd}
-      style={{height:padHeight,width:'100%',borderWidth:1,borderColor:'#64748b',backgroundColor:'#fff'}}
+      style={{flex:1,minHeight:140,width:'100%',borderWidth:1,borderColor:'#64748b',backgroundColor:'#fff'}}
     >
-      <WebView ref={webview} source={{html:SIGNATURE_PAD_HTML}} originWhitelist={['*']}
+      <WebView ref={webview} source={PAD_SOURCE} originWhitelist={['*']}
         onShouldStartLoadWithRequest={request => request.url === 'about:blank'}
         javaScriptEnabled domStorageEnabled={false} allowFileAccess={false}
         allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}

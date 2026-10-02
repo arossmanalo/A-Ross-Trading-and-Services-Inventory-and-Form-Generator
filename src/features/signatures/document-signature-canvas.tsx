@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { ActionButton } from '@/components/action-button';
 
@@ -8,23 +8,21 @@ export function DocumentSignatureCanvas({
   signerName,
   disabled,
   onCapture,
-  onInteractionStart,
-  onInteractionEnd,
 }: {
   html: string;
   signerName: string;
   disabled: boolean;
   onCapture: (data: string) => void;
-  onInteractionStart?: () => void;
-  onInteractionEnd?: () => void;
 }) {
-  const { height } = useWindowDimensions();
   const webview = useRef<WebView>(null);
+  const source = useMemo(() => ({ html }), [html]);
   const webviewLoaded = useRef(false);
   const signerNameRef = useRef(signerName);
   const [hasInk, setHasInk] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const previewHeight = Math.min(760, Math.max(480, Math.round(height * 0.68)));
+  useEffect(() => {
+    if (disabled) webview.current?.injectJavaScript('window.cancelSignatureInteraction?.();true;');
+  }, [disabled]);
 
   useEffect(() => {
     signerNameRef.current = signerName;
@@ -44,17 +42,15 @@ export function DocumentSignatureCanvas({
     }
   };
 
-  return <View style={{ gap: 12 }}>
+  return <View style={{ flex: 1, gap: 12 }}>
     <Text selectable>Draw directly in the signature box on the document. Scroll the document to reach it; use Redraw signature to clear your mark.</Text>
     <View
-      onTouchStart={onInteractionStart}
-      onTouchEnd={onInteractionEnd}
-      onTouchCancel={onInteractionEnd}
-      style={{ height: previewHeight, overflow: 'hidden', borderWidth: 1, borderColor: '#64748b', backgroundColor: '#fff' }}
+      pointerEvents={disabled ? 'none' : 'auto'}
+      style={{ flex: 1, minHeight: 140, overflow: 'hidden', borderWidth: 1, borderColor: '#64748b', backgroundColor: '#fff' }}
     >
       <WebView
         ref={webview}
-        source={{ html }}
+        source={source}
         originWhitelist={['*']}
         javaScriptEnabled
         domStorageEnabled={false}
@@ -64,7 +60,7 @@ export function DocumentSignatureCanvas({
         mixedContentMode="never"
         setSupportMultipleWindows={false}
         scrollEnabled
-        nestedScrollEnabled
+        nestedScrollEnabled={false}
         setBuiltInZoomControls
         setDisplayZoomControls={false}
         onError={() => setError('The document preview could not load. Reopen this screen to retry.')}
