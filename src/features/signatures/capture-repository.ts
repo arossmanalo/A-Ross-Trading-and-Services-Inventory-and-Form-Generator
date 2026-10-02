@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
+import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
 
@@ -47,7 +48,7 @@ export async function getSignatureCapturePreview(
     ownerType: capture.owner_type,
     ownerId: capture.owner_id,
     number: row.number,
-    html: applySignatureCapturesToDocument(capture.render_template_snapshot, []),
+    html: withDocumentHeaderLayout(applySignatureCapturesToDocument(capture.render_template_snapshot, [])),
   };
 }
 

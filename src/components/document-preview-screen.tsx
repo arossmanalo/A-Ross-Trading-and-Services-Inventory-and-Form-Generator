@@ -7,7 +7,8 @@ import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Button,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +20,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { ActionButton } from '@/components/action-button';
 import { getBillingStatementPreview } from '@/features/billing-statements/billing-statement-pdf';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
+import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
 import { finalizeSignatureDrafts, getSignatureDraftPreview } from '@/features/signatures/signature-draft-repository';
@@ -56,6 +58,8 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [finalizedCaptureId, setFinalizedCaptureId] = useState<string | null>(null);
+  const [confirmSignature, setConfirmSignature] = useState(false);
+  const finalizing = useRef(false);
   const activeCaptureId = finalizedCaptureId ?? signedCaptureId;
   const reviewingSignature = signatureDraft && !finalizedCaptureId;
   const ownerType: SignableOwnerType = kind === 'csr' ? 'service_report' : 'billing_statement';
@@ -83,7 +87,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
           isDraft: value.isDraft,
         }));
     void load
-      .then((value) => { if (active) setPreview(value); })
+      .then((value) => { if (active) setPreview({ ...value, html: withDocumentHeaderLayout(value.html) }); })
       .catch((loadError: unknown) => {
         if (active) setError(loadError instanceof Error ? loadError.message : 'Could not load this document preview.');
       });
@@ -91,21 +95,25 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
   }, [db, documentId, kind, activeCaptureId, reviewingSignature, ownerType]);
 
   const finalizeSignature = useCallback(async () => {
+    if (finalizing.current) return;
+    finalizing.current = true;
+    setConfirmSignature(false);
     setBusy(true);
     setError(null);
     setNotice('');
     try {
       const captureId = await finalizeSignatureDrafts(db, ownerType, documentId);
       setFinalizedCaptureId(captureId);
-      try {
-        await renderSignaturePdf(db, captureId);
-        setNotice(`Signature finalized. The signed version now appears in the ${kind === 'csr' ? 'CSR' : 'Billing Statement'} PDF preview.`);
-      } catch (renderError) {
+      setNotice(`Signature finalized. The signed version now appears in the ${kind === 'csr' ? 'CSR' : 'Billing Statement'} PDF preview.`);
+      // File generation is a retryable derived operation, not signature finalization.
+      // Do not leave the finalization button busy while Android Print is working.
+      void renderSignaturePdf(db, captureId).catch((renderError: unknown) => {
         setError(`Signature finalized, but its PDF file could not be generated yet: ${renderError instanceof Error ? renderError.message : 'Unknown error'}. The in-app signed preview is still available.`);
-      }
+      });
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not finalize the signature.');
     } finally {
+      finalizing.current = false;
       setBusy(false);
     }
   }, [db, documentId, kind, ownerType]);
@@ -210,13 +218,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
             <ActionButton disabled={busy} onPress={() => void openPdfPreview()}>
               {busy ? 'Preparing…' : 'Open PDF preview'}
             </ActionButton>
-            {reviewingSignature ? <ActionButton disabled={busy} onPress={() => Alert.alert(
-              'Finalize signature?',
-              'After finalizing, this customer or preparer signature cannot be redrawn for this document.',
-              [{ text: 'Keep editing', style: 'cancel' }, { text: 'Finalize signature', onPress: () => void finalizeSignature() }],
-            )}>
-              {busy ? 'Finalizing…' : 'Finalize signature'}
-            </ActionButton> : <View style={styles.secondaryActions}>
+            {reviewingSignature ? <Button title={busy ? 'Finalizing…' : 'Finalize signature'} color={colors.brandBlue} disabled={busy} onPress={() => setConfirmSignature(true)} /> : <View style={styles.secondaryActions}>
               <ActionButton compact disabled={busy} variant="secondary" onPress={() => void sharePdf()}>
                 Save / share PDF
               </ActionButton>
@@ -259,6 +261,16 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
           {error ? <Text selectable style={styles.error}>{error}</Text> : <ActivityIndicator color={colors.brandBlue} size="large" />}
         </View>
       )}
+      <Modal visible={confirmSignature} transparent animationType="fade" onRequestClose={() => setConfirmSignature(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.confirmation} accessibilityViewIsModal>
+            <Text style={styles.confirmationTitle}>Finalize signature?</Text>
+            <Text>After finalizing, these signatures cannot be redrawn for this document. Its regular PDF preview will show the signed version.</Text>
+            <Button title="Confirm finalization" color={colors.brandBlue} disabled={busy} onPress={() => void finalizeSignature()} />
+            <Button title="Keep editing" color={colors.secondaryLabel} disabled={busy} onPress={() => setConfirmSignature(false)} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -275,4 +287,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   error: { color: colors.error, fontSize: 13, lineHeight: 19, paddingHorizontal: 14, paddingBottom: 8 },
   notice: { color: colors.success, fontSize: 12, lineHeight: 17, paddingHorizontal: 14, paddingBottom: 8 },
+  modalBackdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.5)' },
+  confirmation: { alignSelf: 'center', width: '100%', maxWidth: 480, padding: 22, gap: 18, borderRadius: 18, backgroundColor: colors.background },
+  confirmationTitle: { fontSize: 20, fontWeight: '700', color: colors.label },
 });

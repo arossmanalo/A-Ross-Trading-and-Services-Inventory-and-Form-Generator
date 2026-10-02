@@ -124,6 +124,24 @@ describe('signature persistence and recovery',() => {
     expect(raw.prepare("SELECT render_template_snapshot FROM service_reports WHERE id='csr'").get()).toEqual({render_template_snapshot:ORIGINAL});
   });
 
+  it.each(['service_report','billing_statement'] as const)('makes %s signature finalization retry-safe without new captures or revisions',async(ownerType)=>{
+    raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now')");
+    raw.prepare("INSERT INTO service_reports(id,csr_number,customer_id,equipment_id,business_date,document_state,render_template_snapshot,created_at) VALUES('csr','CSR-000001','customer','equipment','2026-09-05','finalized',?,'now')").run(ORIGINAL);
+    const ownerId = ownerType === 'service_report' ? 'csr' : 'statement';
+    await saveSignatureDraft(db,{ownerType,ownerId,role:'customer',signerName:'Customer',pngDataUrl:PNG});
+    await saveSignatureDraft(db,{ownerType,ownerId,role:'preparer',signerName:'Owner',pngDataUrl:PNG});
+    const captureId = await finalizeSignatureDrafts(db,ownerType,ownerId);
+    const revision = raw.prepare("SELECT value FROM app_meta WHERE key='database_revision'").get();
+    expect(await finalizeSignatureDrafts(db,ownerType,ownerId)).toBe(captureId);
+    expect(await listSignatureCaptures(db,ownerType,ownerId)).toHaveLength(2);
+    expect(raw.prepare("SELECT value FROM app_meta WHERE key='database_revision'").get()).toEqual(revision);
+    expect(await listSignatureDrafts(db,ownerType,ownerId)).toHaveLength(0);
+  });
+
+  it('still rejects finalization when no signature was ever drawn',async()=>{
+    await expect(finalizeSignatureDrafts(db,'billing_statement','statement')).rejects.toThrow(/Draw a signature/);
+  });
+
   it('shows finalized customer and preparer signatures in the ordinary Billing Statement preview, but not draft signatures',async()=>{
     await saveSignatureDraft(db,{ownerType:'billing_statement',ownerId:'statement',role:'customer',signerName:'Signed Customer',pngDataUrl:PNG});
     await saveSignatureDraft(db,{ownerType:'billing_statement',ownerId:'statement',role:'preparer',signerName:'Signed Owner',pngDataUrl:PNG});
@@ -225,7 +243,7 @@ describe('signature persistence and recovery',() => {
 
     const path=await renderSignaturePdf(db,'legacy-capture');
     const renderedHtml=printer.mock.calls[0]?.[0]?.html as string;
-    expect(path).toContain('inline-v2');
+    expect(path).toContain('inline-v3');
     expect(renderedHtml).toContain('data-signature-image-slot="customer"><img class="signature-image"');
     expect(renderedHtml).toContain('signature-layout-inline-v2');
     expect(renderedHtml).not.toContain('<div class="signature-line"></div>');

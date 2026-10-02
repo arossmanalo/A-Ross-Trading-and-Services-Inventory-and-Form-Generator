@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
+import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { listSignatureCaptures, type SignatureCapture } from '@/features/signatures/capture-repository';
 import { applySignatureCapturesToDocument, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
@@ -63,7 +64,7 @@ function asBlock(mark: Pick<SignatureDraft, 'role' | 'signer_name' | 'png_data_u
 function signedHtml(original: string, captures: SignatureCapture[], drafts: SignatureDraft[]): string {
   const latestByRole = new Map<SignatureCapture['role'], SignatureCapture>();
   for (const capture of captures) if (!latestByRole.has(capture.role)) latestByRole.set(capture.role, capture);
-  return applySignatureCapturesToDocument(original, [
+  return applySignatureCapturesToDocument(withDocumentHeaderLayout(original), [
     ...[...latestByRole.values()].map(asBlock),
     ...drafts.map(asBlock),
   ]);
@@ -121,8 +122,12 @@ export async function finalizeSignatureDrafts(db: SQLiteDatabase, ownerType: Sig
     const owner = await tx.getFirstAsync<OwnerSnapshot>(ownerSql(ownerType), ownerId);
     if (!owner?.number || !owner.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
     const drafts = await listSignatureDrafts(tx, ownerType, ownerId);
-    if (!drafts.length) throw new Error('Draw a signature before finalizing it.');
     const captures = await listSignatureCaptures(tx, ownerType, ownerId);
+    if (!drafts.length) {
+      // A retry after a committed finalization returns the same signed version.
+      if (captures[0]) { latestId = captures[0].id; return; }
+      throw new Error('Draw a signature before finalizing it.');
+    }
     if (drafts.some(draft => captures.some(capture => capture.role === draft.role))) throw new Error('A signature for this role was already finalized.');
     const html = signedHtml(owner.render_template_snapshot, captures, drafts);
     const now = new Date().toISOString();

@@ -34,8 +34,17 @@ Use a test customer/equipment and test catalog records; do not experiment on liv
 8. Open **Sign Billing Statement**, draw the customer signature on the document and save the signature draft. Redraw it once. Before **Finalize signature**, normal document preview must not show that draft signature. Review and finalize it, return to the statement, then open its ordinary preview: the finalized signature must appear inside the document. Repeat for preparer and verify both marks are visible.
 9. On an existing affected linked draft, follow the review message: remove any separate duplicate charge; if a charge is not yet on the CSR, re-add it through the shared flow. Recheck quantities/totals before finalizing.
 
+## Signature button / historical header follow-up
+
+- Removed text selection/touch handling from shared button labels. Signature review now uses a native button and an explicit confirmation modal, a same-frame submission guard, and visible success/error states. Derived PDF generation runs separately after the signatures commit.
+- Signature finalization retries return the existing capture without extra writes; a document with no drawing still cannot finalize a signature.
+- Shared header columns scale to available preview width. Known old Billing Statement headers are normalized in previews and derived signed exports using their frozen logo/name/address/contacts. Current Settings are never substituted into historical documents.
+- Automated checks: TypeScript passed; 117 tests across 25 files passed, including component event wiring for CSR and Billing Statement confirmation, error/retry, slow/failed print generation, and signature idempotency. These event tests mock native controls; they are not proof of tablet touch behavior. Desktop print checks passed for new/shared and older headers at 360px/800px; all seven fixture PDF pages were visually inspected with no clipped or overlapping header/signature content.
+- Recheck on the tablet: open Sign Document, save a signature draft, choose Preview and finalize signature, tap Finalize signature, then Confirm finalization. The signed state and ordinary document preview must update. Test both CSR and Billing Statement, and repeat with a second role. Double-tap confirmation must not create duplicate captures.
+- Compare a newly created Billing Statement and an older finalized statement in the in-app preview with the CSR header; verify logo left, identity right, no overlap, separate phone lines and email last. Saved original files remain available unchanged.
+
 ## Historical records
 
-No existing finalized record or inventory ledger is rewritten automatically. An already-issued empty CSR or duplicate stock movement requires review of that device's actual records and an explicit void/reversal correction, with any active payments handled first. Header changes apply to newly rendered drafts and newly finalized documents, not previously frozen originals.
+No existing finalized record or inventory ledger is rewritten automatically. An already-issued empty CSR or duplicate stock movement requires review of that device's actual records and an explicit void/reversal correction, with any active payments handled first. Header layout repair applies to previews/derived signed copies, not previously frozen originals.
 
 Android touch/printing/signing acceptance and any historical-data corrections are still owner/device verification tasks. This change does not publish an Expo update by itself.

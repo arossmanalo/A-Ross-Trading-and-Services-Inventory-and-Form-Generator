@@ -20,7 +20,7 @@ describe('billing statement template', () => {
     const business = {...fixture.business, name:'Owner & Company', logoDataUrl:'data:image/png;base64,CUSTOM',contactDetails:'owner@example.com\n0917 123 4567\n0920 123 4567'};
     const billing=buildBillingStatementHtml({...fixture,business});
     const csr=buildCsrHtml({business,csrNumber:'CSR-1',businessDate:fixture.businessDate,fingerprint:'TEST',customer:fixture.customer,equipment:{machineType:'Washer',model:'',serialNumber:'',nicknameOrLocation:''},serviceOutcome:'completed',reportedProblem:[],diagnosis:[],actionTaken:[],recommendations:[],billing:[],customerRemarks:[],machineStatus:'',warrantyText:'',servicedBy:'',acknowledgedBy:'',totalBillCentavos:0,usages:[]});
-    expect(billing.match(/<header class="header">[\s\S]*?<\/header>/)?.[0]).toBe(csr.match(/<header class="header">[\s\S]*?<\/header>/)?.[0]);
+    expect(billing.match(/<header class="header aross-header">[\s\S]*?<\/header>/)?.[0]).toBe(csr.match(/<header class="header aross-header">[\s\S]*?<\/header>/)?.[0]);
     expect(billing).toContain(DOCUMENT_HEADER_CSS);
     expect(csr).toContain(DOCUMENT_HEADER_CSS);
     expect(billing).toContain('0917 123 4567\n0920 123 4567\nowner@example.com');

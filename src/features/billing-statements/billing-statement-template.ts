@@ -1,7 +1,7 @@
 import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const BILLING_STATEMENT_TEMPLATE_VERSION = 'billing-a4-v5';
+export const BILLING_STATEMENT_TEMPLATE_VERSION = 'billing-a4-v6';
 
 export type BillingStatementRenderSnapshot = {
   preparerSignatureHtml?: string;

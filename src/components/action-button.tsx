@@ -40,7 +40,7 @@ export function ActionButton({
         style,
       ]}
     >
-      <Text selectable style={[styles.label, compact ? styles.compactLabel : null, { color: palette.color }]}>
+      <Text pointerEvents="none" style={[styles.label, compact ? styles.compactLabel : null, { color: palette.color }]}>
         {children}
       </Text>
     </Pressable>

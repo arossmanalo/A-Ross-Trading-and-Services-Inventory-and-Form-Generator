@@ -28,6 +28,7 @@ function loadTemplate(path) {
 const { buildCsrHtml } = loadTemplate('src/features/service-reports/csr-template.ts');
 const { buildBillingStatementHtml } = loadTemplate('src/features/billing-statements/billing-statement-template.ts');
 const { signatureBlock, applySignatureCapturesToDocument } = loadTemplate('src/features/signatures/signature-html.ts');
+const { withDocumentHeaderLayout } = loadTemplate('src/features/documents/document-header.ts');
 const business = { name: 'A Ross Trading And Services', address: 'Pagasa Street\nPahinga Norte\nCandelaria, Quezon', contactDetails: 'owner@example.com\n0917 5794065\n0920 2970054' };
 const customer = { name: 'QA Laundry - synthetic fixture', address: 'Quezon' };
 const csr = { csrNumber: 'CSR-QA', businessDate: '2026-10-02', fingerprint: 'QA-ONLY', business, customer,
@@ -58,7 +59,7 @@ try {
   ];
   for (const [name, original] of fixtures) {
     const page = await browser.newPage({ viewport: { width: name.startsWith('csr') ? 750 : 680, height: 1000 } });
-    await page.setContent(applySignatureCapturesToDocument(original, marks));
+    await page.setContent(withDocumentHeaderLayout(applySignatureCapturesToDocument(original, marks)));
     await page.locator('.header img').evaluate(img => img.decode());
     const header = await page.locator('.header').boundingBox();
     const logo = await page.locator('.mark').boundingBox();
@@ -69,5 +70,22 @@ try {
     await page.pdf({ path: `tmp/pdfs/${name}-signed.pdf`, preferCSSPageSize: true, printBackground: true });
     await page.close();
   }
-  console.log('Print QA passed: shared headers, contacts, inline signatures; four PDFs generated for visual inspection.');
+  // Exercise narrow WebView layout and historical Billing Statement markup too.
+  const current = buildBillingStatementHtml(billing);
+  const legacyHeader = '<header class="header"><div class="mark"><img src="' + loadTemplate('src/features/settings/default-business-logo.ts').DEFAULT_BUSINESS_LOGO_DATA_URL + '" style="width:100%;height:100%;object-fit:contain"/></div><div class="business"><div class="business-name">Saved Company</div><div class="muted">Saved address\nowner@example.com\n0917\n0920</div></div></header>';
+  const legacy = current.replace(/<header[\s\S]*?<\/header>/, legacyHeader).replace('</head>', '<style>.business{width:250px}.mark{width:92px;height:54px}</style></head>');
+  for (const [name, html] of [['billing',current],['csr',buildCsrHtml(csr)],['legacy-billing',legacy]]) {
+    for (const width of [360,800]) {
+      const page = await browser.newPage({viewport:{width,height:1000}});
+      await page.setContent(withDocumentHeaderLayout(html));
+      await page.locator('.header img').evaluate(img => img.decode());
+      const mark = await page.locator('.mark').boundingBox();
+      const businessBox = await page.locator('.business-block').boundingBox();
+      assert.ok(mark && businessBox && mark.x + mark.width <= businessBox.x && businessBox.x + businessBox.width <= width);
+      if (name === 'legacy-billing') assert.equal(await page.locator('.contact').innerText(),'Saved address\n0917\n0920\nowner@example.com');
+      await page.screenshot({path:`tmp/pdfs/${name}-${width}-preview.png`,fullPage:true});
+      await page.close();
+    }
+  }
+  console.log('Print QA passed: shared/legacy headers at phone/tablet widths, contacts, inline signatures; four PDFs generated for visual inspection.');
 } finally { await browser.close(); }

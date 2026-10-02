@@ -1,7 +1,7 @@
 import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v5';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v6';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;

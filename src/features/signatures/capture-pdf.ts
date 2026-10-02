@@ -3,11 +3,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
+import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import type { SignatureCapture } from '@/features/signatures/capture-repository';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
 const pendingRenders = new Map<string, Promise<string>>();
-const SIGNED_PDF_LAYOUT_VERSION = 'inline-v2';
+const SIGNED_PDF_LAYOUT_VERSION = 'inline-v3';
 export function renderSignaturePdf(db: SQLiteDatabase, captureId: string): Promise<string> {
   const pending = pendingRenders.get(captureId);
   if (pending) return pending;
@@ -25,7 +26,7 @@ async function render(db: SQLiteDatabase, captureId: string): Promise<string> {
   let cacheUri: string | undefined;
   const destination = `${directory}${capture.deterministic_filename}`;
   try {
-    const html = applySignatureCapturesToDocument(capture.render_template_snapshot,[]);
+    const html = withDocumentHeaderLayout(applySignatureCapturesToDocument(capture.render_template_snapshot,[]));
     const pdf = await Print.printToFileAsync({html,width:capture.owner_type === 'service_report' ? 612 : 595,height:capture.owner_type === 'service_report' ? 1008 : 842,base64:true,textZoom:100});
     cacheUri = pdf.uri;
     if (!pdf.base64) throw new Error('PDF checksum source was not returned.');
