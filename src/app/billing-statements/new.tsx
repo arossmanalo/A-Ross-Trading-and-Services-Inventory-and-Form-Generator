@@ -89,7 +89,7 @@ export default function NewBillingStatementScreen() {
                 key={csr.id}
                 label={csr.documentState === 'draft'
                   ? `Draft CSR · ${csr.businessDate} · ${csr.availableLineCount} item/service charge(s) will be included`
-                  : `${csr.csrNumber} · ${csr.businessDate} · ${csr.availableLineCount} unbilled item(s)`}
+                  : `${csr.csrNumber} · ${csr.businessDate} · ${csr.availableLineCount} unbilled item/service charge(s) will be included`}
                 selected={csr.id === csrId}
                 onPress={() => setCsrId(csr.id)}
               />

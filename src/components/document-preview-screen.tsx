@@ -99,7 +99,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
       setFinalizedCaptureId(captureId);
       try {
         await renderSignaturePdf(db, captureId);
-        setNotice('Signature finalized. The signed version now appears in the CSR PDF preview.');
+        setNotice(`Signature finalized. The signed version now appears in the ${kind === 'csr' ? 'CSR' : 'Billing Statement'} PDF preview.`);
       } catch (renderError) {
         setError(`Signature finalized, but its PDF file could not be generated yet: ${renderError instanceof Error ? renderError.message : 'Unknown error'}. The in-app signed preview is still available.`);
       }
@@ -108,7 +108,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     } finally {
       setBusy(false);
     }
-  }, [db, documentId, ownerType]);
+  }, [db, documentId, kind, ownerType]);
 
   const onDocumentMessage = useCallback((event: WebViewMessageEvent) => {
     const height = Number(event.nativeEvent.data);

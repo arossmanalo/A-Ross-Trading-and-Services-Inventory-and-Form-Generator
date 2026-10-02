@@ -139,8 +139,8 @@ Resolution order is one-time override, then customer price, then base selling pr
 
 ### Billing Statement
 
-1. Select a registered customer and optionally one finalized CSR or CSR draft. Linking a CSR draft automatically includes its eligible billable item usages and service usages in the statement draft.
-2. Add eligible finalized CSR item lines and/or direct inventory items. A Billing Statement linked to a CSR draft cannot be finalized until that CSR is finalized; CSR source lines remain tied to their CSR prices and do not post stock a second time.
+1. Select a registered customer and optionally one finalized CSR or CSR draft. Linking either automatically includes its eligible, not-already-billed item and service usages in the statement draft. Finalized CSR charges retain their frozen rates; only draft CSR charges remain editable.
+2. Add eligible finalized CSR item lines and/or direct inventory items. When linked to a CSR draft, item/service additions from either screen are saved as CSR usages and synchronized atomically to the statement; duplicate catalog entries are rejected rather than charged/deducted twice. The CSR remains the source of quantities, rates, and total. Legacy billing-only draft item/service charges must be removed and re-added through this shared flow before CSR finalization; already-imported charges need only their duplicate removed. A Billing Statement linked to a CSR draft cannot be finalized until that CSR is finalized; CSR source lines remain tied to their CSR prices and do not post stock a second time.
 3. Add services at quantity one with owner-customizable rates.
 4. Add expenses with actual cost, billable flag, and billed amount if billable.
 5. Apply an optional fixed or percentage discount to the combined charge subtotal.
@@ -174,7 +174,7 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - PDFs use bundled assets/fonts and work offline.
 - CSR output uses portrait Legal size (8.5 × 14 inches) to match the supplied PDF. The blank second source page is a scan artifact and is not reproduced.
 - Billing Statement and PA output use portrait A4. All document types support overflow pages, repeated applicable headings, unsplit rows where practical, and grouped totals/signatures.
-- The CSR follows the sample's centered logo/business header, ruled section layout, status choices, total box, and opposing bottom signature blocks.
+- CSR and Billing Statement share the same logo-left/business-identity-right header, with owner-configured address and one contact per line (emails last). The CSR retains the ruled section layout, status choices, total box, and opposing bottom signature blocks.
 - The Billing Statement follows the sample's logo-left/business-block-right header, client/details split, four-column charge table, right-aligned totals, and bottom-left disclaimer, extended with discounts, payments/balance, signatures, services, and expenses required by this specification.
 - Frozen data and a retained render-template snapshot protect historical content even after settings, catalogs, or app templates change.
 - CSR and Billing Statement draft previews use current saved data and visibly say `DRAFT — UNNUMBERED`; opening or exporting these PDFs does not finalize, number, deduct stock, create a payment, or alter revision history.
@@ -183,7 +183,7 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - In-person signatures are drawn on-device.
 - Each finalized CSR or Billing Statement accepts at most one finalized customer and one finalized preparer in-person signature. Drawn signatures are first saved as drafts that can be redrawn and reviewed; the owner explicitly finalizes them together from the signed preview. Repeated same-role finalization is blocked; legacy duplicates remain in history, while only the latest finalized capture for each role is used in the signed version.
 - Captured customer and preparer signatures are rendered in larger, line-free signature blocks above their names in the document body; they do not force a separate acknowledgment page. Normal pagination may move the signature area only when preceding content leaves insufficient page space.
-- The finalized document screen reflects its signature status and provides access to a previewable signed copy. Once in-person signatures are finalized, the ordinary CSR PDF preview shows the signed copy by default. Signed copies and externally returned PDFs are linked to the document without rewriting its original finalized PDF or content snapshot.
+- The finalized document screen reflects its signature status and provides access to a previewable signed copy. Once in-person signatures are finalized, the ordinary CSR and Billing Statement PDF previews show their signed copies by default. Signed copies and externally returned PDFs are linked to the document without rewriting its original finalized PDF or content snapshot.
 - Once any signed capture or returned signed PDF exists, its signed status cannot be manually changed back to an unsigned status.
 - For remote signing, the owner shares an unsigned PDF manually, the customer signs externally, and the owner imports the returned PDF.
 - Signature state may be not required, pending, signed in person, signed attachment received, declined, or no response.

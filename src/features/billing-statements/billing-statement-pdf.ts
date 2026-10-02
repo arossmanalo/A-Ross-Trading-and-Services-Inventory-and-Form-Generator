@@ -7,7 +7,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { finalizeBillingStatement, getBillingStatement } from '@/features/billing-statements/billing-statement-repository';
 import { getBusinessLogo } from '@/features/settings/settings-repository';
-import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
+import { getPreparerSignatureHtml, getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
 import { renderPaymentAcknowledgment } from '@/features/payments/payment-pdf';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
@@ -101,7 +101,13 @@ export async function getBillingStatementPreview(
   if (row.document_state !== 'finalized' || !row.bs_number || !row.render_template_snapshot) {
     throw new Error('Only a draft or finalized statement can be previewed.');
   }
-  return { bsNumber: row.bs_number, html: row.render_template_snapshot, isDraft: false };
+  const signed = await db.getFirstAsync<{ id: string }>(
+    `SELECT id FROM signature_captures WHERE owner_type='billing_statement' AND owner_id=?
+     ORDER BY created_at DESC,rowid DESC LIMIT 1`,
+    statementId,
+  );
+  const html = signed ? (await getSignatureCapturePreview(db, signed.id)).html : row.render_template_snapshot;
+  return { bsNumber: row.bs_number, html, isDraft: false };
 }
 
 export async function shareBillingStatementPdf(db: SQLiteDatabase, statementId: string): Promise<void> {

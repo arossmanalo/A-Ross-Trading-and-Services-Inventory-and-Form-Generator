@@ -7,9 +7,10 @@ import { allocateDocumentNumber } from '@/db/sequences';
 import { getLocalBusinessDate, validateBusinessDate } from '@/domain/business-date';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { buildCsrHtml, CSR_TEMPLATE_VERSION, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
-import { deleteLinkedBillingStatementDrafts, syncLinkedCsrDraftLines } from '@/features/billing-statements/billing-statement-repository';
+import { assertLinkedCsrChargesAreSourced, deleteLinkedBillingStatementDrafts, syncLinkedCsrDraftLines } from '@/features/billing-statements/billing-statement-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { calculateServiceReportTotal } from '@/features/service-reports/service-report-total';
+import { insertCsrItemUsage, insertCsrServiceUsage, recalculateServiceReportTotal } from '@/features/service-reports/csr-charge-repository';
 import type {
   CreateServiceReportDraftInput,
   DocumentState,
@@ -268,76 +269,11 @@ export async function updateServiceReportDraft(
   });
 }
 
-export async function addReportItemUsage(
-  db: SQLiteDatabase,
-  reportId: string,
-  itemId: string,
-  quantity: number,
-  billable: boolean,
-): Promise<string> {
-  assertPositiveIntegerQuantity(quantity);
-  const usageId = Crypto.randomUUID();
-  const now = new Date().toISOString();
-
+export async function addReportItemUsage(db: SQLiteDatabase, reportId: string, itemId: string, quantity: number, billable: boolean): Promise<string> {
+  let usageId = '';
   await db.withExclusiveTransactionAsync(async (tx) => {
-    const report = await tx.getFirstAsync<{ customer_id: string }>(
-      "SELECT customer_id FROM service_reports WHERE id = ? AND document_state = 'draft'",
-      reportId,
-    );
-    if (!report) throw new Error('Only a draft CSR can accept item usage.');
-    const item = await tx.getFirstAsync<{
-      name: string;
-      active: number;
-      base_selling_price_centavos: number;
-      customer_price_centavos: number | null;
-      current_stock: number;
-    }>(
-      `SELECT i.name, i.active, i.base_selling_price_centavos,
-              p.selling_price_centavos AS customer_price_centavos,
-              COALESCE((SELECT SUM(m.quantity_delta_integer) FROM inventory_movements m WHERE m.item_id = i.id), 0) AS current_stock
-       FROM items i
-       LEFT JOIN customer_item_prices p
-         ON p.item_id = i.id AND p.customer_id = ? AND p.effective_to IS NULL
-       WHERE i.id = ?`,
-      report.customer_id,
-      itemId,
-    );
-    if (!item || item.active !== 1) throw new Error('Select an active inventory item.');
-    if (quantity > item.current_stock) {
-      throw new Error(`Only ${item.current_stock} unit(s) are currently available.`);
-    }
-    const price = item.customer_price_centavos ?? item.base_selling_price_centavos;
-    const source = item.customer_price_centavos === null ? 'base' : 'customer';
-    try {
-      await tx.runAsync(
-        `INSERT INTO service_report_item_usage
-          (id, service_report_id, item_id, quantity_integer, billable,
-           resolved_selling_price_centavos, price_source, description_snapshot, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        usageId,
-        reportId,
-        itemId,
-        quantity,
-        billable ? 1 : 0,
-        billable ? price : null,
-        billable ? source : null,
-        item.name,
-        now,
-      );
-    } catch (error) {
-      if (String(error).includes('UNIQUE')) throw new Error('This item is already listed on the CSR.');
-      throw error;
-    }
+    usageId = await insertCsrItemUsage(tx, reportId, itemId, quantity, billable);
     await syncLinkedCsrDraftLines(tx, reportId);
-    await recalculateServiceReportTotal(tx, reportId);
-    await appendAuditEvent(tx, {
-      eventType: 'csr.item_usage_added',
-      entityType: 'service_report',
-      entityId: reportId,
-      details: { itemId, quantity, billable },
-      createdAt: now,
-    });
-    await incrementDatabaseRevision(tx);
   });
   return usageId;
 }
@@ -378,62 +314,11 @@ export async function removeReportItemUsage(
   });
 }
 
-export async function addReportServiceUsage(
-  db: SQLiteDatabase,
-  reportId: string,
-  serviceId: string,
-  overrideRateCentavos?: number,
-  overrideReason?: string,
-): Promise<string> {
-  if (overrideRateCentavos !== undefined) assertNonNegativeMoney(overrideRateCentavos, 'Service rate');
-  const reason = overrideReason?.trim() || null;
-  const usageId = Crypto.randomUUID();
-  const now = new Date().toISOString();
-
+export async function addReportServiceUsage(db: SQLiteDatabase, reportId: string, serviceId: string, overrideRateCentavos?: number, overrideReason?: string): Promise<string> {
+  let usageId = '';
   await db.withExclusiveTransactionAsync(async (tx) => {
-    const report = await tx.getFirstAsync<{ id: string }>(
-      "SELECT id FROM service_reports WHERE id = ? AND document_state = 'draft'",
-      reportId,
-    );
-    if (!report) throw new Error('Only a draft CSR can accept service usage.');
-    const service = await tx.getFirstAsync<{
-      name: string;
-      active: number;
-      base_rate_centavos: number;
-    }>('SELECT name, active, base_rate_centavos FROM services WHERE id = ?', serviceId);
-    if (!service || service.active !== 1) throw new Error('Select an active service.');
-    const rate = overrideRateCentavos ?? service.base_rate_centavos;
-    const isOverride = overrideRateCentavos !== undefined && overrideRateCentavos !== service.base_rate_centavos;
-    if (isOverride && !reason) throw new Error('A reason is required when overriding a service rate.');
-    try {
-      await tx.runAsync(
-        `INSERT INTO service_report_service_usage
-          (id, service_report_id, service_id, quantity_integer, resolved_rate_centavos,
-           rate_source, override_reason, description_snapshot, created_at)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-        usageId,
-        reportId,
-        serviceId,
-        rate,
-        isOverride ? 'override' : 'catalog',
-        isOverride ? reason : null,
-        service.name,
-        now,
-      );
-    } catch (error) {
-      if (String(error).includes('UNIQUE')) throw new Error('This service is already listed on the CSR.');
-      throw error;
-    }
+    usageId = await insertCsrServiceUsage(tx, reportId, serviceId, overrideRateCentavos, overrideReason);
     await syncLinkedCsrDraftLines(tx, reportId);
-    await recalculateServiceReportTotal(tx, reportId);
-    await appendAuditEvent(tx, {
-      eventType: 'csr.service_usage_added',
-      entityType: 'service_report',
-      entityId: reportId,
-      details: { serviceId, rateCentavos: rate, overridden: isOverride },
-      createdAt: now,
-    });
-    await incrementDatabaseRevision(tx);
   });
   return usageId;
 }
@@ -544,6 +429,7 @@ export async function finalizeServiceReport(
     if (row.document_state !== 'draft') throw new Error('Only a draft CSR can be finalized.');
     validateBusinessDate(row.business_date, row.backdate_reason ?? undefined);
 
+    await assertLinkedCsrChargesAreSourced(tx, reportId);
     let usages = await listFinalizationUsages(tx, reportId, row.customer_id);
     let services = await listFinalizationServices(tx, reportId);
     const priceChanges: string[] = [];
@@ -551,7 +437,7 @@ export async function finalizeServiceReport(
       if (usage.quantity_integer > usage.current_stock) {
         throw new Error(`${usage.item_name}: only ${usage.current_stock} available, ${usage.quantity_integer} required.`);
       }
-      if (usage.billable === 1) {
+      if (usage.billable === 1 && usage.price_source !== 'override') {
         const currentPrice = usage.customer_price_centavos ?? usage.base_selling_price_centavos;
         if (usage.resolved_selling_price_centavos !== currentPrice) priceChanges.push(usage.item_name);
       }
@@ -564,7 +450,7 @@ export async function finalizeServiceReport(
     if (priceChanges.length && pricePolicy === 'reject') throw new DraftPriceChangedError(priceChanges);
 
     for (const usage of usages) {
-      if (usage.billable !== 1) continue;
+      if (usage.billable !== 1 || usage.price_source === 'override') continue;
       const currentPrice = usage.customer_price_centavos ?? usage.base_selling_price_centavos;
       const currentSource = usage.customer_price_centavos === null ? 'base' : 'customer';
       if (pricePolicy === 'use-current') {
@@ -833,7 +719,7 @@ export async function voidServiceReport(
 
 async function listReportUsages(db: SQLiteDatabase, reportId: string): Promise<ServiceReportUsage[]> {
   const rows = await db.getAllAsync<UsageRow>(
-    `SELECT u.id, u.item_id, i.name AS item_name, i.sku AS item_sku, i.unit_label,
+    `SELECT u.id, u.item_id, u.description_snapshot AS item_name, i.sku AS item_sku, i.unit_label,
             u.quantity_integer, u.billable, u.resolved_selling_price_centavos,
             u.price_source, u.override_reason,
             COALESCE((SELECT SUM(m.quantity_delta_integer) FROM inventory_movements m WHERE m.item_id = i.id), 0) AS current_stock
@@ -865,7 +751,7 @@ async function listFinalizationUsages(
   customerId: string,
 ): Promise<FinalizationUsageRow[]> {
   return db.getAllAsync<FinalizationUsageRow>(
-    `SELECT u.id, u.item_id, i.name AS item_name, i.sku AS item_sku, i.unit_label,
+    `SELECT u.id, u.item_id, u.description_snapshot AS item_name, i.sku AS item_sku, i.unit_label,
             u.quantity_integer, u.billable, u.resolved_selling_price_centavos,
             u.price_source, u.override_reason, i.base_selling_price_centavos,
             p.selling_price_centavos AS customer_price_centavos,
@@ -895,42 +781,6 @@ async function listFinalizationServices(
      ORDER BY u.created_at ASC`,
     reportId,
   );
-}
-
-async function recalculateServiceReportTotal(
-  db: SQLiteDatabase,
-  reportId: string,
-): Promise<number> {
-  const [items, services] = await Promise.all([
-    db.getAllAsync<{
-      quantity_integer: number;
-      billable: number;
-      resolved_selling_price_centavos: number | null;
-    }>(
-      `SELECT quantity_integer, billable, resolved_selling_price_centavos
-       FROM service_report_item_usage WHERE service_report_id = ?`,
-      reportId,
-    ),
-    db.getAllAsync<{ resolved_rate_centavos: number }>(
-      `SELECT resolved_rate_centavos
-       FROM service_report_service_usage WHERE service_report_id = ?`,
-      reportId,
-    ),
-  ]);
-  const total = calculateServiceReportTotal(
-    items.map((item) => ({
-      quantity: item.quantity_integer,
-      billable: item.billable === 1,
-      resolvedSellingPriceCentavos: item.resolved_selling_price_centavos,
-    })),
-    services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })),
-  );
-  await db.runAsync(
-    "UPDATE service_reports SET total_bill_centavos = ? WHERE id = ? AND document_state = 'draft'",
-    total,
-    reportId,
-  );
-  return total;
 }
 
 function mapSummaryRow(row: SummaryRow): ServiceReportSummary {

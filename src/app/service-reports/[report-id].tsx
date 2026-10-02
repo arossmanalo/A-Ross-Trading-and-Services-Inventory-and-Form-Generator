@@ -309,6 +309,8 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Recommendations" values={report.recommendations} />
             <ReadSection label="Machine Status" values={[report.machineStatus]} />
             <ReadSection label="Warranty" values={[report.warrantyText]} />
+            <ReadSection label="Items used" values={report.usages.map((usage) => `${usage.itemName} · ${usage.quantity} ${usage.unitLabel} · ${usage.billable ? formatCentavos(usage.quantity * (usage.resolvedSellingPriceCentavos ?? 0)) : 'Non-billable'}`)} />
+            <ReadSection label="Services used" values={report.services.map((service) => `${service.serviceName} · ${formatCentavos(service.resolvedRateCentavos)}`)} />
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>TOTAL BILL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Derived from billable inventory items and service rates.</Text></View>
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>SIGNATURE STATUS</Text>

@@ -1,8 +1,7 @@
-import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
-import { normalizeContactDetails } from '@/features/settings/contact-details';
+import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v4';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v5';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -76,11 +75,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     @page { size: 8.5in 14in; margin: 0.35in; }
     * { box-sizing: border-box; }
     body { margin: 0; color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 10px; line-height: 1.35; }
-    .header { display: flex; align-items: center; gap: 24px; padding-bottom: 10px; border-bottom: 1.5px solid #0b377f; }
-    .mark { display: flex; align-items: center; justify-content: center; flex: 0 0 190px; height: 78px; }
-    .business-block { flex: 1; min-width: 0; text-align: left; }
-    .business { font-size: 16px; font-weight: 800; }
-    .contact { color: #374151; font-size: 9px; white-space: pre-line; }
+    ${DOCUMENT_HEADER_CSS}
     h1 { margin: 10px 0 8px; color: #0b377f; font-size: 16px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #334155; }
     .cell { min-height: 34px; padding: 5px 7px; border-right: 1px solid #64748b; border-bottom: 1px solid #64748b; }
@@ -104,10 +99,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   </style>
 </head>
 <body>
-  <header class="header">
-    <div class="mark">${logoHtml(snapshot.business.logoDataUrl)}</div>
-    <div class="business-block"><div class="business">${escapeHtml(snapshot.business.name)}</div><div class="contact">${escapeHtml([snapshot.business.address, normalizeContactDetails(snapshot.business.contactDetails)].filter(Boolean).join('\n'))}</div></div>
-  </header>
+  ${buildDocumentHeader(snapshot.business)}
   <h1>Customer Service Report</h1>
   <section class="grid">
     ${cell('Customer Name', snapshot.customer.name, true)}
@@ -180,9 +172,4 @@ export function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
-}
-
-function logoHtml(logoDataUrl?: string | null): string {
-  const source = logoDataUrl?.trim() ? logoDataUrl : DEFAULT_BUSINESS_LOGO_DATA_URL;
-  return `<img alt="Business logo" src="${escapeHtml(source)}" style="width:100%;height:100%;object-fit:contain"/>`;
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { buildBillingStatementHtml, type BillingStatementRenderSnapshot } from './billing-statement-template';
 import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
+import { buildCsrHtml } from '@/features/service-reports/csr-template';
+import { DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 
 const fixture: BillingStatementRenderSnapshot = {
   bsNumber: 'BS-000042', businessDate: '2026-08-31', fingerprint: 'ABC123DEF456',
@@ -14,6 +16,18 @@ const fixture: BillingStatementRenderSnapshot = {
 };
 
 describe('billing statement template', () => {
+  it('uses exactly the CSR header with custom branding, separate contacts and email last', () => {
+    const business = {...fixture.business, name:'Owner & Company', logoDataUrl:'data:image/png;base64,CUSTOM',contactDetails:'owner@example.com\n0917 123 4567\n0920 123 4567'};
+    const billing=buildBillingStatementHtml({...fixture,business});
+    const csr=buildCsrHtml({business,csrNumber:'CSR-1',businessDate:fixture.businessDate,fingerprint:'TEST',customer:fixture.customer,equipment:{machineType:'Washer',model:'',serialNumber:'',nicknameOrLocation:''},serviceOutcome:'completed',reportedProblem:[],diagnosis:[],actionTaken:[],recommendations:[],billing:[],customerRemarks:[],machineStatus:'',warrantyText:'',servicedBy:'',acknowledgedBy:'',totalBillCentavos:0,usages:[]});
+    expect(billing.match(/<header class="header">[\s\S]*?<\/header>/)?.[0]).toBe(csr.match(/<header class="header">[\s\S]*?<\/header>/)?.[0]);
+    expect(billing).toContain(DOCUMENT_HEADER_CSS);
+    expect(csr).toContain(DOCUMENT_HEADER_CSS);
+    expect(billing).toContain('0917 123 4567\n0920 123 4567\nowner@example.com');
+    expect(billing).toContain('Owner &amp; Company');
+    expect(billing).toContain('data:image/png;base64,CUSTOM');
+    expect(billing).not.toContain('.business{width:250px}');
+  });
   it('renders the required title, totals, traceability, and escaped content', () => {
     const html=buildBillingStatementHtml(fixture);
     expect(html).toContain('Billing Statement — Not a Tax Invoice');

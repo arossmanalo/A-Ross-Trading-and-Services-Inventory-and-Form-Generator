@@ -29,6 +29,7 @@ import { addServiceLine, createBillingStatementDraft, finalizeBillingStatement, 
 import { validateSignaturePng } from '@/features/signatures/signature-html';
 import { getBusinessLogo, saveBusinessLogo } from '@/features/settings/settings-repository';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
+import { getBillingStatementPreview } from '@/features/billing-statements/billing-statement-pdf';
 
 // A tiny raster fixture, not a real person's signature.
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6bOAAAAAASUVORK5CYII=';
@@ -121,6 +122,20 @@ describe('signature persistence and recovery',() => {
     expect(preview.html).toContain('Signed Customer');
     expect(preview.html).toContain('data-signature-image-slot="customer"');
     expect(raw.prepare("SELECT render_template_snapshot FROM service_reports WHERE id='csr'").get()).toEqual({render_template_snapshot:ORIGINAL});
+  });
+
+  it('shows finalized customer and preparer signatures in the ordinary Billing Statement preview, but not draft signatures',async()=>{
+    await saveSignatureDraft(db,{ownerType:'billing_statement',ownerId:'statement',role:'customer',signerName:'Signed Customer',pngDataUrl:PNG});
+    await saveSignatureDraft(db,{ownerType:'billing_statement',ownerId:'statement',role:'preparer',signerName:'Signed Owner',pngDataUrl:PNG});
+    expect((await getBillingStatementPreview(db,'statement')).html).toBe(ORIGINAL);
+    await finalizeSignatureDrafts(db,'billing_statement','statement');
+    const preview = await getBillingStatementPreview(db,'statement');
+    expect(preview).toMatchObject({bsNumber:'BS-000001',isDraft:false});
+    expect(preview.html).toContain('Signed Customer');
+    expect(preview.html).toContain('Signed Owner');
+    expect(preview.html.match(/class="signature-image"/g)).toHaveLength(2);
+    expect((await getBillingStatement(db,'statement'))?.signatureStatus).toBe('signed_in_person');
+    expect(raw.prepare("SELECT render_template_snapshot FROM billing_statements WHERE id='statement'").get()).toEqual({render_template_snapshot:ORIGINAL});
   });
 
   it('saves idempotently and never changes original content, numbering, or stock',async()=>{

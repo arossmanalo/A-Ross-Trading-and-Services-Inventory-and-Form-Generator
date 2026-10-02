@@ -9,6 +9,7 @@ import { calculateDiscountCentavos, type Discount } from '@/domain/money';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { BILLING_STATEMENT_TEMPLATE_VERSION, buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
+import { insertCsrItemUsage, insertCsrServiceUsage } from '@/features/service-reports/csr-charge-repository';
 import type { BillingDiscountType, BillingDocumentState, BillingExpense, BillingPriceSource, BillingStatementDetail, BillingStatementLine, BillingStatementSummary, EligibleCsrUsage } from '@/features/billing-statements/billing-statement-types';
 import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features/payments/payment-repository';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
@@ -24,6 +25,60 @@ export class BillingDraftPriceChangedError extends Error {
     super(`Pricing changed for: ${lineNames.join(', ')}. Choose which prices to retain.`);
     this.name = 'BillingDraftPriceChangedError';
   }
+}
+
+async function getLinkedChargeTarget(db: SQLiteDatabase, statementId: string): Promise<{ service_report_id: string | null; csr_state: string | null }> {
+  const row = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null }>(
+    `SELECT b.service_report_id,r.document_state AS csr_state FROM billing_statements b
+     LEFT JOIN service_reports r ON r.id=b.service_report_id WHERE b.id=? AND b.document_state='draft'`, statementId,
+  );
+  if (!row) throw new Error('Only a draft Billing Statement can accept charges.');
+  if (row.service_report_id && row.csr_state !== 'draft' && row.csr_state !== 'finalized') {
+    throw new Error('The linked CSR is unavailable or voided.');
+  }
+  return row;
+}
+
+async function assertNotCsrDuplicate(db: SQLiteDatabase, reportId: string | null, kind: 'item' | 'service', catalogId: string): Promise<void> {
+  if (!reportId) return;
+  const duplicate = kind === 'item'
+    ? await db.getFirstAsync<{ id: string }>('SELECT id FROM service_report_item_usage WHERE service_report_id=? AND item_id=? AND billable=1', reportId, catalogId)
+    : await db.getFirstAsync<{ id: string }>('SELECT id FROM service_report_service_usage WHERE service_report_id=? AND service_id=?', reportId, catalogId);
+  if (duplicate) throw new Error(`This ${kind} is already recorded on the linked CSR. Use its CSR source charge instead of adding a separate charge.`);
+}
+
+async function validateCsrSourceLine(db: SQLiteDatabase, reportId: string | null, line: LineRow): Promise<void> {
+  if (!line.source_csr_usage_id && !line.source_csr_service_usage_id) return;
+  const source = line.source_csr_usage_id
+    ? await db.getFirstAsync<{ catalog_id: string; quantity: number; price: number; posted: number }>(
+      `SELECT u.item_id AS catalog_id,u.quantity_integer AS quantity,u.resolved_selling_price_centavos AS price,
+         COALESCE((SELECT -SUM(m.quantity_delta_integer) FROM inventory_movements m
+                   WHERE m.service_report_id=u.service_report_id AND m.item_id=u.item_id AND m.movement_type='sale'),0) AS posted
+       FROM service_report_item_usage u WHERE u.id=? AND u.service_report_id=? AND u.billable=1`, line.source_csr_usage_id, reportId,
+    )
+    : await db.getFirstAsync<{ catalog_id: string; quantity: number; price: number; posted?: number }>(
+      `SELECT service_id AS catalog_id,quantity_integer AS quantity,resolved_rate_centavos AS price
+       FROM service_report_service_usage WHERE id=? AND service_report_id=?`, line.source_csr_service_usage_id, reportId,
+    );
+  if (!source || source.catalog_id !== (line.source_csr_usage_id ? line.item_id : line.service_id)
+      || source.quantity !== line.quantity_integer || source.price !== line.unit_price_centavos
+      || safeMultiply(source.quantity, source.price) !== line.amount_centavos
+      || (line.source_csr_usage_id && (line.line_type !== 'item' || source.posted !== source.quantity))
+      || (line.source_csr_service_usage_id && line.line_type !== 'service')) {
+    throw new Error(`The CSR source charge "${line.description_snapshot}" does not match its finalized usage/stock record. Review the linked CSR before finalizing; stock will not be deducted again.`);
+  }
+}
+
+/** Prevent legacy billing-only draft charges from issuing an empty or incomplete CSR. */
+export async function assertLinkedCsrChargesAreSourced(db: SQLiteDatabase, reportId: string): Promise<void> {
+  const unsourced = await db.getFirstAsync<{ description_snapshot: string }>(
+    `SELECT l.description_snapshot FROM billing_statement_lines l
+     JOIN billing_statements b ON b.id=l.billing_statement_id
+     WHERE b.service_report_id=? AND b.document_state='draft'
+       AND ((l.line_type='item' AND l.source_csr_usage_id IS NULL)
+         OR (l.line_type='service' AND l.source_csr_service_usage_id IS NULL)) LIMIT 1`, reportId,
+  );
+  if (unsourced) throw new Error(`Review the linked Billing Statement charge "${unsourced.description_snapshot}". Remove its separate charge, then add it through the CSR or linked statement again so it appears on both documents. Existing CSR charges must not be added twice.`);
 }
 
 export async function listBillingStatements(db: SQLiteDatabase): Promise<BillingStatementSummary[]> {
@@ -63,18 +118,13 @@ export async function listCsrsForBilling(db: SQLiteDatabase, customerId: string)
     available_line_count: number;
   }>(
     `SELECT r.id, r.csr_number, r.business_date, r.document_state,
-            CASE WHEN r.document_state='draft' THEN
-              (SELECT COUNT(*) FROM service_report_item_usage u
+            (SELECT COUNT(*) FROM service_report_item_usage u
                WHERE u.service_report_id=r.id AND u.billable=1
                  AND NOT EXISTS(SELECT 1 FROM billing_statement_lines l WHERE l.source_csr_usage_id=u.id))
               + (SELECT COUNT(*) FROM service_report_service_usage su
                  WHERE su.service_report_id=r.id
                    AND NOT EXISTS(SELECT 1 FROM billing_statement_lines l WHERE l.source_csr_service_usage_id=su.id))
-            ELSE
-              (SELECT COUNT(*) FROM service_report_item_usage u
-               WHERE u.service_report_id=r.id AND u.billable=1
-                 AND NOT EXISTS(SELECT 1 FROM billing_statement_lines l WHERE l.source_csr_usage_id=u.id))
-            END AS available_line_count
+            AS available_line_count
      FROM service_reports r
      WHERE r.customer_id=? AND r.document_state IN ('draft','finalized')
      ORDER BY CASE r.document_state WHEN 'draft' THEN 0 ELSE 1 END,
@@ -126,7 +176,7 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
       }
     }
     await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,business_date,backdate_reason,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.businessDate, input.backdateReason?.trim() || null, now);
-    if (input.serviceReportId && linkedReportState === 'draft') {
+    if (input.serviceReportId) {
       await syncLinkedCsrDraftLines(tx, input.serviceReportId);
     }
     await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null }, now);
@@ -320,6 +370,14 @@ export async function addCsrUsageLine(db: SQLiteDatabase, statementId: string, u
 export async function addDirectItemLine(db: SQLiteDatabase, statementId: string, input: { itemId: string; quantity: number; unitPriceCentavos?: number; overrideReason?: string }): Promise<void> {
   assertPositiveIntegerQuantity(input.quantity); const now = new Date().toISOString();
   await db.withExclusiveTransactionAsync(async (tx) => {
+    const linked = await getLinkedChargeTarget(tx, statementId);
+    if (linked.service_report_id && linked.csr_state === 'draft') {
+      await insertCsrItemUsage(tx, linked.service_report_id, input.itemId, input.quantity, true, input.unitPriceCentavos, input.overrideReason);
+      await syncLinkedCsrDraftLines(tx, linked.service_report_id);
+      await auditAndRevise(tx, 'billing_statement.csr_item_added', statementId, { serviceReportId: linked.service_report_id, itemId: input.itemId }, now);
+      return;
+    }
+    await assertNotCsrDuplicate(tx, linked.service_report_id, 'item', input.itemId);
     const row = await tx.getFirstAsync<{ customer_id: string; name: string; active: number; base_selling_price_centavos: number; customer_price_centavos: number | null }>(`SELECT b.customer_id,i.name,i.active,i.base_selling_price_centavos,p.selling_price_centavos AS customer_price_centavos FROM billing_statements b JOIN items i ON i.id=? LEFT JOIN customer_item_prices p ON p.item_id=i.id AND p.customer_id=b.customer_id AND p.effective_to IS NULL WHERE b.id=? AND b.document_state='draft'`, input.itemId, statementId);
     if (!row || row.active !== 1) throw new Error('Select an active item for a draft statement.');
     const resolved = row.customer_price_centavos ?? row.base_selling_price_centavos;
@@ -334,6 +392,31 @@ export async function addDirectItemLine(db: SQLiteDatabase, statementId: string,
 export async function addServiceLine(db: SQLiteDatabase, statementId: string, input: { serviceId: string; rateCentavos?: number; overrideReason?: string }): Promise<void> {
   const now = new Date().toISOString();
   await db.withExclusiveTransactionAsync(async (tx) => {
+    const linked = await getLinkedChargeTarget(tx, statementId);
+    if (linked.service_report_id && linked.csr_state === 'draft') {
+      await insertCsrServiceUsage(tx, linked.service_report_id, input.serviceId, input.rateCentavos, input.overrideReason);
+      await syncLinkedCsrDraftLines(tx, linked.service_report_id);
+      await auditAndRevise(tx, 'billing_statement.csr_service_added', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId }, now);
+      return;
+    }
+    if (linked.service_report_id) {
+      const source = await tx.getFirstAsync<{ id: string; description_snapshot: string; resolved_rate_centavos: number; rate_source: BillingPriceSource; override_reason: string | null }>(
+        'SELECT id,description_snapshot,resolved_rate_centavos,rate_source,override_reason FROM service_report_service_usage WHERE service_report_id=? AND service_id=?', linked.service_report_id, input.serviceId,
+      );
+      if (source) {
+        if (input.rateCentavos !== undefined && input.rateCentavos !== source.resolved_rate_centavos) throw new Error('Use the finalized CSR service rate; its source charge cannot be repriced.');
+        const billed = await tx.getFirstAsync<{ id: string }>('SELECT id FROM billing_statement_lines WHERE source_csr_service_usage_id=?', source.id);
+        if (billed) throw new Error('This CSR service has already been included in a Billing Statement.');
+        await tx.runAsync(
+          `INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_service_usage_id,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at)
+           VALUES(?,?,'service',?,?,?,1,?,?,?,?,?)`,
+          Crypto.randomUUID(), statementId, source.id, input.serviceId, source.description_snapshot, source.resolved_rate_centavos, source.resolved_rate_centavos, source.rate_source, source.override_reason, now,
+        );
+        await refreshTotals(tx, statementId);
+        await auditAndRevise(tx, 'billing_statement.csr_service_linked', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId }, now);
+        return;
+      }
+    }
     const row = await tx.getFirstAsync<{ name: string; active: number; base_rate_centavos: number }>(`SELECT s.name,s.active,s.base_rate_centavos FROM billing_statements b JOIN services s ON s.id=? WHERE b.id=? AND b.document_state='draft'`, input.serviceId, statementId);
     if (!row || row.active !== 1) throw new Error('Select an active service for a draft statement.');
     const rate = input.rateCentavos ?? row.base_rate_centavos; assertMoney(rate, 'Service rate');
@@ -429,6 +512,11 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
       if (!linkedCsr || linkedCsr.document_state !== 'finalized') throw new Error('Finalize the linked CSR before finalizing its Billing Statement.');
     }
     const lines = await listFinalLines(tx,statementId,row.customer_id); if (!lines.length) throw new Error('Add at least one billable item, service, or expense before finalizing.');
+    for (const line of lines) {
+      await validateCsrSourceLine(tx, row.service_report_id, line);
+      if (line.line_type === 'item' && !line.source_csr_usage_id && line.item_id) await assertNotCsrDuplicate(tx, row.service_report_id, 'item', line.item_id);
+      if (line.line_type === 'service' && !line.source_csr_service_usage_id && line.service_id) await assertNotCsrDuplicate(tx, row.service_report_id, 'service', line.service_id);
+    }
     const changed: string[] = []; const changedIds = new Set<string>(); const required = new Map<string,{name:string,quantity:number,stock:number}>();
     for (const line of lines) {
       if (line.line_type === 'item' && !line.source_csr_usage_id && line.item_id) {
