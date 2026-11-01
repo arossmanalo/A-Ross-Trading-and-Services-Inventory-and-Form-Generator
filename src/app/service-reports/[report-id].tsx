@@ -16,7 +16,7 @@ import {
   deleteServiceReportDraft,
   getServiceReport,
   removeReportEquipment,
-  removeReportServiceUsage,
+  removeMachineService,
   removeReportItemUsage,
   updateServiceReportDraft,
 } from '@/features/service-reports/service-report-repository';
@@ -151,9 +151,9 @@ export default function ServiceReportDetailScreen() {
 
   const removeService = useCallback((usageId: string) => {
     if (!reportId) return;
-    Alert.alert('Remove service usage?', 'The service will be removed from this draft total.', [
+    Alert.alert('Remove service charge?', 'This price will be removed from the draft total.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => void removeReportServiceUsage(db, reportId, usageId).then(loadReport).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not remove service.')) },
+      { text: 'Remove', style: 'destructive', onPress: () => void removeMachineService(db, reportId, usageId).then(loadReport).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not remove service.')) },
     ]);
   }, [db, loadReport, reportId]);
 
@@ -312,7 +312,7 @@ export default function ServiceReportDetailScreen() {
               return <View key={machine.equipmentId} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{label}</Text>{machine.serialNumber ? <Text selectable style={styles.meta}>Serial {machine.serialNumber}</Text> : null}</View>{report.machines.length > 1 ? <Pressable onPress={() => removeMachine(machine.equipmentId, label)}><Text selectable style={styles.remove}>Remove</Text></Pressable> : null}</View>;
             })}
             {availableMachines.map((entry) => <ActionButton key={entry.id} compact variant="secondary" disabled={busy} onPress={() => addMachine(entry.id)}>{`Add ${[entry.machineType, entry.model, entry.nicknameOrLocation].filter(Boolean).join(' · ')}`}</ActionButton>)}
-            {report.machineCount > 1 ? <Text selectable style={styles.totalHelp}>Each service is billed once per machine (× {report.machineCount}). Item charges are not multiplied.</Text> : null}
+            {report.machineCount > 1 ? <Text selectable style={styles.totalHelp}>Each service is priced per machine and added to the total as entered. Item charges are not multiplied.</Text> : null}
             <FormField label="Business date" onChangeText={(v) => setField('businessDate', v)} value={form.businessDate} />
             <Text selectable style={styles.sectionTitle}>Status after service</Text>
             <View style={styles.outcomes}>{(['completed', 'incomplete', 'waiting_for_parts', 'under_observation'] as ServiceOutcome[]).map((outcome) => <Pressable key={outcome} onPress={() => setField('serviceOutcome', outcome)} style={[styles.outcome, form.serviceOutcome === outcome ? styles.outcomeSelected : null]}><Text selectable style={styles.outcomeText}>{formatLabel(outcome)}</Text></Pressable>)}</View>
@@ -329,14 +329,14 @@ export default function ServiceReportDetailScreen() {
               <Text selectable style={styles.pickerLabel}>Acknowledged By</Text>
               <View style={styles.outcomes}>{report.acknowledgmentOptions.map((name) => <Pressable key={name} onPress={() => setField('acknowledgedBy', name)} style={[styles.outcome, form.acknowledgedBy === name ? styles.outcomeSelected : null]}><Text selectable style={styles.outcomeText}>{name}</Text></Pressable>)}</View>
             </View> : <FormField label="Acknowledged By" onChangeText={(v) => setField('acknowledgedBy', v)} value={form.acknowledgedBy} />}
-            <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus selected service rates (× the number of machines). Non-billable items are excluded.</Text></View>
+            <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus every per-machine service price. Non-billable items are excluded.</Text></View>
             <ActionButton disabled={busy} variant="secondary" onPress={() => void openDraftPreview()}>Preview PDF before finalizing</ActionButton>
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Items used</Text><ActionButton compact onPress={addItem}>Add item</ActionButton></View>
             {report?.usages.map((usage) => <View key={usage.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{usage.itemName}</Text><Text selectable style={styles.meta}>{usage.quantity} {usage.unitLabel} · {usage.billable ? `Billable ${formatCentavos(usage.resolvedSellingPriceCentavos ?? 0)}` : 'Non-billable'}</Text></View><Pressable onPress={() => removeUsage(usage.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.usages.length ? <Text selectable style={styles.emptyHint}>No inventory items added yet.</Text> : null}
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Services used</Text><ActionButton compact onPress={addService}>Add service</ActionButton></View>
-            {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{report.machineCount > 1 ? `${formatCentavos(service.resolvedRateCentavos)} × ${report.machineCount} machines = ${formatCentavos(service.resolvedRateCentavos * report.machineCount)}` : `${formatCentavos(service.resolvedRateCentavos)} · quantity 1`}{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
-            {!report.services.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
+            {report.machineServices.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{service.machineLabel} · {formatCentavos(service.rateCentavos)}{service.rateSource === 'custom' ? ' · custom price' : ''}{service.note ? ` · ${service.note}` : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
+            {!report.machineServices.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
             <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Open or create linked Billing Statement draft</ActionButton>
             {error ? <Text accessibilityLiveRegion="polite" selectable style={styles.errorText}>{error}</Text> : null}
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
@@ -352,7 +352,7 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Machine Status" values={[report.machineStatus]} />
             <ReadSection label="Warranty" values={[report.warrantyText]} />
             <ReadSection label="Items used" values={report.usages.map((usage) => `${usage.itemName} · ${usage.quantity} ${usage.unitLabel} · ${usage.billable ? formatCentavos(usage.quantity * (usage.resolvedSellingPriceCentavos ?? 0)) : 'Non-billable'}`)} />
-            <ReadSection label="Services used" values={report.services.map((service) => report.machineCount > 1 ? `${service.serviceName} · ${formatCentavos(service.resolvedRateCentavos)} × ${report.machineCount} machines = ${formatCentavos(service.resolvedRateCentavos * report.machineCount)}` : `${service.serviceName} · ${formatCentavos(service.resolvedRateCentavos)}`)} />
+            <ReadSection label="Services used" values={report.machineServices.map((service) => `${service.serviceName} · ${service.machineLabel} · ${formatCentavos(service.rateCentavos)}`)} />
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>TOTAL BILL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Derived from billable inventory items and service rates.</Text></View>
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>SIGNATURE STATUS</Text>

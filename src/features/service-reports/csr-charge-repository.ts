@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
+import { formatMachineLabel } from '@/features/service-reports/machine-label';
 import { calculateServiceReportTotal } from '@/features/service-reports/service-report-total';
 
 // Transaction-only helpers. Callers own the exclusive transaction and linked billing sync.
@@ -86,78 +87,107 @@ export async function insertCsrItemUsage(
 }
 
 
-export async function insertCsrServiceUsage(
-  db: SQLiteDatabase,
-  reportId: string,
-  serviceId: string,
-  overrideRateCentavos?: number,
-  overrideReason?: string,
-): Promise<string> {
-  if (overrideRateCentavos !== undefined) assertNonNegativeMoney(overrideRateCentavos, 'Service rate');
-  const reason = overrideReason?.trim() || null;
-  const usageId = Crypto.randomUUID();
-  const now = new Date().toISOString();
+export type MachineServiceInput = {
+  equipmentId: string;
+  serviceId: string;
+  rateCentavos: number;
+  note?: string;
+};
 
+/** Machine ids on a CSR; legacy rows without join entries fall back to the primary machine. */
+export async function listReportMachineIds(db: SQLiteDatabase, reportId: string): Promise<string[]> {
+  const rows = await db.getAllAsync<{ equipment_id: string }>(
+    'SELECT equipment_id FROM service_report_equipment WHERE service_report_id = ? ORDER BY position ASC',
+    reportId,
+  );
+  if (rows.length > 0) return rows.map((row) => row.equipment_id);
+  const primary = await db.getFirstAsync<{ equipment_id: string }>('SELECT equipment_id FROM service_reports WHERE id = ?', reportId);
+  return primary ? [primary.equipment_id] : [];
+}
+
+/**
+ * Prices one service on one machine of a draft CSR. Duplicates are allowed:
+ * the same service can be added to a machine again at a different price.
+ * Callers own the transaction and the linked billing sync.
+ */
+export async function insertMachineService(db: SQLiteDatabase, reportId: string, input: MachineServiceInput): Promise<string> {
+  assertNonNegativeMoney(input.rateCentavos, 'Service price');
   const tx = db;
   const report = await tx.getFirstAsync<{ id: string }>(
     "SELECT id FROM service_reports WHERE id = ? AND document_state = 'draft'",
     reportId,
   );
-  if (!report) throw new Error('Only a draft CSR can accept service usage.');
-  const service = await tx.getFirstAsync<{
-    name: string;
-    active: number;
-    base_rate_centavos: number;
-  }>('SELECT name, active, base_rate_centavos FROM services WHERE id = ?', serviceId);
-  if (!service || service.active !== 1) throw new Error('Select an active service.');
-  const rate = overrideRateCentavos ?? service.base_rate_centavos;
-  const isOverride = overrideRateCentavos !== undefined && overrideRateCentavos !== service.base_rate_centavos;
-  if (isOverride && !reason) throw new Error('A reason is required when overriding a service rate.');
-  try {
-    await tx.runAsync(
-      `INSERT INTO service_report_service_usage
-        (id, service_report_id, service_id, quantity_integer, resolved_rate_centavos,
-         rate_source, override_reason, description_snapshot, created_at)
-       VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-      usageId,
-      reportId,
-      serviceId,
-      rate,
-      isOverride ? 'override' : 'catalog',
-      isOverride ? reason : null,
-      service.name,
-      now,
-    );
-  } catch (error) {
-    if (String(error).includes('UNIQUE')) throw new Error('This service is already listed on the CSR.');
-    throw error;
+  if (!report) throw new Error('Only a draft CSR can accept service charges.');
+  if (!(await listReportMachineIds(tx, reportId)).includes(input.equipmentId)) {
+    throw new Error('That machine is not listed on this CSR.');
   }
+  const service = await tx.getFirstAsync<{ name: string; active: number; base_rate_centavos: number }>(
+    'SELECT name, active, base_rate_centavos FROM services WHERE id = ?',
+    input.serviceId,
+  );
+  if (!service || service.active !== 1) throw new Error('Select an active service.');
+  const machine = await tx.getFirstAsync<{ machine_type: string; nickname_or_location: string; serial_number: string }>(
+    'SELECT machine_type, nickname_or_location, serial_number FROM customer_equipment WHERE id = ?',
+    input.equipmentId,
+  );
+  if (!machine) throw new Error('Machine was not found.');
+
+  const id = Crypto.randomUUID();
+  const now = new Date().toISOString();
+  await tx.runAsync(
+    `INSERT INTO service_report_machine_service
+      (id, service_report_id, equipment_id, service_id, rate_centavos, rate_source,
+       description_snapshot, machine_label, note, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    reportId,
+    input.equipmentId,
+    input.serviceId,
+    input.rateCentavos,
+    input.rateCentavos === service.base_rate_centavos ? 'catalog' : 'custom',
+    service.name,
+    formatMachineLabel({ machineType: machine.machine_type, nicknameOrLocation: machine.nickname_or_location, serialNumber: machine.serial_number }),
+    input.note?.trim() || null,
+    now,
+  );
   await recalculateServiceReportTotal(tx, reportId);
   await appendAuditEvent(tx, {
-    eventType: 'csr.service_usage_added',
+    eventType: 'csr.machine_service_added',
     entityType: 'service_report',
     entityId: reportId,
-    details: { serviceId, rateCentavos: rate, overridden: isOverride },
+    details: { serviceId: input.serviceId, equipmentId: input.equipmentId, rateCentavos: input.rateCentavos },
     createdAt: now,
   });
   await incrementDatabaseRevision(tx);
-  return usageId;
+  return id;
 }
 
-/** Number of machines on a CSR. Legacy rows without join entries count as one. */
-export async function countReportMachines(db: SQLiteDatabase, reportId: string): Promise<number> {
-  const row = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) AS count FROM service_report_equipment WHERE service_report_id = ?',
-    reportId,
-  );
-  return Math.max(1, row?.count ?? 0);
+/** Adds one service to every machine on the CSR at the same price. */
+export async function insertServiceOnAllMachines(
+  db: SQLiteDatabase,
+  reportId: string,
+  serviceId: string,
+  rateCentavos: number | undefined,
+  note?: string,
+): Promise<string[]> {
+  let rate = rateCentavos;
+  if (rate === undefined) {
+    const service = await db.getFirstAsync<{ base_rate_centavos: number }>('SELECT base_rate_centavos FROM services WHERE id = ?', serviceId);
+    if (!service) throw new Error('Select an active service.');
+    rate = service.base_rate_centavos;
+  }
+  const ids: string[] = [];
+  for (const equipmentId of await listReportMachineIds(db, reportId)) {
+    ids.push(await insertMachineService(db, reportId, { equipmentId, serviceId, rateCentavos: rate, note }));
+  }
+  return ids;
 }
 
 export async function recalculateServiceReportTotal(
   db: SQLiteDatabase,
   reportId: string,
 ): Promise<number> {
-  const [items, services, machineCount] = await Promise.all([
+  const [items, services] = await Promise.all([
     db.getAllAsync<{
       quantity_integer: number;
       billable: number;
@@ -167,12 +197,10 @@ export async function recalculateServiceReportTotal(
        FROM service_report_item_usage WHERE service_report_id = ?`,
       reportId,
     ),
-    db.getAllAsync<{ resolved_rate_centavos: number }>(
-      `SELECT resolved_rate_centavos
-       FROM service_report_service_usage WHERE service_report_id = ?`,
+    db.getAllAsync<{ rate_centavos: number }>(
+      'SELECT rate_centavos FROM service_report_machine_service WHERE service_report_id = ?',
       reportId,
     ),
-    countReportMachines(db, reportId),
   ]);
   const total = calculateServiceReportTotal(
     items.map((item) => ({
@@ -180,8 +208,7 @@ export async function recalculateServiceReportTotal(
       billable: item.billable === 1,
       resolvedSellingPriceCentavos: item.resolved_selling_price_centavos,
     })),
-    services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })),
-    machineCount,
+    services.map((service) => ({ resolvedRateCentavos: service.rate_centavos })),
   );
   await db.runAsync(
     "UPDATE service_reports SET total_bill_centavos = ? WHERE id = ? AND document_state = 'draft'",
@@ -190,7 +217,6 @@ export async function recalculateServiceReportTotal(
   );
   return total;
 }
-
 
 function assertNonNegativeMoney(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(label + ' must be a non-negative amount.');

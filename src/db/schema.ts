@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 10;
+export const DATABASE_VERSION = 11;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -440,3 +440,57 @@ CREATE INDEX service_report_equipment_equipment_idx
 INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at)
 SELECT id, equipment_id, 1, created_at FROM service_reports;
 `;
+
+/**
+ * Per-machine service charges. Each row prices one service on one machine of a
+ * CSR; the CSR total and linked billing lines come straight from these rows.
+ * Rows backfilled from v10 usages keep that usage id so statements that already
+ * billed the old per-service line are still recognised as billed.
+ */
+export const SCHEMA_V11 = `
+CREATE TABLE service_report_machine_service (
+  id TEXT PRIMARY KEY NOT NULL,
+  service_report_id TEXT NOT NULL REFERENCES service_reports(id),
+  equipment_id TEXT NOT NULL REFERENCES customer_equipment(id),
+  service_id TEXT NOT NULL REFERENCES services(id),
+  rate_centavos INTEGER NOT NULL CHECK (rate_centavos >= 0),
+  rate_source TEXT NOT NULL CHECK (rate_source IN ('catalog', 'custom')),
+  description_snapshot TEXT NOT NULL,
+  machine_label TEXT NOT NULL,
+  note TEXT,
+  legacy_service_usage_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX service_report_machine_service_report_idx
+  ON service_report_machine_service(service_report_id, equipment_id, created_at);
+
+ALTER TABLE billing_statement_lines
+  ADD COLUMN source_csr_machine_service_id TEXT REFERENCES service_report_machine_service(id);
+
+CREATE UNIQUE INDEX billing_statement_lines_source_machine_service_unique
+  ON billing_statement_lines(source_csr_machine_service_id)
+  WHERE source_csr_machine_service_id IS NOT NULL;
+
+INSERT INTO service_report_machine_service
+  (id, service_report_id, equipment_id, service_id, rate_centavos, rate_source,
+   description_snapshot, machine_label, note, legacy_service_usage_id, created_at)
+SELECT u.id || ':' || q.id, u.service_report_id, q.id, u.service_id, u.resolved_rate_centavos,
+       CASE u.rate_source WHEN 'override' THEN 'custom' ELSE 'catalog' END,
+       u.description_snapshot,
+       q.machine_type || CASE
+         WHEN q.nickname_or_location <> '' THEN ' · ' || q.nickname_or_location
+         WHEN q.serial_number <> '' THEN ' · SN ' || q.serial_number
+         ELSE '' END,
+       u.override_reason, u.id, u.created_at
+FROM service_report_service_usage u
+JOIN (
+  SELECT service_report_id, equipment_id, position FROM service_report_equipment
+  UNION ALL
+  SELECT id, equipment_id, 1 FROM service_reports
+  WHERE id NOT IN (SELECT service_report_id FROM service_report_equipment)
+) m ON m.service_report_id = u.service_report_id
+JOIN customer_equipment q ON q.id = m.equipment_id
+ORDER BY u.created_at, u.id, m.position;
+`;
+

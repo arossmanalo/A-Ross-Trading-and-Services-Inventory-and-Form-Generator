@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11 } from '@/db/schema';
 
 let idCounter = 0;
 vi.mock('expo-crypto', () => ({
@@ -22,6 +22,7 @@ import {
   removeBillingLine,
 } from '@/features/billing-statements/billing-statement-repository';
 import {
+  addMachineService,
   addReportEquipment,
   addReportItemUsage,
   addReportServiceUsage,
@@ -70,7 +71,7 @@ describe('CSRs with several machines', () => {
     idCounter = 0;
     vi.useFakeTimers({ now: new Date('2026-09-05T12:00:00.000Z') });
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}`);
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}`);
     raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','0')");
     raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',0),('BS',0),('PA',0)");
     raw.prepare("INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner',?,?)").run(NOW, NOW);
@@ -94,7 +95,7 @@ describe('CSRs with several machines', () => {
 
   const stock = () => raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get();
 
-  it('multiplies service rates, but not item charges, by the number of machines', async () => {
+  it('totals every per-machine service price, and item charges are not multiplied', async () => {
     const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer', additionalEquipmentIds: ['dryer'] });
     await addReportItemUsage(db, reportId, 'item', 2, true);
     await addReportServiceUsage(db, reportId, 'service');
@@ -130,29 +131,36 @@ describe('CSRs with several machines', () => {
     expect(raw.prepare('SELECT COUNT(*) AS count FROM service_report_equipment').get()).toEqual({ count: 0 });
   });
 
-  it('re-multiplies services and the linked statement draft when machines are added or removed', async () => {
+  it('prices services per machine: a new machine starts with no services and a removed machine drops its prices', async () => {
     const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer' });
     await addReportServiceUsage(db, reportId, 'service');
     const statementId = await createBillingStatementDraft(db, { ...DRAFT, serviceReportId: reportId });
     expect((await getBillingStatement(db, statementId))?.lines).toMatchObject([{ quantity: 1, amountCentavos: 50000 }]);
 
     await addReportEquipment(db, reportId, 'dryer');
-    expect((await getServiceReport(db, reportId))?.totalBillCentavos).toBe(100000);
-    expect(await getBillingStatement(db, statementId)).toMatchObject({
-      subtotalCentavos: 100000,
-      discountedTotalCentavos: 100000,
-      lines: [{ lineType: 'service', quantity: 2, unitPriceCentavos: 50000, amountCentavos: 100000 }],
-    });
+    expect((await getServiceReport(db, reportId))?.totalBillCentavos).toBe(50000);
+    expect((await getBillingStatement(db, statementId))?.lines).toHaveLength(1);
     await expect(addReportEquipment(db, reportId, 'dryer')).rejects.toThrow(/already listed/);
+
+    await addMachineService(db, reportId, { equipmentId: 'dryer', serviceId: 'service', rateCentavos: 30000 });
+    expect((await getServiceReport(db, reportId))?.totalBillCentavos).toBe(80000);
+    expect(await getBillingStatement(db, statementId)).toMatchObject({
+      subtotalCentavos: 80000,
+      discountedTotalCentavos: 80000,
+      lines: [
+        { description: 'Labor — Washer · SN SN-W', quantity: 1, amountCentavos: 50000 },
+        { description: 'Labor — Dryer · SN SN-D', quantity: 1, amountCentavos: 30000 },
+      ],
+    });
 
     await removeReportEquipment(db, reportId, 'washer');
     expect(raw.prepare('SELECT equipment_id FROM service_reports WHERE id=?').get(reportId)).toEqual({ equipment_id: 'dryer' });
-    expect((await getServiceReport(db, reportId))?.totalBillCentavos).toBe(50000);
-    expect((await getBillingStatement(db, statementId))?.lines).toMatchObject([{ quantity: 1, amountCentavos: 50000 }]);
+    expect((await getServiceReport(db, reportId))?.totalBillCentavos).toBe(30000);
+    expect((await getBillingStatement(db, statementId))?.lines).toMatchObject([{ description: 'Labor — Dryer · SN SN-D', amountCentavos: 30000 }]);
     await expect(removeReportEquipment(db, reportId, 'dryer')).rejects.toThrow(/at least one machine/);
   });
 
-  it('freezes machines and the multiplied total at finalization and bills the statement without re-posting stock', async () => {
+  it('freezes machines and per-machine prices at finalization and bills the statement without re-posting stock', async () => {
     const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer', additionalEquipmentIds: ['dryer'] });
     await addReportItemUsage(db, reportId, 'item', 1, true);
     await addReportServiceUsage(db, reportId, 'service');
@@ -161,43 +169,54 @@ describe('CSRs with several machines', () => {
     const csr = await finalizeServiceReport(db, reportId);
     expect(csr.snapshot.machineCount).toBe(2);
     expect(csr.snapshot.machines).toMatchObject([{ machineType: 'Washer', serialNumber: 'SN-W' }, { machineType: 'Dryer', serialNumber: 'SN-D' }]);
+    expect(csr.snapshot.services).toMatchObject([
+      { description: 'Labor', rateCentavos: 50000, machineNumber: 1 },
+      { description: 'Labor', rateCentavos: 50000, machineNumber: 2 },
+    ]);
     expect(csr.snapshot.totalBillCentavos).toBe(120000 + 100000);
     expect(csr.html).toContain('Machine 1 of 2');
     expect(csr.html).toContain('Machine 2 of 2');
-    expect(csr.html).toContain('&times; 2');
+    expect(csr.html).toContain('Machine subtotal');
     expect(stock()).toEqual({ stock: 9 });
 
     await expect(addReportEquipment(db, reportId, 'retired')).rejects.toThrow(/draft CSR/);
     await expect(removeReportEquipment(db, reportId, 'dryer')).rejects.toThrow(/draft CSR/);
+    await expect(addMachineService(db, reportId, { equipmentId: 'washer', serviceId: 'service', rateCentavos: 1 })).rejects.toThrow(/draft CSR/);
 
     const statement = await finalizeBillingStatement(db, statementId);
     expect(statement.snapshot.totalCentavos).toBe(220000);
     expect(statement.snapshot.lines).toMatchObject([
       { description: 'Detergent', quantity: 1, amountCentavos: 120000 },
-      { description: 'Labor', quantity: 2, unitLabel: 'machines', unitPriceCentavos: 50000, amountCentavos: 100000 },
+      { description: 'Labor — Washer · SN SN-W', quantity: 1, unitPriceCentavos: 50000, amountCentavos: 50000 },
+      { description: 'Labor — Dryer · SN SN-D', quantity: 1, unitPriceCentavos: 50000, amountCentavos: 50000 },
     ]);
     expect(stock()).toEqual({ stock: 9 });
   });
 
-  it('reattaches a removed finalized CSR service at the multiplied quantity', async () => {
+  it('reattaches only the removed finalized CSR service line, at its frozen price', async () => {
     const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer', additionalEquipmentIds: ['dryer'] });
-    await addReportServiceUsage(db, reportId, 'service');
+    await addMachineService(db, reportId, { equipmentId: 'washer', serviceId: 'service', rateCentavos: 20000 });
+    await addMachineService(db, reportId, { equipmentId: 'dryer', serviceId: 'service', rateCentavos: 40000 });
     const statementId = await createBillingStatementDraft(db, { ...DRAFT, serviceReportId: reportId });
     await finalizeServiceReport(db, reportId);
 
-    const line = (await getBillingStatement(db, statementId))!.lines[0];
-    await removeBillingLine(db, statementId, line.id);
+    const lines = (await getBillingStatement(db, statementId))!.lines;
+    expect(lines.map((line) => line.amountCentavos)).toEqual([20000, 40000]);
+    await removeBillingLine(db, statementId, lines[1].id);
+    raw.exec("UPDATE services SET base_rate_centavos=90000 WHERE id='service'");
+    await expect(addServiceLine(db, statementId, { serviceId: 'service', rateCentavos: 90000 })).rejects.toThrow(/cannot be repriced/);
     await addServiceLine(db, statementId, { serviceId: 'service' });
-    expect((await getBillingStatement(db, statementId))?.lines).toMatchObject([{ quantity: 2, amountCentavos: 100000 }]);
-    expect((await finalizeBillingStatement(db, statementId)).snapshot.totalCentavos).toBe(100000);
+    expect((await getBillingStatement(db, statementId))?.lines.map((line) => line.amountCentavos)).toEqual([20000, 40000]);
+    await expect(addServiceLine(db, statementId, { serviceId: 'service' })).rejects.toThrow(/already been included/);
+    expect((await finalizeBillingStatement(db, statementId)).snapshot.totalCentavos).toBe(60000);
   });
 
-  it('refuses a billing line whose quantity no longer matches the CSR machine count', async () => {
+  it('refuses a billing line whose price no longer matches its CSR service price', async () => {
     const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer', additionalEquipmentIds: ['dryer'] });
     await addReportServiceUsage(db, reportId, 'service');
     const statementId = await createBillingStatementDraft(db, { ...DRAFT, serviceReportId: reportId });
     await finalizeServiceReport(db, reportId);
-    raw.prepare('UPDATE billing_statement_lines SET quantity_integer=1, amount_centavos=50000 WHERE billing_statement_id=?').run(statementId);
+    raw.prepare('UPDATE billing_statement_lines SET unit_price_centavos=40000, amount_centavos=40000 WHERE billing_statement_id=? AND description_snapshot LIKE ?').run(statementId, '%SN-W');
     await expect(finalizeBillingStatement(db, statementId)).rejects.toThrow(/does not match/);
     expect(raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get()).toEqual({ high_water_mark: 0 });
   });

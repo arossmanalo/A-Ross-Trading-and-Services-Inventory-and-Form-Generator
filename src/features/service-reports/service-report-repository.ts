@@ -10,14 +10,14 @@ import { buildCsrHtml, CSR_TEMPLATE_VERSION, type CsrRenderSnapshot } from '@/fe
 import { assertLinkedCsrChargesAreSourced, deleteLinkedBillingStatementDrafts, syncLinkedCsrDraftLines } from '@/features/billing-statements/billing-statement-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { calculateServiceReportTotal } from '@/features/service-reports/service-report-total';
-import { insertCsrItemUsage, insertCsrServiceUsage, recalculateServiceReportTotal } from '@/features/service-reports/csr-charge-repository';
+import { insertCsrItemUsage, insertMachineService, insertServiceOnAllMachines, recalculateServiceReportTotal } from '@/features/service-reports/csr-charge-repository';
 import type {
   CreateServiceReportDraftInput,
   DocumentState,
   ServiceOutcome,
   ServiceReportDetail,
   ServiceReportMachine,
-  ServiceReportServiceUsage,
+  ServiceReportMachineService,
   ServiceReportSummary,
   ServiceReportUsage,
   UpdateServiceReportDraftInput,
@@ -75,18 +75,15 @@ type FinalizationUsageRow = UsageRow & {
   customer_price_centavos: number | null;
 };
 
-type ServiceUsageRow = {
+type MachineServiceRow = {
   id: string;
+  equipment_id: string;
   service_id: string;
-  service_name: string;
-  quantity_integer: number;
-  resolved_rate_centavos: number;
-  rate_source: ServiceReportServiceUsage['rateSource'];
-  override_reason: string | null;
-};
-
-type FinalizationServiceUsageRow = ServiceUsageRow & {
-  base_rate_centavos: number;
+  description_snapshot: string;
+  machine_label: string;
+  rate_centavos: number;
+  rate_source: 'catalog' | 'custom';
+  note: string | null;
 };
 
 export class DraftPriceChangedError extends Error {
@@ -169,7 +166,7 @@ export async function getServiceReport(
   );
   if (!row) return null;
   const usages = await listReportUsages(db, reportId);
-  const services = await listReportServices(db, reportId);
+  const machineServices = await listReportMachineServices(db, reportId);
   const machines = await listReportMachines(db, reportId);
   const machineCount = Math.max(1, machines.length);
   const detail = mapDetailRow(row);
@@ -180,12 +177,12 @@ export async function getServiceReport(
   return {
     ...detail,
     totalBillCentavos: row.document_state === 'draft'
-      ? calculateServiceReportTotal(usages, services, machineCount)
+      ? calculateServiceReportTotal(usages, machineServices.map((service) => ({ resolvedRateCentavos: service.rateCentavos })))
       : detail.totalBillCentavos,
     machines,
     machineCount,
     usages,
-    services,
+    machineServices,
     acknowledgmentOptions: row.customer_type === 'individual' ? [row.customer_name] : memberRows.map((member) => member.name),
   };
 }
@@ -367,45 +364,109 @@ export async function removeReportItemUsage(
   });
 }
 
-export async function addReportServiceUsage(db: SQLiteDatabase, reportId: string, serviceId: string, overrideRateCentavos?: number, overrideReason?: string): Promise<string> {
-  let usageId = '';
+/**
+ * Compatibility helper: adds one service to every machine on the CSR at one
+ * price. The per-machine API below is the normal way to price a service.
+ */
+export async function addReportServiceUsage(db: SQLiteDatabase, reportId: string, serviceId: string, rateCentavos?: number, note?: string): Promise<string> {
+  let firstId = '';
   await db.withExclusiveTransactionAsync(async (tx) => {
-    usageId = await insertCsrServiceUsage(tx, reportId, serviceId, overrideRateCentavos, overrideReason);
+    [firstId] = await insertServiceOnAllMachines(tx, reportId, serviceId, rateCentavos, note);
     await syncLinkedCsrDraftLines(tx, reportId);
   });
-  return usageId;
+  return firstId;
 }
 
-export async function removeReportServiceUsage(
+/**
+ * Prices a service on a machine of a draft CSR. `alsoEquipmentIds` repeats it at
+ * the same price on other machines. The same service may be added again to a
+ * machine at another price.
+ */
+export async function addMachineService(
   db: SQLiteDatabase,
   reportId: string,
-  usageId: string,
-): Promise<void> {
+  input: { equipmentId: string; serviceId: string; rateCentavos: number; note?: string; alsoEquipmentIds?: string[] },
+): Promise<string> {
+  const machineIds = [input.equipmentId, ...(input.alsoEquipmentIds ?? [])];
+  if (new Set(machineIds).size !== machineIds.length) throw new Error('Each machine can be selected only once.');
+  let firstId = '';
   await db.withExclusiveTransactionAsync(async (tx) => {
+    for (const [index, equipmentId] of machineIds.entries()) {
+      const id = await insertMachineService(tx, reportId, { equipmentId, serviceId: input.serviceId, rateCentavos: input.rateCentavos, note: input.note });
+      if (index === 0) firstId = id;
+    }
+    await syncLinkedCsrDraftLines(tx, reportId);
+  });
+  return firstId;
+}
+
+export async function updateMachineService(
+  db: SQLiteDatabase,
+  reportId: string,
+  rowId: string,
+  input: { rateCentavos: number; note?: string },
+): Promise<void> {
+  if (!Number.isSafeInteger(input.rateCentavos) || input.rateCentavos < 0) throw new Error('Service price must be a non-negative amount.');
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const row = await tx.getFirstAsync<{ base_rate_centavos: number }>(
+      `SELECT s.base_rate_centavos
+       FROM service_report_machine_service m
+       JOIN services s ON s.id = m.service_id
+       JOIN service_reports r ON r.id = m.service_report_id
+       WHERE m.id = ? AND m.service_report_id = ? AND r.document_state = 'draft'`,
+      rowId,
+      reportId,
+    );
+    if (!row) throw new Error('Only a draft CSR service price can be changed.');
+    await tx.runAsync(
+      'UPDATE service_report_machine_service SET rate_centavos = ?, rate_source = ?, note = ? WHERE id = ?',
+      input.rateCentavos,
+      input.rateCentavos === row.base_rate_centavos ? 'catalog' : 'custom',
+      input.note?.trim() || null,
+      rowId,
+    );
+    await recalculateServiceReportTotal(tx, reportId);
+    await syncLinkedCsrDraftLines(tx, reportId);
+    await appendAuditEvent(tx, {
+      eventType: 'csr.machine_service_updated',
+      entityType: 'service_report',
+      entityId: reportId,
+      details: { rowId, rateCentavos: input.rateCentavos },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
+export async function removeMachineService(db: SQLiteDatabase, reportId: string, rowId: string): Promise<void> {
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    // Lines first: they reference the row, and foreign keys are enforced.
     await tx.runAsync(
       `DELETE FROM billing_statement_lines
-       WHERE source_csr_service_usage_id=?
+       WHERE source_csr_machine_service_id = ?
          AND billing_statement_id IN (
-           SELECT id FROM billing_statements WHERE service_report_id=? AND document_state='draft'
+           SELECT id FROM billing_statements WHERE service_report_id = ? AND document_state = 'draft'
          )`,
-      usageId,
+      rowId,
       reportId,
     );
     const result = await tx.runAsync(
-      `DELETE FROM service_report_service_usage
+      `DELETE FROM service_report_machine_service
        WHERE id = ? AND service_report_id = ?
          AND EXISTS (SELECT 1 FROM service_reports WHERE id = ? AND document_state = 'draft')`,
-      usageId,
+      rowId,
       reportId,
       reportId,
     );
-    if (result.changes !== 1) throw new Error('Only draft service usage can be removed.');
+    if (result.changes !== 1) throw new Error('Only draft service charges can be removed.');
     await syncLinkedCsrDraftLines(tx, reportId);
     await recalculateServiceReportTotal(tx, reportId);
     await appendAuditEvent(tx, {
-      eventType: 'csr.service_usage_removed',
+      eventType: 'csr.machine_service_removed',
       entityType: 'service_report',
       entityId: reportId,
+      details: { rowId },
       createdAt: new Date().toISOString(),
     });
     await incrementDatabaseRevision(tx);
@@ -473,6 +534,14 @@ export async function removeReportEquipment(db: SQLiteDatabase, reportId: string
     if (!machines.some((machine) => machine.equipmentId === equipmentId)) throw new Error('This machine is not listed on the CSR.');
     if (machines.length <= 1) throw new Error('A CSR needs at least one machine.');
     const remaining = machines.filter((machine) => machine.equipmentId !== equipmentId);
+    await tx.runAsync(
+      `DELETE FROM billing_statement_lines
+       WHERE billing_statement_id IN (SELECT id FROM billing_statements WHERE service_report_id = ? AND document_state = 'draft')
+         AND source_csr_machine_service_id IN (
+           SELECT id FROM service_report_machine_service WHERE service_report_id = ? AND equipment_id = ?)`,
+      reportId, reportId, equipmentId,
+    );
+    await tx.runAsync('DELETE FROM service_report_machine_service WHERE service_report_id = ? AND equipment_id = ?', reportId, equipmentId);
     await tx.runAsync('DELETE FROM service_report_equipment WHERE service_report_id = ?', reportId);
     for (const [index, machine] of remaining.entries()) {
       await tx.runAsync(
@@ -508,6 +577,7 @@ export async function deleteServiceReportDraft(
     await deleteLinkedBillingStatementDrafts(tx, reportId, now);
     await tx.runAsync('DELETE FROM service_report_item_usage WHERE service_report_id = ?', reportId);
     await tx.runAsync('DELETE FROM service_report_service_usage WHERE service_report_id = ?', reportId);
+    await tx.runAsync('DELETE FROM service_report_machine_service WHERE service_report_id = ?', reportId);
     await tx.runAsync('DELETE FROM service_report_equipment WHERE service_report_id = ?', reportId);
     await tx.runAsync("DELETE FROM service_reports WHERE id = ? AND document_state = 'draft'", reportId);
     await appendAuditEvent(tx, {
@@ -567,9 +637,10 @@ export async function finalizeServiceReport(
 
     await assertLinkedCsrChargesAreSourced(tx, reportId);
     let usages = await listFinalizationUsages(tx, reportId, row.customer_id);
-    let services = await listFinalizationServices(tx, reportId);
     const machines = await listReportMachines(tx, reportId);
     const machineCount = Math.max(1, machines.length);
+    const machineServices = await listReportMachineServices(tx, reportId);
+    const machineNumberById = new Map(machines.map((machine, index) => [machine.equipmentId, index + 1]));
     const priceChanges: string[] = [];
     for (const usage of usages) {
       if (usage.quantity_integer > usage.current_stock) {
@@ -578,11 +649,6 @@ export async function finalizeServiceReport(
       if (usage.billable === 1 && usage.price_source !== 'override') {
         const currentPrice = usage.customer_price_centavos ?? usage.base_selling_price_centavos;
         if (usage.resolved_selling_price_centavos !== currentPrice) priceChanges.push(usage.item_name);
-      }
-    }
-    for (const service of services) {
-      if (service.rate_source !== 'override' && service.resolved_rate_centavos !== service.base_rate_centavos) {
-        priceChanges.push(service.service_name);
       }
     }
     if (priceChanges.length && pricePolicy === 'reject') throw new DraftPriceChangedError(priceChanges);
@@ -609,32 +675,12 @@ export async function finalizeServiceReport(
         );
       }
     }
-    for (const service of services) {
-      if (service.rate_source === 'override') continue;
-      if (pricePolicy === 'use-current') {
-        await tx.runAsync(
-          `UPDATE service_report_service_usage
-           SET resolved_rate_centavos = ?, rate_source = 'catalog', override_reason = NULL
-           WHERE id = ?`,
-          service.base_rate_centavos,
-          service.id,
-        );
-      } else if (pricePolicy === 'keep-draft' && service.resolved_rate_centavos !== service.base_rate_centavos) {
-        await tx.runAsync(
-          `UPDATE service_report_service_usage
-           SET rate_source = 'override', override_reason = 'Draft rate retained after rate change'
-           WHERE id = ?`,
-          service.id,
-        );
-      }
-    }
     usages = await listFinalizationUsages(tx, reportId, row.customer_id);
-    services = await listFinalizationServices(tx, reportId);
     const totalBillCentavos = calculateServiceReportTotal(usages.map((usage) => ({
       quantity: usage.quantity_integer,
       billable: usage.billable === 1,
       resolvedSellingPriceCentavos: usage.resolved_selling_price_centavos,
-    })), services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })), machineCount);
+    })), machineServices.map((service) => ({ resolvedRateCentavos: service.rateCentavos })));
     await tx.runAsync('UPDATE service_reports SET total_bill_centavos = ? WHERE id = ?', totalBillCentavos, reportId);
 
     const csrNumber = await allocateDocumentNumber(tx, 'CSR');
@@ -671,9 +717,12 @@ export async function finalizeServiceReport(
         unitLabel: usage.unit_label,
         billable: usage.billable === 1,
       })),
-      services: services.map((service) => ({
-        description: service.service_name,
-        rateCentavos: service.resolved_rate_centavos,
+      services: machineServices.map((service) => ({
+        description: service.serviceName,
+        rateCentavos: service.rateCentavos,
+        machineLabel: service.machineLabel,
+        machineNumber: machineNumberById.get(service.equipmentId) ?? 1,
+        ...(service.note ? { note: service.note } : {}),
       })),
     };
     snapshot.business.logoDataUrl = await getBusinessLogo(tx);
@@ -766,9 +815,13 @@ export async function voidServiceReport(
     const activeBilling = await tx.getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) AS count
        FROM billing_statement_lines l
-       JOIN service_report_item_usage u ON u.id = l.source_csr_usage_id
        JOIN billing_statements b ON b.id = l.billing_statement_id
-       WHERE u.service_report_id = ? AND b.document_state <> 'voided'`,
+       WHERE b.document_state <> 'voided'
+         AND (l.source_csr_usage_id IN (SELECT id FROM service_report_item_usage WHERE service_report_id = ?)
+           OR l.source_csr_service_usage_id IN (SELECT id FROM service_report_service_usage WHERE service_report_id = ?)
+           OR l.source_csr_machine_service_id IN (SELECT id FROM service_report_machine_service WHERE service_report_id = ?))`,
+      reportId,
+      reportId,
       reportId,
     );
     if ((activeBilling?.count ?? 0) > 0) throw new Error('Void related Billing Statements before voiding this CSR.');
@@ -878,17 +931,24 @@ async function listReportUsages(db: SQLiteDatabase, reportId: string): Promise<S
   return rows.map(mapUsageRow);
 }
 
-async function listReportServices(db: SQLiteDatabase, reportId: string): Promise<ServiceReportServiceUsage[]> {
-  const rows = await db.getAllAsync<ServiceUsageRow>(
-    `SELECT u.id, u.service_id, COALESCE(u.description_snapshot, s.name) AS service_name,
-            u.quantity_integer, u.resolved_rate_centavos, u.rate_source, u.override_reason
-     FROM service_report_service_usage u
-     JOIN services s ON s.id = u.service_id
-     WHERE u.service_report_id = ?
-     ORDER BY u.created_at ASC`,
+export async function listReportMachineServices(db: SQLiteDatabase, reportId: string): Promise<ServiceReportMachineService[]> {
+  const rows = await db.getAllAsync<MachineServiceRow>(
+    `SELECT id, equipment_id, service_id, description_snapshot, machine_label, rate_centavos, rate_source, note
+     FROM service_report_machine_service
+     WHERE service_report_id = ?
+     ORDER BY created_at ASC, rowid ASC`,
     reportId,
   );
-  return rows.map(mapServiceUsageRow);
+  return rows.map((row) => ({
+    id: row.id,
+    equipmentId: row.equipment_id,
+    machineLabel: row.machine_label,
+    serviceId: row.service_id,
+    serviceName: row.description_snapshot,
+    rateCentavos: row.rate_centavos,
+    rateSource: row.rate_source,
+    note: row.note,
+  }));
 }
 
 async function listFinalizationUsages(
@@ -913,22 +973,6 @@ async function listFinalizationUsages(
   );
 }
 
-async function listFinalizationServices(
-  db: SQLiteDatabase,
-  reportId: string,
-): Promise<FinalizationServiceUsageRow[]> {
-  return db.getAllAsync<FinalizationServiceUsageRow>(
-    `SELECT u.id, u.service_id, COALESCE(u.description_snapshot, s.name) AS service_name,
-            u.quantity_integer, u.resolved_rate_centavos, u.rate_source, u.override_reason,
-            s.base_rate_centavos
-     FROM service_report_service_usage u
-     JOIN services s ON s.id = u.service_id
-     WHERE u.service_report_id = ?
-     ORDER BY u.created_at ASC`,
-    reportId,
-  );
-}
-
 function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
   return {
     id: row.id,
@@ -942,7 +986,7 @@ function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
   };
 }
 
-function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'services' | 'machines' | 'machineCount'> {
+function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'machineServices' | 'machines' | 'machineCount'> {
   return {
     ...mapSummaryRow(row),
     customerId: row.customer_id,
@@ -982,18 +1026,6 @@ function mapUsageRow(row: UsageRow): ServiceReportUsage {
     billable: row.billable === 1,
     resolvedSellingPriceCentavos: row.resolved_selling_price_centavos,
     priceSource: row.price_source,
-    overrideReason: row.override_reason,
-  };
-}
-
-function mapServiceUsageRow(row: ServiceUsageRow): ServiceReportServiceUsage {
-  return {
-    id: row.id,
-    serviceId: row.service_id,
-    serviceName: row.service_name,
-    quantity: 1,
-    resolvedRateCentavos: row.resolved_rate_centavos,
-    rateSource: row.rate_source,
     overrideReason: row.override_reason,
   };
 }

@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11 } from '@/db/schema';
 
 let idCounter=0;
 vi.mock('expo-crypto',()=>({randomUUID:()=>`test-id-${++idCounter}`,CryptoDigestAlgorithm:{SHA256:'SHA-256'},digestStringAsync:async()=> 'ABCDEF1234567890'}));
@@ -26,7 +26,7 @@ function adapter(database:DatabaseSync):SQLiteDatabase {
   return api as unknown as SQLiteDatabase;
 }
 
-describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteDatabase;beforeEach(()=>{idCounter=0;raw=new DatabaseSync(':memory:');raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}`);const now='2026-09-05T00:00:00.000Z';raw.prepare("INSERT INTO app_meta(key,value) VALUES('database_revision','0')").run();raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',0),('PA',0)");raw.prepare(`INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner',?,?)`).run(now,now);raw.prepare(`INSERT INTO customers(id,name,address,active,created_at,updated_at) VALUES('customer','Laundry','Sariaya',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO items(id,name,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Detergent','carboy',120000,1,?,?)`).run(now,now);raw.prepare(`INSERT INTO inventory_movements(id,item_id,movement_type,quantity_delta_integer,description,created_at) VALUES('opening','item','restock',10,'Opening',?)`).run(now);raw.prepare(`INSERT INTO services(id,name,base_rate_centavos,active,created_at,updated_at) VALUES('service','Labor',50000,1,?,?)`).run(now,now);db=adapter(raw);});afterEach(()=>raw.close());
+describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteDatabase;beforeEach(()=>{idCounter=0;raw=new DatabaseSync(':memory:');raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}`);const now='2026-09-05T00:00:00.000Z';raw.prepare("INSERT INTO app_meta(key,value) VALUES('database_revision','0')").run();raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',0),('PA',0)");raw.prepare(`INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner',?,?)`).run(now,now);raw.prepare(`INSERT INTO customers(id,name,address,active,created_at,updated_at) VALUES('customer','Laundry','Sariaya',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO items(id,name,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Detergent','carboy',120000,1,?,?)`).run(now,now);raw.prepare(`INSERT INTO inventory_movements(id,item_id,movement_type,quantity_delta_integer,description,created_at) VALUES('opening','item','restock',10,'Opening',?)`).run(now);raw.prepare(`INSERT INTO services(id,name,base_rate_centavos,active,created_at,updated_at) VALUES('service','Labor',50000,1,?,?)`).run(now,now);db=adapter(raw);});afterEach(()=>raw.close());
 
   async function draftPair() {
     raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now')");
@@ -71,7 +71,6 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     expect((await getServiceReport(db,reportId))?.usages).toMatchObject([{itemName:'Detergent',quantity:2}]);
     expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(3);
     await expect(addDirectItemLine(db,statementId,{itemId:'item',quantity:2})).rejects.toThrow(/already listed on the CSR/);
-    await expect(addServiceLine(db,statementId,{serviceId:'service'})).rejects.toThrow(/already listed on the CSR/);
     expect(raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get()).toEqual({stock:10});
     const finalized=await finalizeServiceReport(db,reportId);
     expect(finalized.snapshot).toMatchObject({totalBillCentavos:300000,usages:[{description:'Detergent',quantity:2}],services:[{description:'Labor'},{description:'Inspection'}]});
@@ -104,7 +103,7 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     await finalizeServiceReport(db,reportId);
     expect(await listCsrsForBilling(db,'customer')).toMatchObject([{id:reportId,availableLineCount:1}]);
     const linkedId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});
-    expect((await getBillingStatement(db,linkedId))?.lines).toMatchObject([{sourceCsrServiceUsageId:expect.any(String),description:'Labor',amountCentavos:50000}]);
+    expect((await getBillingStatement(db,linkedId))?.lines).toMatchObject([{sourceCsrMachineServiceId:expect.any(String),description:'Labor — Washer',amountCentavos:50000}]);
     expect((await finalizeBillingStatement(db,linkedId)).snapshot.totalCentavos).toBe(50000);
   });
 
@@ -207,7 +206,7 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(8);
     expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(2);
     expect(finalized.snapshot.usages).toEqual([{description:'Detergent',quantity:2,unitLabel:'carboy',billable:true}]);
-    expect(finalized.snapshot.services).toEqual([{description:'Labor',rateCentavos:50000}]);
+    expect(finalized.snapshot.services).toEqual([{description:'Labor',rateCentavos:50000,machineLabel:'Washer',machineNumber:1}]);
     expect(finalized.snapshot.totalBillCentavos).toBe(290000);
     expect(finalized.html).toContain('Items Used');
     expect(finalized.html).toContain('Services Used');
@@ -228,14 +227,14 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     await addReportItemUsage(db,reportId,'item',2,true);
     await addReportServiceUsage(db,reportId,'service');
     const itemUsageId=(raw.prepare('SELECT id FROM service_report_item_usage WHERE service_report_id=?').get(reportId) as {id:string}).id;
-    const serviceUsageId=(raw.prepare('SELECT id FROM service_report_service_usage WHERE service_report_id=?').get(reportId) as {id:string}).id;
+    const serviceUsageId=(raw.prepare('SELECT id FROM service_report_machine_service WHERE service_report_id=?').get(reportId) as {id:string}).id;
     expect(await listCsrsForBilling(db,'customer')).toMatchObject([{id:reportId,availableLineCount:2}]);
 
     const populatedDraftId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});
     const populatedDraft=await getBillingStatement(db,populatedDraftId);
     expect(populatedDraft?.lines).toEqual(expect.arrayContaining([
       expect.objectContaining({lineType:'item',sourceCsrUsageId:itemUsageId,description:'Detergent',quantity:2,amountCentavos:240000}),
-      expect.objectContaining({lineType:'service',sourceCsrServiceUsageId:serviceUsageId,description:'Labor',quantity:1,amountCentavos:50000}),
+      expect.objectContaining({lineType:'service',sourceCsrMachineServiceId:serviceUsageId,description:'Labor — Washer',quantity:1,amountCentavos:50000}),
     ]));
     expect(populatedDraft?.subtotalCentavos).toBe(290000);
 
@@ -264,7 +263,7 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
 
   it('does not cascade-delete a linked non-draft Billing Statement',async()=>{const now='2026-09-05T12:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);const reportId=await createServiceReportDraft(db,{customerId:'customer',equipmentId:'equipment',businessDate:'2026-09-05'});const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05'});raw.prepare(`UPDATE billing_statements SET document_state='finalized' WHERE id=?`).run(statementId);await expect(deleteServiceReportDraft(db,reportId)).rejects.toThrow(/non-draft Billing Statement/);expect(raw.prepare('SELECT document_state FROM service_reports WHERE id=?').get(reportId)).toEqual({document_state:'draft'});expect(raw.prepare('SELECT document_state FROM billing_statements WHERE id=?').get(statementId)).toEqual({document_state:'finalized'});});
 
-  it('keeps linked Billing Statement draft charges synchronized as CSR item and service usage changes',async()=>{const now='2026-09-05T00:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO service_reports(id,customer_id,equipment_id,document_state,service_outcome,business_date,created_at) VALUES('live-csr','customer','equipment','draft','incomplete','2026-09-05',?)`).run(now);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:'live-csr',businessDate:'2026-09-05'});const itemUsageId=await addReportItemUsage(db,'live-csr','item',1,true);const serviceUsageId=await addReportServiceUsage(db,'live-csr','service');expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(2);await removeReportItemUsage(db,'live-csr',itemUsageId);expect((await getBillingStatement(db,statementId))?.lines).toEqual([expect.objectContaining({sourceCsrServiceUsageId:serviceUsageId})]);});
+  it('keeps linked Billing Statement draft charges synchronized as CSR item and service usage changes',async()=>{const now='2026-09-05T00:00:00.000Z';raw.prepare(`INSERT INTO customer_equipment(id,customer_id,machine_type,active,created_at,updated_at) VALUES('equipment','customer','Washer',1,?,?)`).run(now,now);raw.prepare(`INSERT INTO service_reports(id,customer_id,equipment_id,document_state,service_outcome,business_date,created_at) VALUES('live-csr','customer','equipment','draft','incomplete','2026-09-05',?)`).run(now);const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:'live-csr',businessDate:'2026-09-05'});const itemUsageId=await addReportItemUsage(db,'live-csr','item',1,true);const serviceUsageId=await addReportServiceUsage(db,'live-csr','service');expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(2);await removeReportItemUsage(db,'live-csr',itemUsageId);expect((await getBillingStatement(db,statementId))?.lines).toEqual([expect.objectContaining({sourceCsrMachineServiceId:serviceUsageId})]);});
 
   it('enforces one down payment followed by the exact remaining balance',async()=>{const statementId=await createBillingStatementDraft(db,{customerId:'customer',businessDate:'2026-09-05'});await addServiceLine(db,statementId,{serviceId:'service'});const initial=await finalizeBillingStatement(db,statementId,'reject',{choice:'down_payment',payment:{amountCentavos:20000,businessDate:'2026-09-05',method:'cash'}});expect(initial.initialPayment?.paNumber).toBe('PA-000001');await expect(createLaterPayment(db,statementId,{amountCentavos:20000,businessDate:'2026-09-05',method:'cash'})).rejects.toThrow(/full remaining balance/);const balance=await createLaterPayment(db,statementId,{amountCentavos:30000,businessDate:'2026-09-05',method:'e_wallet',referenceNumber:'GCASH-1'});expect(balance.paNumber).toBe('PA-000002');expect((await listPaymentsForStatement(db,statementId)).status).toBe('paid');await expect(voidPayment(db,initial.initialPayment!.paymentId,'Wrong amount')).rejects.toThrow(/remaining-balance payment/);await voidPayment(db,balance.paymentId,'Wrong reference');expect((await listPaymentsForStatement(db,statementId)).status).toBe('balance_due');});
 

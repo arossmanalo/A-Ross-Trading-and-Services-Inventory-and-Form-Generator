@@ -117,9 +117,12 @@ export async function getServiceReportPreview(
         unitLabel: usage.unitLabel,
         billable: usage.billable,
       })),
-      services: report.services.map((service) => ({
+      services: report.machineServices.map((service) => ({
         description: service.serviceName,
-        rateCentavos: service.resolvedRateCentavos,
+        rateCentavos: service.rateCentavos,
+        machineLabel: service.machineLabel,
+        machineNumber: report.machines.findIndex((machine) => machine.equipmentId === service.equipmentId) + 1 || 1,
+        ...(service.note ? { note: service.note } : {}),
       })),
     };
     return { csrNumber: snapshot.csrNumber, html: buildCsrHtml(snapshot), isDraft: true };

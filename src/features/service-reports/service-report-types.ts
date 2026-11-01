@@ -42,14 +42,16 @@ export type ServiceReportUsage = {
   overrideReason: string | null;
 };
 
-export type ServiceReportServiceUsage = {
+/** One service priced for one machine of a CSR. */
+export type ServiceReportMachineService = {
   id: string;
+  equipmentId: string;
+  machineLabel: string;
   serviceId: string;
   serviceName: string;
-  quantity: 1;
-  resolvedRateCentavos: number;
-  rateSource: 'catalog' | 'override';
-  overrideReason: string | null;
+  rateCentavos: number;
+  rateSource: 'catalog' | 'custom';
+  note: string | null;
 };
 
 export type ServiceReportMachine = {
@@ -72,7 +74,7 @@ export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   shareState: 'not_shared' | 'shared';
   finalizedAt: string | null;
   usages: ServiceReportUsage[];
-  services: ServiceReportServiceUsage[];
+  machineServices: ServiceReportMachineService[];
   customerType: 'individual' | 'company';
   acknowledgmentOptions: string[];
 };

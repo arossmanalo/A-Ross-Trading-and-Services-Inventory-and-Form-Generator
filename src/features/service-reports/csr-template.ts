@@ -1,7 +1,7 @@
 import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v7';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v8';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -52,9 +52,17 @@ export type CsrRenderSnapshot = {
     unitLabel: string;
     billable: boolean;
   }>;
+  /**
+   * One entry per service per machine. Entries from earlier template versions
+   * have no machine fields and keep the single-rate (or rate x machines) layout.
+   */
   services?: Array<{
     description: string;
     rateCentavos: number;
+    machineLabel?: string;
+    /** 1-based position of the machine in `machines`. */
+    machineNumber?: number;
+    note?: string;
   }>;
 };
 
@@ -191,6 +199,7 @@ function usageSection(usages: CsrRenderSnapshot['usages']): string {
 
 function serviceSection(services: CsrRenderSnapshot['services'] = [], machineCount = 1): string {
   if (!services.length) return '';
+  if (services.some((service) => service.machineLabel !== undefined)) return perMachineServiceSection(services);
   if (machineCount <= 1) {
     return `<section class="section"><div class="section-title">Services Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Rate</th></tr></thead><tbody>${services
       .map((service) => `<tr><td>${escapeHtml(service.description)}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(service.rateCentavos / 100))}</td></tr>`)
@@ -199,6 +208,25 @@ function serviceSection(services: CsrRenderSnapshot['services'] = [], machineCou
   return `<section class="section"><div class="section-title">Services Used (per machine &times; ${machineCount} machines)</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Rate</th><th class="qty">Machines</th><th class="qty">Amount</th></tr></thead><tbody>${services
     .map((service) => `<tr><td>${escapeHtml(service.description)}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(service.rateCentavos / 100))}</td><td class="qty">&times; ${machineCount}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format((service.rateCentavos * machineCount) / 100))}</td></tr>`)
     .join('')}</tbody></table></section>`;
+}
+
+/** Services grouped under their machine, each priced individually, with a subtotal per machine. */
+function perMachineServiceSection(services: NonNullable<CsrRenderSnapshot['services']>): string {
+  const groups = new Map<number, { label: string; rows: typeof services }>();
+  for (const service of services) {
+    const number = service.machineNumber ?? 1;
+    const group = groups.get(number) ?? { label: service.machineLabel ?? `Machine ${number}`, rows: [] };
+    group.rows.push(service);
+    groups.set(number, group);
+  }
+  const tables = [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([number, group]) => {
+    const subtotal = group.rows.reduce((sum, row) => sum + row.rateCentavos, 0);
+    const rows = group.rows
+      .map((row) => `<tr><td>${escapeHtml(row.description)}${row.note ? ` <span class="note">(${escapeHtml(row.note)})</span>` : ''}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(row.rateCentavos / 100))}</td></tr>`)
+      .join('');
+    return `<table class="usage-table"><thead><tr><th colspan="2">Machine ${number}: ${escapeHtml(group.label)}</th></tr></thead><tbody>${rows}<tr><td><strong>Machine subtotal</strong></td><td class="qty"><strong>${escapeHtml(PHP_FORMATTER.format(subtotal / 100))}</strong></td></tr></tbody></table>`;
+  });
+  return `<section class="section"><div class="section-title">Services Used</div>${tables.join('')}</section>`;
 }
 
 export function escapeHtml(value: string): string {

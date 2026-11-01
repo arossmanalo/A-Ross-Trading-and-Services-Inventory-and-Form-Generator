@@ -5,7 +5,7 @@ import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11 } from '@/db/schema';
 
 const files = new Map<string, string>();
 let idCounter = 0;
@@ -76,7 +76,7 @@ describe('backup repository', () => {
     idCounter = 0;
     files.clear();
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}`);
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}`);
     raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','3');");
     raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',1),('PA',1);");
     raw.exec("INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner','2026-09-01','2026-09-01');");
@@ -137,14 +137,14 @@ describe('backup repository', () => {
     const entries = new TextDecoder();
     const zip = readStoredZip(bytes);
     const manifest = JSON.parse(entries.decode(zip.get('manifest.json'))) as Record<string, unknown>;
-    manifest.schemaVersion = 11;
+    manifest.schemaVersion = 12;
     const data = entries.decode(zip.get('data/tables.json'));
     const future = createStoredZip([
       { path: 'manifest.json', data: JSON.stringify(manifest) },
       { path: 'data/tables.json', data },
       { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
     ]);
-    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 11/);
+    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 12/);
     expect(raw.prepare('SELECT COUNT(*) AS count FROM backup_manifests').get()).toEqual({ count: 1 });
   });
 
@@ -164,6 +164,8 @@ describe('backup repository', () => {
     delete manifest.recordCounts.signature_drafts;
     delete payload.tables.service_report_equipment;
     delete manifest.recordCounts.service_report_equipment;
+    delete payload.tables.service_report_machine_service;
+    delete manifest.recordCounts.service_report_machine_service;
     manifest.schemaVersion = 1;
     for (const row of payload.tables.service_reports) {
       delete row.billing_json;
@@ -218,4 +220,69 @@ describe('backup repository', () => {
     expect(raw.prepare("SELECT customer_id FROM customer_equipment WHERE id='equipment'").get()).toEqual({ customer_id: 'customer' });
     expect(raw.prepare("SELECT name FROM customers WHERE id='customer'").get()).toEqual({ name: 'Laundry' });
   });
+
+  async function repackage(bytes: Uint8Array, change: (payload: { tables: Record<string, any[]> }, manifest: Record<string, any>) => void): Promise<Uint8Array> {
+    const zip = readStoredZip(bytes);
+    const manifest = JSON.parse(new TextDecoder().decode(zip.get('manifest.json'))) as Record<string, any>;
+    const payload = JSON.parse(new TextDecoder().decode(zip.get('data/tables.json'))) as { tables: Record<string, any[]> };
+    change(payload, manifest);
+    const payloadJson = JSON.stringify(payload, null, 2);
+    const { checksum: _checksum, ...withoutChecksum } = manifest;
+    manifest.checksum = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify({ payloadChecksum: await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, payloadJson), manifestWithoutChecksum: withoutChecksum }, null, 2));
+    return createStoredZip([
+      { path: 'manifest.json', data: JSON.stringify(manifest, null, 2) },
+      { path: 'data/tables.json', data: payloadJson },
+      { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
+    ]);
+  }
+
+  function insertBilledService() {
+    raw.exec("INSERT INTO services(id,name,base_rate_centavos,active,created_at,updated_at) VALUES('svc','Labor',50000,1,'2026-09-01','2026-09-01');");
+    raw.exec("INSERT INTO service_report_service_usage(id,service_report_id,service_id,quantity_integer,resolved_rate_centavos,rate_source,description_snapshot,created_at) VALUES('usage','csr','svc',1,50000,'catalog','Labor','2026-09-01');");
+    raw.exec("INSERT INTO service_report_equipment(service_report_id,equipment_id,position,created_at) VALUES('csr','equipment',1,'2026-09-01');");
+    raw.exec("INSERT INTO billing_statements(id,bs_number,customer_id,service_report_id,document_state,business_date,created_at) VALUES('bs','BS-000001','customer','csr','finalized','2026-09-01','2026-09-01');");
+    raw.exec("INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_service_usage_id,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,created_at) VALUES('line','bs','service','usage','svc','Labor',1,50000,50000,'catalog','2026-09-01');");
+  }
+
+  it('restores a schema 10 package, giving each machine its own service row and keeping the billed link', async () => {
+    insertBilledService();
+    const exported = await createBackupPackage(db);
+    const legacy = await repackage(base64ToBytes(files.get(exported.fileUri) ?? ''), (payload, manifest) => {
+      delete payload.tables.service_report_machine_service;
+      delete manifest.recordCounts.service_report_machine_service;
+      for (const row of payload.tables.billing_statement_lines) delete row.source_csr_machine_service_id;
+      manifest.schemaVersion = 10;
+    });
+    const migrated = await validateBackupPackage(legacy);
+    expect(migrated.tables.service_report_machine_service).toEqual([expect.objectContaining({
+      id: 'usage:equipment', service_report_id: 'csr', equipment_id: 'equipment', service_id: 'svc',
+      rate_centavos: 50000, rate_source: 'catalog', machine_label: 'Washer', legacy_service_usage_id: 'usage',
+    })]);
+    expect(migrated.tables.billing_statement_lines[0]).toMatchObject({ source_csr_service_usage_id: 'usage', source_csr_machine_service_id: null });
+
+    await restoreBackupPackage(db, legacy, 'schema10.arossbackup');
+    expect(raw.prepare('SELECT id, rate_centavos, legacy_service_usage_id FROM service_report_machine_service').all()).toEqual([{ id: 'usage:equipment', rate_centavos: 50000, legacy_service_usage_id: 'usage' }]);
+    expect(raw.prepare("SELECT source_csr_service_usage_id AS usage FROM billing_statement_lines WHERE id='line'").get()).toEqual({ usage: 'usage' });
+  });
+
+  it('restores a schema 6 package that has billing statement lines', async () => {
+    insertBilledService();
+    const exported = await createBackupPackage(db);
+    const legacy = await repackage(base64ToBytes(files.get(exported.fileUri) ?? ''), (payload, manifest) => {
+      for (const table of ['customer_members', 'signature_drafts', 'service_report_equipment', 'service_report_machine_service']) {
+        delete payload.tables[table];
+        delete manifest.recordCounts[table];
+      }
+      for (const row of payload.tables.customers) delete row.customer_type;
+      for (const row of payload.tables.billing_statement_lines) {
+        delete row.source_csr_service_usage_id;
+        delete row.source_csr_machine_service_id;
+      }
+      manifest.schemaVersion = 6;
+    });
+    await expect(restoreBackupPackage(db, legacy, 'schema6.arossbackup')).resolves.toMatchObject({ filename: 'schema6.arossbackup' });
+    expect(raw.prepare("SELECT id, source_csr_service_usage_id AS usage, source_csr_machine_service_id AS machine FROM billing_statement_lines").all()).toEqual([{ id: 'line', usage: null, machine: null }]);
+    expect(raw.prepare('SELECT COUNT(*) AS count FROM service_report_machine_service').get()).toEqual({ count: 1 });
+  });
 });
+

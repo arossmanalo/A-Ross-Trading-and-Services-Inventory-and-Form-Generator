@@ -14,6 +14,7 @@ import {
   type BackupTableName,
 } from '@/features/backup/backup-repository';
 import { base64ToBytes, bytesToBase64, readStoredZip, type StoredZipArchive } from '@/features/backup/zip';
+import { formatMachineLabel } from '@/features/service-reports/machine-label';
 
 const MAX_PACKAGE_BYTES = 100 * 1024 * 1024;
 const REQUIRED_ENTRIES = new Set(['manifest.json', 'data/tables.json']);
@@ -57,6 +58,7 @@ export function parseBackupPackage(bytes: Uint8Array): ParsedBackupPackage {
     ...(manifest.schemaVersion < 8 ? ['customer_members'] : []),
     ...(manifest.schemaVersion < 9 ? ['signature_drafts'] : []),
     ...(manifest.schemaVersion < 10 ? ['service_report_equipment'] : []),
+    ...(manifest.schemaVersion < 11 ? ['service_report_machine_service'] : []),
   ];
   if (tableKeys.some(table => !DATA_TABLES.includes(table as BackupTableName)) || DATA_TABLES.some(table => !tableKeys.includes(table) && !legacyMissing.includes(table))) {
     throw new Error('Backup table set does not match the supported schema.');
@@ -272,6 +274,7 @@ function parseManifest(value: unknown): BackupFileManifest {
     if (table === 'customer_members') return value.schemaVersion >= 8;
     if (table === 'signature_drafts') return value.schemaVersion >= 9;
     if (table === 'service_report_equipment') return value.schemaVersion >= 10;
+    if (table === 'service_report_machine_service') return value.schemaVersion >= 11;
     return true;
   });
   if (countKeys.some(table => !expectedCountTables.includes(table as BackupTableName)) || expectedCountTables.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
@@ -326,6 +329,46 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
       position: 1,
       created_at: row.created_at,
     }));
+  }
+  if (parsed.manifest.schemaVersion < 7) {
+    // Schema 7 added the service-usage source link to Billing Statement lines.
+    tables.billing_statement_lines = tables.billing_statement_lines.map(row => ({ source_csr_service_usage_id: null, ...row }));
+  }
+  if (parsed.manifest.schemaVersion < 11) {
+    tables.billing_statement_lines = tables.billing_statement_lines.map(row => ({ source_csr_machine_service_id: null, ...row }));
+    // Earlier CSRs priced each service once for all of their machines; give every machine its own row at that rate.
+    const equipmentById = new Map(tables.customer_equipment.map(row => [String(row.id), row]));
+    const machinesByReport = new Map<string, string[]>();
+    for (const row of [...tables.service_report_equipment].sort((a, b) => Number(a.position) - Number(b.position))) {
+      const list = machinesByReport.get(String(row.service_report_id)) ?? [];
+      list.push(String(row.equipment_id));
+      machinesByReport.set(String(row.service_report_id), list);
+    }
+    const machineServices: BackupRow[] = [];
+    for (const usage of tables.service_report_service_usage) {
+      for (const equipmentId of machinesByReport.get(String(usage.service_report_id)) ?? []) {
+        const machine = equipmentById.get(equipmentId);
+        if (!machine) continue;
+        machineServices.push({
+          id: `${String(usage.id)}:${equipmentId}`,
+          service_report_id: usage.service_report_id,
+          equipment_id: equipmentId,
+          service_id: usage.service_id,
+          rate_centavos: usage.resolved_rate_centavos,
+          rate_source: usage.rate_source === 'override' ? 'custom' : 'catalog',
+          description_snapshot: usage.description_snapshot,
+          machine_label: formatMachineLabel({
+            machineType: String(machine.machine_type),
+            nicknameOrLocation: String(machine.nickname_or_location ?? ''),
+            serialNumber: String(machine.serial_number ?? ''),
+          }),
+          note: usage.override_reason,
+          legacy_service_usage_id: usage.id,
+          created_at: usage.created_at,
+        });
+      }
+    }
+    tables.service_report_machine_service = machineServices;
   }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };
