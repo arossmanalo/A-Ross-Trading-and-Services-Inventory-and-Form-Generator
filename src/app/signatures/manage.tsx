@@ -4,6 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useRef, useState } from 'react';
 import { ScrollView, Switch, Text, View } from 'react-native';
 import { ActionButton } from '@/components/action-button';
+import { resolveShareFileName } from '@/features/documents/share-file-name';
 import { listSignatureCaptures, type SignatureCapture } from '@/features/signatures/capture-repository';
 import { listSignatureDrafts, type SignatureDraft } from '@/features/signatures/signature-draft-repository';
 import { getSignableDocument, pickAndAttachSignedPdf, setDocumentSignatureStatus, shareSignedAttachment } from '@/features/signatures/signature-repository';
@@ -59,10 +60,10 @@ export default function ManageSignaturesScreen() {
       <View style={{flexDirection:'row',alignItems:'center',gap:12}}><Switch accessibilityLabel="I checked the returned document number, revision and fingerprint" disabled={locked} value={matched} onValueChange={setMatched}/><Text style={{flex:1}}>I checked that the returned PDF matches this document.</Text></View>
       <ActionButton disabled={locked || !matched} onPress={() => void run(async () => {await pickAndAttachSignedPdf(db,ownerType,ownerId,document.fingerprint);setMatched(false);})}>Choose signed PDF to import</ActionButton>
       <Text selectable style={{fontWeight:'700'}}>Previously imported signed PDFs</Text>
-      {document.attachments.length ? document.attachments.map(attachment => <View key={attachment.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
+      {document.attachments.length ? document.attachments.map((attachment,index) => <View key={attachment.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
         <Text selectable>{attachment.filename}</Text>
         <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {await Print.printAsync({uri:attachment.privatePath});setNotice('Returned signed PDF preview opened.');})}>Preview returned PDF</ActionButton>
-        <ActionButton variant="secondary" disabled={busy} onPress={() => void run(() => shareSignedAttachment(attachment))}>Share returned PDF</ActionButton>
+        <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => shareSignedAttachment(attachment,await resolveShareFileName(db,document.ownerType,document.ownerId,document.attachments.length > 1 ? `Signed ${document.attachments.length - index}` : 'Signed')))}>Share returned PDF</ActionButton>
       </View>) : <Text>No signed PDF has been imported for this document yet.</Text>}
     </> : previewing ? <>
       <Text selectable style={{fontWeight:'700'}}>In-person signed version</Text>
@@ -75,10 +76,10 @@ export default function ManageSignaturesScreen() {
         <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/signatures/preview', params: { captureId: latestInPersonVersion.id, kind: document.ownerType === 'service_report' ? 'csr' : 'billing_statement' } })}>Preview signed version</ActionButton>
       </> : <Text>No in-person signature has been captured for this document yet.</Text>}
       <Text selectable style={{fontWeight:'700'}}>Customer-returned signed PDFs</Text>
-      {document.attachments.length ? document.attachments.map(attachment => <View key={attachment.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
+      {document.attachments.length ? document.attachments.map((attachment,index) => <View key={attachment.id} style={{gap:8,padding:12,borderWidth:1,borderColor:colors.separator,borderRadius:12}}>
         <Text selectable>{attachment.filename}</Text>
         <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => {await Print.printAsync({uri:attachment.privatePath});setNotice('Returned signed PDF preview opened.');})}>Preview returned PDF</ActionButton>
-        <ActionButton variant="secondary" disabled={busy} onPress={() => void run(() => shareSignedAttachment(attachment))}>Share returned PDF</ActionButton>
+        <ActionButton variant="secondary" disabled={busy} onPress={() => void run(async () => shareSignedAttachment(attachment,await resolveShareFileName(db,document.ownerType,document.ownerId,document.attachments.length > 1 ? `Signed ${document.attachments.length - index}` : 'Signed')))}>Share returned PDF</ActionButton>
       </View>) : <Text>No customer-returned signed PDF has been imported.</Text>}
       {!latestInPersonVersion && !document.attachments.length ? <Text>No signed version is available yet.</Text> : null}
     </> : <>

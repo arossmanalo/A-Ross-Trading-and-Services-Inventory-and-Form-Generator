@@ -2,7 +2,6 @@ import { Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { requestPermissionsAsync, saveToLibraryAsync } from 'expo-media-library/legacy';
 import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -18,7 +17,12 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { ActionButton } from '@/components/action-button';
-import { getBillingStatementPreview } from '@/features/billing-statements/billing-statement-pdf';
+import { confirmNextShare } from '@/components/confirm-next-share';
+import { getBillingStatementPreview, listShareableStatementsForReport } from '@/features/billing-statements/billing-statement-pdf';
+import { printHtmlToPdf } from '@/features/documents/pdf-output';
+import { resolveShareFileName } from '@/features/documents/share-file-name';
+import { sharePdfFile } from '@/features/documents/share-pdf';
+import { runShareSequence, type ShareStep } from '@/features/documents/share-sequence';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
 import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
@@ -32,6 +36,12 @@ type PreviewData = { number: string; html: string; isDraft: boolean };
 type CaptureView = View & { measure?: unknown };
 
 const MAX_IMAGE_HEIGHT = 6_000;
+
+/** Renders a portrait PDF at the document's page size, whatever the tablet's current rotation. */
+async function renderPdf(html: string, documentKind: DocumentKind): Promise<string> {
+  const file = await printHtmlToPdf(html, documentKind === 'csr' ? 'legal' : 'a4');
+  return file.uri;
+}
 
 /**
  * The generated document HTML uses a one-to-one viewport by default so that
@@ -132,15 +142,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
 
   const generatePdf = useCallback(async () => {
     if (!preview) throw new Error('The document preview is not ready.');
-    const dimensions = kind === 'csr'
-      ? { width: 612, height: 1008 }
-      : { width: 595, height: 842 };
-    const file = await Print.printToFileAsync({
-      html: preview.html,
-      ...dimensions,
-      textZoom: 100,
-    });
-    return file.uri;
+    return renderPdf(preview.html, kind);
   }, [kind, preview]);
 
   const openPdfPreview = useCallback(async () => {
@@ -149,7 +151,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     setNotice('');
     try {
       const uri = await generatePdf();
-      await Print.printAsync({ uri });
+      await Print.printAsync({ uri, orientation: Print.Orientation.portrait });
       setNotice(reviewingSignature ? 'Signature preview opened. It is not finalized yet.' : 'PDF preview opened.');
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not open the PDF preview.');
@@ -163,20 +165,33 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     setError(null);
     setNotice('');
     try {
-      if (!(await Sharing.isAvailableAsync())) throw new Error('File sharing is unavailable on this device.');
-      const uri = await generatePdf();
-      await Sharing.shareAsync(uri, {
-        dialogTitle: `Save or share ${kind === 'csr' ? 'CSR' : 'Billing Statement'} PDF`,
-        mimeType: 'application/pdf',
-        UTI: 'com.adobe.pdf',
-      });
-      setNotice(preview?.isDraft ? 'PDF export opened. The document remains a draft until you finalize it.' : 'PDF export opened.');
+      if (!preview) throw new Error('The document preview is not ready.');
+      const fileName = await resolveShareFileName(db, kind === 'csr' ? 'service_report' : 'billing_statement', documentId);
+      const steps: ShareStep[] = [{
+        title: kind === 'csr' ? 'Customer Service Report' : 'Billing Statement',
+        fileName,
+        run: async () => sharePdfFile({ sourceUri: await renderPdf(preview.html, kind), fileName }),
+      }];
+      // A finalized CSR is shared together with its finalized Billing Statements (signed copies where they exist).
+      if (kind === 'csr' && !preview.isDraft) {
+        for (const statement of await listShareableStatementsForReport(db, documentId)) {
+          const statementPreview = await getBillingStatementPreview(db, statement.id);
+          const statementFileName = await resolveShareFileName(db, 'billing_statement', statement.id);
+          steps.push({
+            title: 'Billing Statement',
+            fileName: statementFileName,
+            run: async () => sharePdfFile({ sourceUri: await renderPdf(withDocumentHeaderLayout(statementPreview.html), 'billing_statement'), fileName: statementFileName }),
+          });
+        }
+      }
+      const shared = await runShareSequence(steps, confirmNextShare);
+      setNotice(shared > 1 ? `${shared} PDFs were handed to the share sheet.` : preview.isDraft ? 'PDF export opened. The document remains a draft until you finalize it.' : 'PDF export opened.');
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not export the PDF.');
     } finally {
       setBusy(false);
     }
-  }, [generatePdf, kind, preview?.isDraft]);
+  }, [db, documentId, kind, preview]);
 
   const saveImage = useCallback(async () => {
     setBusy(true);
@@ -216,7 +231,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
         <>
           <View style={styles.actions}>
             <ActionButton disabled={busy} onPress={() => void openPdfPreview()}>
-              {busy ? 'Preparing…' : 'Open PDF preview'}
+              {busy ? 'Preparing…' : reviewingSignature ? 'Open print preview' : 'Print (opens print dialog)'}
             </ActionButton>
             {reviewingSignature ? <Button title={busy ? 'Finalizing…' : 'Finalize signature'} color={colors.brandBlue} disabled={busy} onPress={() => setConfirmSignature(true)} /> : <View style={styles.secondaryActions}>
               <ActionButton compact disabled={busy} variant="secondary" onPress={() => void sharePdf()}>
@@ -228,7 +243,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
             </View>}
             <Text selectable style={styles.help}>
               {reviewingSignature ? 'Signature review only. Return to Sign Document to redraw it before finalizing.' : preview.isDraft ? 'Draft preview only — no number, stock movement, or payment is created.' : activeCaptureId ? 'Finalized signed document preview.' : 'Finalized document preview.'}
-              {' '}Image export saves the full preview as one PNG; PDF keeps normal page breaks.
+              {' '}Image export saves the full preview as one PNG; PDF keeps normal page breaks. To send a PDF use Save / share PDF; the print dialog follows the tablet's rotation and is meant for printing.
             </Text>
           </View>
           {error ? <Text selectable style={styles.error}>{error}</Text> : null}

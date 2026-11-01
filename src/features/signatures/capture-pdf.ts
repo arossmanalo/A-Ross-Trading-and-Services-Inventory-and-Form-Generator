@@ -1,9 +1,9 @@
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Print from 'expo-print';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { withDocumentHeaderLayout } from '@/features/documents/document-header';
+import { printHtmlToPdf } from '@/features/documents/pdf-output';
 import type { SignatureCapture } from '@/features/signatures/capture-repository';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
@@ -27,7 +27,7 @@ async function render(db: SQLiteDatabase, captureId: string): Promise<string> {
   const destination = `${directory}${capture.deterministic_filename}`;
   try {
     const html = withDocumentHeaderLayout(applySignatureCapturesToDocument(capture.render_template_snapshot,[]));
-    const pdf = await Print.printToFileAsync({html,width:capture.owner_type === 'service_report' ? 612 : 595,height:capture.owner_type === 'service_report' ? 1008 : 842,base64:true,textZoom:100});
+    const pdf = await printHtmlToPdf(html,capture.owner_type === 'service_report' ? 'legal' : 'a4',{base64:true});
     cacheUri = pdf.uri;
     if (!pdf.base64) throw new Error('PDF checksum source was not returned.');
     await FileSystem.makeDirectoryAsync(directory,{intermediates:true});

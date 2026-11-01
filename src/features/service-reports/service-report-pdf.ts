@@ -1,18 +1,18 @@
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
+import { listShareableStatementsForReport, retryBillingStatementPdf, shareBillingStatementPdf } from '@/features/billing-statements/billing-statement-pdf';
+import { printHtmlToPdf } from '@/features/documents/pdf-output';
+import { resolveShareFileName } from '@/features/documents/share-file-name';
+import { sharePdfFile } from '@/features/documents/share-pdf';
+import type { ShareStep } from '@/features/documents/share-sequence';
 import { getBusinessLogo } from '@/features/settings/settings-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { buildCsrHtml, type CsrRenderSnapshot } from '@/features/service-reports/csr-template';
 import { finalizeServiceReport, getServiceReport } from '@/features/service-reports/service-report-repository';
-
-const LEGAL_WIDTH_POINTS = 612;
-const LEGAL_HEIGHT_POINTS = 1008;
 
 export async function finalizeAndRenderServiceReport(
   db: SQLiteDatabase,
@@ -139,21 +139,55 @@ export async function getServiceReportPreview(
   return { csrNumber: row.csr_number, html: row.render_template_snapshot, isDraft: false };
 }
 
+/**
+ * Everything to hand to the share sheet for a finalized CSR: the CSR itself,
+ * then each finalized Billing Statement linked to it. Missing PDFs are rendered
+ * first so a failure shows before any sheet opens.
+ */
+export async function getServiceReportShareSteps(db: SQLiteDatabase, reportId: string): Promise<ShareStep[]> {
+  const report = await db.getFirstAsync<{ document_state: string }>('SELECT document_state FROM service_reports WHERE id = ?', reportId);
+  if (!report || report.document_state !== 'finalized') throw new Error('Only a finalized CSR can be shared.');
+
+  const stored = await db.getFirstAsync<{ private_path: string }>(
+    `SELECT private_path FROM document_attachments
+     WHERE owner_type = 'service_report' AND owner_id = ? AND attachment_type = 'generated_pdf'`,
+    reportId,
+  );
+  if (!stored?.private_path || !(await FileSystem.getInfoAsync(stored.private_path)).exists) {
+    await retryServiceReportPdf(db, reportId);
+  }
+
+  const statements = await listShareableStatementsForReport(db, reportId);
+  for (const statement of statements) {
+    if (statement.pdfState !== 'ready') await retryBillingStatementPdf(db, statement.id);
+  }
+
+  const steps: ShareStep[] = [{
+    title: 'Customer Service Report',
+    fileName: await resolveShareFileName(db, 'service_report', reportId),
+    run: () => shareServiceReportPdf(db, reportId),
+  }];
+  for (const statement of statements) {
+    steps.push({
+      title: 'Billing Statement',
+      fileName: await resolveShareFileName(db, 'billing_statement', statement.id),
+      run: () => shareBillingStatementPdf(db, statement.id),
+    });
+  }
+  return steps;
+}
+
 export async function shareServiceReportPdf(db: SQLiteDatabase, reportId: string): Promise<void> {
-  const attachment = await db.getFirstAsync<{ private_path: string; deterministic_filename: string }>(
-    `SELECT private_path, deterministic_filename
+  const attachment = await db.getFirstAsync<{ private_path: string }>(
+    `SELECT private_path
      FROM document_attachments
      WHERE owner_type = 'service_report' AND owner_id = ? AND attachment_type = 'generated_pdf'`,
     reportId,
   );
   if (!attachment) throw new Error('Generate the CSR PDF before sharing.');
-  if (!(await Sharing.isAvailableAsync())) throw new Error('File sharing is unavailable on this device.');
+  const fileName = await resolveShareFileName(db, 'service_report', reportId);
 
-  await Sharing.shareAsync(attachment.private_path, {
-    dialogTitle: `Share ${attachment.deterministic_filename}`,
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
-  });
+  await sharePdfFile({ sourceUri: attachment.private_path, fileName });
 
   await db.withExclusiveTransactionAsync(async (tx) => {
     await tx.runAsync("UPDATE service_reports SET share_state = 'shared' WHERE id = ?", reportId);
@@ -175,13 +209,7 @@ async function renderFinalizedServiceReportPdf(
 ): Promise<string> {
   let cacheUri: string | undefined;
   try {
-    const result = await Print.printToFileAsync({
-      html,
-      width: LEGAL_WIDTH_POINTS,
-      height: LEGAL_HEIGHT_POINTS,
-      base64: true,
-      textZoom: 100,
-    });
+    const result = await printHtmlToPdf(html, 'legal', { base64: true });
     cacheUri = result.uri;
     if (!FileSystem.documentDirectory) throw new Error('Persistent document storage is unavailable.');
     if (!result.base64) throw new Error('PDF checksum source was not returned.');

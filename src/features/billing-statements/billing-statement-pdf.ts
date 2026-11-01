@@ -1,7 +1,5 @@
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
@@ -9,11 +7,12 @@ import { finalizeBillingStatement, getBillingStatement } from '@/features/billin
 import { getBusinessLogo } from '@/features/settings/settings-repository';
 import { getPreparerSignatureHtml, getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
+import type { BillingStatementSummary } from '@/features/billing-statements/billing-statement-types';
+import { printHtmlToPdf } from '@/features/documents/pdf-output';
+import { resolveShareFileName } from '@/features/documents/share-file-name';
+import { sharePdfFile } from '@/features/documents/share-pdf';
 import { renderPaymentAcknowledgment } from '@/features/payments/payment-pdf';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
-
-const A4_WIDTH_POINTS = 595;
-const A4_HEIGHT_POINTS = 842;
 
 export async function finalizeAndRenderBillingStatement(db: SQLiteDatabase, statementId: string, pricePolicy: 'keep-draft' | 'reject' | 'use-current' = 'reject', paymentSelection: InitialPaymentSelection = { choice: 'pay_later' }): Promise<{ bsNumber: string; pdfUri: string; paymentId: string | null }> {
   const finalized = await finalizeBillingStatement(db, statementId, pricePolicy, paymentSelection);
@@ -110,18 +109,28 @@ export async function getBillingStatementPreview(
   return { bsNumber: row.bs_number, html, isDraft: false };
 }
 
+/** Finalized (not draft, not voided) statements billed against a CSR, oldest first. */
+export async function listShareableStatementsForReport(db: SQLiteDatabase, reportId: string): Promise<Array<{ id: string; bsNumber: string; pdfState: BillingStatementSummary['pdfState'] }>> {
+  const rows = await db.getAllAsync<{ id: string; bs_number: string; pdf_state: BillingStatementSummary['pdfState'] }>(
+    `SELECT id, bs_number, pdf_state FROM billing_statements
+     WHERE service_report_id = ? AND document_state = 'finalized' AND bs_number IS NOT NULL
+     ORDER BY finalized_at, rowid`,
+    reportId,
+  );
+  return rows.map((row) => ({ id: row.id, bsNumber: row.bs_number, pdfState: row.pdf_state }));
+}
+
 export async function shareBillingStatementPdf(db: SQLiteDatabase, statementId: string): Promise<void> {
-  const attachment=await db.getFirstAsync<{private_path:string;deterministic_filename:string}>(`SELECT private_path,deterministic_filename FROM document_attachments WHERE owner_type='billing_statement' AND owner_id=? AND attachment_type='generated_pdf'`,statementId);
+  const attachment=await db.getFirstAsync<{private_path:string}>(`SELECT private_path FROM document_attachments WHERE owner_type='billing_statement' AND owner_id=? AND attachment_type='generated_pdf'`,statementId);
   if(!attachment) throw new Error('Generate the billing statement PDF before sharing.');
-  if(!(await Sharing.isAvailableAsync())) throw new Error('File sharing is unavailable on this device.');
-  await Sharing.shareAsync(attachment.private_path,{dialogTitle:`Share ${attachment.deterministic_filename}`,mimeType:'application/pdf',UTI:'com.adobe.pdf'});
+  await sharePdfFile({sourceUri:attachment.private_path,fileName:await resolveShareFileName(db,'billing_statement',statementId)});
   await db.withExclusiveTransactionAsync(async(tx)=>{await tx.runAsync("UPDATE billing_statements SET share_state='shared' WHERE id=?",statementId);await appendAuditEvent(tx,{eventType:'billing_statement.share_sheet_opened',entityType:'billing_statement',entityId:statementId,createdAt:new Date().toISOString()});await incrementDatabaseRevision(tx);});
 }
 
 async function renderFinalizedBillingStatementPdf(db: SQLiteDatabase, statementId: string, bsNumber: string, html: string): Promise<string> {
   let cacheUri: string | undefined;
   try {
-    const result=await Print.printToFileAsync({html,width:A4_WIDTH_POINTS,height:A4_HEIGHT_POINTS,base64:true,textZoom:100}); cacheUri=result.uri;
+    const result=await printHtmlToPdf(html,'a4',{base64:true}); cacheUri=result.uri;
     if(!FileSystem.documentDirectory) throw new Error('Persistent document storage is unavailable.');
     if(!result.base64) throw new Error('PDF checksum source was not returned.');
     const directory=`${FileSystem.documentDirectory}documents/`; await FileSystem.makeDirectoryAsync(directory,{intermediates:true}); const filename=`${bsNumber}.pdf`; const destination=`${directory}${filename}`; const existing=await FileSystem.getInfoAsync(destination); if(existing.exists) await FileSystem.deleteAsync(destination,{idempotent:true}); await FileSystem.writeAsStringAsync(destination,result.base64,{encoding:FileSystem.EncodingType.Base64});
