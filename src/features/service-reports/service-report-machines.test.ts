@@ -13,6 +13,7 @@ vi.mock('expo-crypto', () => ({
   digestStringAsync: async () => 'ABCDEF1234567890',
 }));
 
+import { DEFAULT_CRITERIA, filterServiceReports } from '@/features/service-reports/service-report-filter';
 import {
   addDirectItemLine,
   addServiceLine,
@@ -247,6 +248,25 @@ describe('CSRs with several machines', () => {
     await deleteServiceReportDraft(db, reportId);
     expect(raw.prepare('SELECT COUNT(*) AS count FROM service_report_equipment').get()).toEqual({ count: 0 });
     expect(raw.prepare('SELECT COUNT(*) AS count FROM service_reports').get()).toEqual({ count: 0 });
+  });
+
+  it('lists each CSR with searchable text covering code, customer, every machine, linked statement and problem', async () => {
+    const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer', additionalEquipmentIds: ['dryer'] });
+    raw.prepare('UPDATE service_reports SET reported_problem_json=? WHERE id=?').run(JSON.stringify(['Drain leaking']), reportId);
+    await addReportServiceUsage(db, reportId, 'service');
+    const statementId = await createBillingStatementDraft(db, { ...DRAFT, serviceReportId: reportId });
+    await finalizeServiceReport(db, reportId);
+    await finalizeBillingStatement(db, statementId);
+
+    const [item] = await listServiceReports(db);
+    for (const text of ['csr-000001', 'laundry', 'sn-w', 'sn-d', 'bs-000001', 'drain leaking', 'incomplete', 'dryer']) {
+      expect(item.searchText, text).toContain(text);
+    }
+    expect(item.linkedStatements).toMatchObject([{ bsNumber: 'BS-000001', documentState: 'finalized' }]);
+    const find = (query: string) => filterServiceReports([item], { ...DEFAULT_CRITERIA, query }, '2026-09-05').length;
+    expect(find('sn-d leaking')).toBe(1);
+    expect(find('BS-000001')).toBe(1);
+    expect(find('nothing here')).toBe(0);
   });
 
   it('labels multi-machine CSRs in the list', async () => {

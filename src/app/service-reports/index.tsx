@@ -1,10 +1,25 @@
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ActionButton } from '@/components/action-button';
+import { Dropdown } from '@/components/dropdown';
+import { FormField } from '@/components/form-field';
+import { getLocalBusinessDate } from '@/domain/business-date';
+import {
+  BILLING_OPTIONS,
+  DEFAULT_CRITERIA,
+  OUTCOME_OPTIONS,
+  PERIOD_OPTIONS,
+  SORT_OPTIONS,
+  STATE_OPTIONS,
+  filterServiceReports,
+  hasActiveFilters,
+  type ServiceReportCriteria,
+} from '@/features/service-reports/service-report-filter';
 import { listServiceReports } from '@/features/service-reports/service-report-repository';
-import type { ServiceReportSummary } from '@/features/service-reports/service-report-types';
+import type { ServiceReportListItem, ServiceReportSummary } from '@/features/service-reports/service-report-types';
 import { colors } from '@/theme/colors';
 
 const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSummary }) {
@@ -47,7 +62,8 @@ const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSum
 
 export default function ServiceReportsScreen() {
   const db = useSQLiteContext();
-  const [reports, setReports] = useState<ServiceReportSummary[]>([]);
+  const [reports, setReports] = useState<ServiceReportListItem[]>([]);
+  const [criteria, setCriteria] = useState<ServiceReportCriteria>(DEFAULT_CRITERIA);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,11 +83,16 @@ export default function ServiceReportsScreen() {
     void loadReports();
   }, [loadReports]));
 
+  const visible = useMemo(() => filterServiceReports(reports, criteria, getLocalBusinessDate()), [criteria, reports]);
+  const filtered = hasActiveFilters(criteria);
+  const update = <K extends keyof ServiceReportCriteria>(key: K, value: ServiceReportCriteria[K]) => setCriteria((current) => ({ ...current, [key]: value }));
+
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={reports.length ? styles.content : styles.emptyContent}
-      data={reports}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={visible.length ? styles.content : styles.emptyContent}
+      data={visible}
       keyExtractor={(report) => report.id}
       renderItem={({ item }) => <ReportRow report={item} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -86,10 +107,35 @@ export default function ServiceReportsScreen() {
               <Text selectable style={styles.newButtonText}>New CSR draft</Text>
             </Pressable>
           </Link>
+          <FormField
+            autoCapitalize="none"
+            autoCorrect={false}
+            label="Search"
+            onChangeText={(value) => update('query', value)}
+            placeholder="CSR code, customer, machine, serial, BS number, problem…"
+            returnKeyType="search"
+            value={criteria.query}
+          />
+          <View style={styles.filters}>
+            <Dropdown label="STATUS" value={criteria.state} options={STATE_OPTIONS} onChange={(value) => update('state', value)} />
+            <Dropdown label="OUTCOME" value={criteria.outcome} options={OUTCOME_OPTIONS} onChange={(value) => update('outcome', value)} />
+            <Dropdown label="BILLING" value={criteria.billing} options={BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
+            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={(value) => update('period', value)} />
+            <Dropdown label="SORT BY" value={criteria.sort} options={SORT_OPTIONS} onChange={(value) => update('sort', value)} />
+          </View>
+          <View style={styles.resultLine}>
+            <Text selectable style={styles.headerText}>{visible.length} of {reports.length} service report{reports.length === 1 ? '' : 's'}</Text>
+            {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
+          </View>
           {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
         </View>
       }
-      ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandBlue} size="large" /> : (
+      ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandBlue} size="large" /> : reports.length && filtered ? (
+        <View style={styles.emptyState}>
+          <Text selectable style={styles.emptyTitle}>No matching service reports</Text>
+          <Text selectable style={styles.emptyBody}>Try a different search or clear the filters.</Text>
+        </View>
+      ) : (
         <View style={styles.emptyState}>
           <Text selectable style={styles.emptyTitle}>No service reports yet</Text>
           <Text selectable style={styles.emptyBody}>Create the first unnumbered draft for a registered customer and equipment record.</Text>
@@ -104,6 +150,8 @@ function formatOutcome(value: string) {
 }
 
 const styles = StyleSheet.create({
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  resultLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   billingChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.brandBlue, backgroundColor: '#eaf2ff' },
   billingChipText: { color: colors.brandNavy, fontSize: 11, fontWeight: '800' },
   content: { paddingHorizontal: 18, paddingBottom: 44 },

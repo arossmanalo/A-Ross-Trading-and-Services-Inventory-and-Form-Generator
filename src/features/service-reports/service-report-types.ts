@@ -65,6 +65,9 @@ export type ServiceReportMachineService = {
   note: string | null;
 };
 
+/** A CSR as listed, with the lower-cased text the list search matches against. */
+export type ServiceReportListItem = ServiceReportSummary & { searchText: string };
+
 export type ServiceReportMachine = {
   equipmentId: string;
   machineType: string;

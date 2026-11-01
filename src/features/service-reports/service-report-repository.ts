@@ -18,6 +18,7 @@ import type {
   ServiceReportDetail,
   ServiceReportMachine,
   ServiceReportLinkedStatement,
+  ServiceReportListItem,
   ServiceReportMachineService,
   ServiceReportSummary,
   ServiceReportUsage,
@@ -148,21 +149,68 @@ async function loadLinkedStatements(db: SQLiteDatabase, reportId?: string): Prom
   return grouped;
 }
 
-export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceReportSummary[]> {
-  const rows = await db.getAllAsync<SummaryRow>(
-    `SELECT r.id, r.csr_number, c.name AS customer_name,
+const OUTCOME_WORDS: Record<ServiceOutcome, string> = {
+  completed: 'completed',
+  incomplete: 'incomplete',
+  waiting_for_parts: 'waiting for parts',
+  under_observation: 'under observation',
+};
+
+export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceReportListItem[]> {
+  const rows = await db.getAllAsync<SummaryRow & {
+    customer_address: string;
+    primary_model: string;
+    primary_serial: string;
+    primary_nickname: string;
+    reported_problem_json: string;
+    serviced_by_snapshot: string;
+    acknowledged_by_snapshot: string;
+  }>(
+    `SELECT r.id, r.csr_number, c.name AS customer_name, c.address AS customer_address,
             e.machine_type || CASE
               WHEN (SELECT COUNT(*) FROM service_report_equipment x WHERE x.service_report_id = r.id) > 1
               THEN ' +' || ((SELECT COUNT(*) FROM service_report_equipment x WHERE x.service_report_id = r.id) - 1) || ' more'
               ELSE '' END AS equipment_name,
-            r.document_state, r.service_outcome, r.business_date, r.pdf_state
+            e.model AS primary_model, e.serial_number AS primary_serial, e.nickname_or_location AS primary_nickname,
+            r.document_state, r.service_outcome, r.business_date, r.pdf_state,
+            r.reported_problem_json, r.serviced_by_snapshot, r.acknowledged_by_snapshot
      FROM service_reports r
      JOIN customers c ON c.id = r.customer_id
      JOIN customer_equipment e ON e.id = r.equipment_id
      ORDER BY r.created_at DESC`,
   );
+  const machineRows = await db.getAllAsync<{ service_report_id: string; machine_type: string; model: string; serial_number: string; nickname_or_location: string }>(
+    `SELECT re.service_report_id, q.machine_type, q.model, q.serial_number, q.nickname_or_location
+     FROM service_report_equipment re JOIN customer_equipment q ON q.id = re.equipment_id`,
+  );
+  const machineText = new Map<string, string[]>();
+  for (const machine of machineRows) {
+    machineText.set(machine.service_report_id, [...(machineText.get(machine.service_report_id) ?? []), machine.machine_type, machine.model, machine.serial_number, machine.nickname_or_location]);
+  }
   const linked = await loadLinkedStatements(db);
-  return rows.map((row) => ({ ...mapSummaryRow(row), linkedStatements: linked.get(row.id) ?? [] }));
+  return rows.map((row) => {
+    const summary = mapSummaryRow(row);
+    const linkedStatements = linked.get(row.id) ?? [];
+    const searchText = [
+      row.csr_number ?? 'draft',
+      row.customer_name,
+      row.customer_address,
+      row.business_date,
+      row.document_state,
+      row.service_outcome,
+      OUTCOME_WORDS[row.service_outcome],
+      row.equipment_name,
+      row.primary_model,
+      row.primary_serial,
+      row.primary_nickname,
+      ...(machineText.get(row.id) ?? []),
+      ...linkedStatements.map((statement) => statement.bsNumber ?? 'draft statement'),
+      ...parseEntries(row.reported_problem_json),
+      row.serviced_by_snapshot,
+      row.acknowledged_by_snapshot,
+    ].join(' ').toLowerCase();
+    return { ...summary, linkedStatements, searchText };
+  });
 }
 
 export async function getServiceReport(
