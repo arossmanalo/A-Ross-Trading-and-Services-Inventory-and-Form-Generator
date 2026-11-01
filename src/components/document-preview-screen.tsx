@@ -17,12 +17,10 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { ActionButton } from '@/components/action-button';
-import { confirmNextShare } from '@/components/confirm-next-share';
 import { getBillingStatementPreview, listShareableStatementsForReport } from '@/features/billing-statements/billing-statement-pdf';
 import { printHtmlToPdf } from '@/features/documents/pdf-output';
 import { resolveShareFileName } from '@/features/documents/share-file-name';
-import { sharePdfFile } from '@/features/documents/share-pdf';
-import { runShareSequence, type ShareStep } from '@/features/documents/share-sequence';
+import { sharePdfFiles } from '@/features/documents/share-pdf';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
 import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
@@ -167,23 +165,9 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     try {
       if (!preview) throw new Error('The document preview is not ready.');
       const fileName = await resolveShareFileName(db, kind === 'csr' ? 'service_report' : 'billing_statement', documentId);
-      const steps: ShareStep[] = [{
-        title: kind === 'csr' ? 'Customer Service Report' : 'Billing Statement',
-        fileName,
-        run: async () => sharePdfFile({ sourceUri: await renderPdf(preview.html, kind), fileName }),
-      }];
-      // A finalized CSR is shared together with its finalized Billing Statements (signed copies where they exist).
-      if (kind === 'csr' && !preview.isDraft) {
-        for (const statement of await listShareableStatementsForReport(db, documentId)) {
-          const statementPreview = await getBillingStatementPreview(db, statement.id);
-          const statementFileName = await resolveShareFileName(db, 'billing_statement', statement.id);
-          steps.push({
-            title: 'Billing Statement',
-            fileName: statementFileName,
-            run: async () => sharePdfFile({ sourceUri: await renderPdf(withDocumentHeaderLayout(statementPreview.html), 'billing_statement'), fileName: statementFileName }),
-          });
-        }
-      }
+      // One PDF: a CSR is followed by its finalized Billing Statements, and a Billing Statement is preceded by its
+      // finalized CSR. Signed copies are used where they exist. A draft, or a document with no link, goes alone.
+      const pages: Array<{ html: string; kind: DocumentKind }> = [];
       if (kind === 'billing_statement' && !preview.isDraft) {
         const linked = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null }>(
           'SELECT b.service_report_id, r.document_state AS csr_state FROM billing_statements b LEFT JOIN service_reports r ON r.id = b.service_report_id WHERE b.id = ?',
@@ -191,18 +175,22 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
         );
         if (linked?.service_report_id && linked.csr_state === 'finalized') {
           const reportPreview = await getServiceReportPreview(db, linked.service_report_id);
-          if (!reportPreview.isDraft) {
-            const reportFileName = await resolveShareFileName(db, 'service_report', linked.service_report_id);
-            steps.push({
-              title: 'Customer Service Report',
-              fileName: reportFileName,
-              run: async () => sharePdfFile({ sourceUri: await renderPdf(withDocumentHeaderLayout(reportPreview.html), 'csr'), fileName: reportFileName }),
-            });
-          }
+          pages.push({ html: withDocumentHeaderLayout(reportPreview.html), kind: 'csr' });
         }
       }
-      const shared = await runShareSequence(steps, confirmNextShare);
-      setNotice(shared > 1 ? `${shared} PDFs were handed to the share sheet.` : preview.isDraft ? 'PDF export opened. The document remains a draft until you finalize it.' : 'PDF export opened.');
+      pages.push({ html: preview.html, kind });
+      if (kind === 'csr' && !preview.isDraft) {
+        for (const statement of await listShareableStatementsForReport(db, documentId)) {
+          const statementPreview = await getBillingStatementPreview(db, statement.id);
+          pages.push({ html: withDocumentHeaderLayout(statementPreview.html), kind: 'billing_statement' });
+        }
+      }
+      const sourceUris: string[] = [];
+      for (const page of pages) sourceUris.push(await renderPdf(page.html, page.kind));
+      await sharePdfFiles({ sourceUris, fileName });
+      setNotice(pages.length > 1
+        ? 'The CSR and its Billing Statement were sent as one PDF.'
+        : preview.isDraft ? 'PDF export opened. The document remains a draft until you finalize it.' : 'PDF export opened.');
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not export the PDF.');
     } finally {

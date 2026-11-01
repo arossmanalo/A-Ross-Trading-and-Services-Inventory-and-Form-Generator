@@ -24,9 +24,7 @@ import {
   finalizeAndRenderServiceReport,
   retryServiceReportPdf,
 } from '@/features/service-reports/service-report-pdf';
-import { getServiceReportShareSteps } from '@/features/documents/share-steps';
-import { runShareSequence } from '@/features/documents/share-sequence';
-import { confirmNextShare } from '@/components/confirm-next-share';
+import { getServiceReportShareBundle, shareBundle } from '@/features/documents/share-bundle';
 import type { ServiceOutcome, ServiceReportDetail } from '@/features/service-reports/service-report-types';
 import { colors } from '@/theme/colors';
 
@@ -231,7 +229,7 @@ export default function ServiceReportDetailScreen() {
   const sharePdf = useCallback(async () => {
     if (!reportId) return;
     setBusy(true);
-    try { await runShareSequence(await getServiceReportShareSteps(db, reportId), confirmNextShare); await loadReport(); }
+    try { await shareBundle(db, await getServiceReportShareBundle(db, reportId)); await loadReport(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not share PDF.'); }
     finally { setBusy(false); }
   }, [db, loadReport, reportId]);
@@ -361,7 +359,7 @@ export default function ServiceReportDetailScreen() {
             </View> : null}
             <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/service-reports/preview', params: { reportId } })} variant="secondary">Preview PDF</ActionButton>
             {report.pdfState !== 'ready' ? <ActionButton disabled={busy} onPress={() => void retryPdf()}>Retry PDF</ActionButton> : <ActionButton disabled={busy} onPress={() => void sharePdf()}>Share PDF</ActionButton>}
-            {report.documentState === 'finalized' && report.pdfState === 'ready' ? <Text selectable style={styles.totalHelp}>Its linked finalized Billing Statements are offered for sharing right after the CSR, one share sheet per file.</Text> : null}
+            {report.documentState === 'finalized' && report.pdfState === 'ready' ? <Text selectable style={styles.totalHelp}>If this CSR has a finalized Billing Statement, it is sent as the following pages of the same PDF (CSR first).</Text> : null}
             {report.documentState === 'finalized' ? (
               <>
                 <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId, mode: 'sign' } })} variant="secondary">Sign document</ActionButton>

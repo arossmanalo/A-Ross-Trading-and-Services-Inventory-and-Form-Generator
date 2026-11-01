@@ -193,7 +193,7 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - Unsigned PDFs include document number, revision identifier, and content fingerprint for manual matching. No cryptographic-verification claim is made.
 - Sharing failure leaves the record finalized as `Not yet shared` and is retryable.
 - Generated PDFs are always portrait at their document size, independent of device rotation (the print viewport is pinned to the page width). Shared files are named `[CSR ID] [Document Type].pdf` (own number when no CSR; `DRAFT` for drafts).
-- Sharing a finalized CSR also offers its finalized linked Billing Statements. Because Android shares one file per sheet, they are shared in sequence with an in-app confirmation between sheets.
+- A CSR and its linked Billing Statement are sent as one PDF (CSR page first, then the statement), whichever of the two is shared; a statement without a CSR is sent alone. Shared files are named `[Customer Name] [Code] [Date].pdf`, and a combined file follows the CSR format.
 
 ## 8. Backup and Restore
 

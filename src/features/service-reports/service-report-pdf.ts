@@ -4,8 +4,6 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { printHtmlToPdf } from '@/features/documents/pdf-output';
-import { resolveShareFileName } from '@/features/documents/share-file-name';
-import { sharePdfFile } from '@/features/documents/share-pdf';
 import { getBusinessLogo } from '@/features/settings/settings-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
@@ -138,30 +136,6 @@ export async function getServiceReportPreview(
     return { csrNumber: preview.number, html: preview.html, isDraft: false };
   }
   return { csrNumber: row.csr_number, html: row.render_template_snapshot, isDraft: false };
-}
-
-export async function shareServiceReportPdf(db: SQLiteDatabase, reportId: string): Promise<void> {
-  const attachment = await db.getFirstAsync<{ private_path: string }>(
-    `SELECT private_path
-     FROM document_attachments
-     WHERE owner_type = 'service_report' AND owner_id = ? AND attachment_type = 'generated_pdf'`,
-    reportId,
-  );
-  if (!attachment) throw new Error('Generate the CSR PDF before sharing.');
-  const fileName = await resolveShareFileName(db, 'service_report', reportId);
-
-  await sharePdfFile({ sourceUri: attachment.private_path, fileName });
-
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    await tx.runAsync("UPDATE service_reports SET share_state = 'shared' WHERE id = ?", reportId);
-    await appendAuditEvent(tx, {
-      eventType: 'csr.share_sheet_opened',
-      entityType: 'service_report',
-      entityId: reportId,
-      createdAt: new Date().toISOString(),
-    });
-    await incrementDatabaseRevision(tx);
-  });
 }
 
 async function renderFinalizedServiceReportPdf(

@@ -3,13 +3,12 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { buildPdfFileName, type ShareDocumentKind } from '@/features/documents/pdf-file-name';
 
 /**
- * File name for a shared PDF: "[CSR ID] [Document Type].pdf".
+ * File name for a shared PDF: "[Customer Name] [Code] [Date].pdf".
  *
- * A Billing Statement or Payment Acknowledgment that belongs to a CSR carries
- * that CSR's number so the documents sort together; documents with no CSR use
- * their own number. When the CSR prefix alone would repeat (several statements
- * on one CSR, or several payments) the document's own number is appended.
- * `variant` marks alternate versions, for example "Signed".
+ * Code and date are the document's own, taken from the document as issued (the
+ * frozen customer name once finalized). A Billing Statement billed against a
+ * finalized CSR is always sent together with that CSR in one PDF, so it takes
+ * the CSR's name. `variant` marks alternate versions, for example "Signed".
  */
 export async function resolveShareFileName(
   db: SQLiteDatabase,
@@ -17,40 +16,61 @@ export async function resolveShareFileName(
   documentId: string,
   variant?: string,
 ): Promise<string> {
-  const { id, suffix } = await lookup(db, kind, documentId);
-  return buildPdfFileName(id, kind, [suffix, variant].filter(Boolean).join(' '));
+  const { customerName, code, date } = await lookup(db, kind, documentId);
+  return buildPdfFileName({ customerName, code, date, variant });
 }
 
-async function lookup(db: SQLiteDatabase, kind: ShareDocumentKind, documentId: string): Promise<{ id: string | null; suffix: string | null }> {
+type Naming = { customerName: string; code: string | null; date: string };
+
+function frozenCustomerName(snapshotJson: string | null, fallback: string): string {
+  if (!snapshotJson) return fallback;
+  try {
+    const name = (JSON.parse(snapshotJson) as { customer?: { name?: unknown } }).customer?.name;
+    return typeof name === 'string' && name.trim() ? name : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function lookup(db: SQLiteDatabase, kind: ShareDocumentKind, documentId: string): Promise<Naming> {
   if (kind === 'service_report') {
-    const row = await db.getFirstAsync<{ csr_number: string | null }>('SELECT csr_number FROM service_reports WHERE id = ?', documentId);
+    const row = await db.getFirstAsync<{ csr_number: string | null; business_date: string; snapshot: string | null; customer_name: string }>(
+      `SELECT r.csr_number, r.business_date, r.content_snapshot_json AS snapshot, c.name AS customer_name
+       FROM service_reports r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?`,
+      documentId,
+    );
     if (!row) throw new Error('CSR was not found.');
-    return { id: row.csr_number, suffix: null };
+    return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.csr_number, date: row.business_date };
   }
 
   if (kind === 'billing_statement') {
-    const row = await db.getFirstAsync<{ bs_number: string | null; csr_number: string | null; siblings: number }>(
-      `SELECT b.bs_number, r.csr_number,
-              (SELECT COUNT(*) FROM billing_statements x
-                WHERE x.service_report_id = b.service_report_id AND x.document_state <> 'draft') AS siblings
+    const row = await db.getFirstAsync<{
+      bs_number: string | null; business_date: string; snapshot: string | null; customer_name: string;
+      csr_number: string | null; csr_date: string | null; csr_snapshot: string | null; csr_state: string | null;
+    }>(
+      `SELECT b.bs_number, b.business_date, b.content_snapshot_json AS snapshot, c.name AS customer_name,
+              r.csr_number, r.business_date AS csr_date, r.content_snapshot_json AS csr_snapshot, r.document_state AS csr_state
        FROM billing_statements b
+       JOIN customers c ON c.id = b.customer_id
        LEFT JOIN service_reports r ON r.id = b.service_report_id
        WHERE b.id = ?`,
       documentId,
     );
     if (!row) throw new Error('Billing statement was not found.');
-    if (!row.csr_number) return { id: row.bs_number, suffix: null };
-    return { id: row.csr_number, suffix: row.siblings > 1 ? row.bs_number : null };
+    if (row.csr_state === 'finalized' && row.csr_number && row.csr_date) {
+      return { customerName: frozenCustomerName(row.csr_snapshot, row.customer_name), code: row.csr_number, date: row.csr_date };
+    }
+    return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.bs_number, date: row.business_date };
   }
 
-  const row = await db.getFirstAsync<{ pa_number: string | null; csr_number: string | null }>(
-    `SELECT p.pa_number, r.csr_number
+  const row = await db.getFirstAsync<{ pa_number: string | null; business_date: string; snapshot: string | null; customer_name: string }>(
+    `SELECT p.pa_number, p.business_date, p.content_snapshot_json AS snapshot, c.name AS customer_name
      FROM payments p
      JOIN billing_statements b ON b.id = p.billing_statement_id
-     LEFT JOIN service_reports r ON r.id = b.service_report_id
+     JOIN customers c ON c.id = b.customer_id
      WHERE p.id = ?`,
     documentId,
   );
   if (!row) throw new Error('Payment was not found.');
-  return row.csr_number ? { id: row.csr_number, suffix: row.pa_number } : { id: row.pa_number, suffix: null };
+  return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.pa_number, date: row.business_date };
 }

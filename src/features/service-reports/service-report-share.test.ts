@@ -1,17 +1,19 @@
 /// <reference types="node" />
 
 import { DatabaseSync } from 'node:sqlite';
+import { PDFDocument } from 'pdf-lib';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11 } from '@/db/schema';
 
 let idCounter = 0;
 const files = vi.hoisted(() => new Map<string, string>());
 const sharedTargets = vi.hoisted(() => [] as string[]);
-const printer = vi.hoisted(() => vi.fn(async (_options: { width: number; height: number; html: string }) => {
-  files.set('file://cache/print.pdf', 'JVBERi0xLjQK');
-  return { uri: 'file://cache/print.pdf', base64: 'JVBERi0xLjQK', numberOfPages: 1 };
+const samples = vi.hoisted(() => ({ legal: '', a4: '' }));
+const printer = vi.hoisted(() => vi.fn(async (options: { width: number; height: number; html: string }) => {
+  files.set('file://cache/print.pdf', options.width === 612 ? samples.legal : samples.a4);
+  return { uri: 'file://cache/print.pdf', base64: options.width === 612 ? samples.legal : samples.a4, numberOfPages: 1 };
 }));
 
 vi.mock('expo-crypto', () => ({
@@ -30,6 +32,11 @@ vi.mock('expo-file-system/legacy', () => ({
   EncodingType: { Base64: 'base64' },
   makeDirectoryAsync: async () => undefined,
   getInfoAsync: async (path: string) => ({ exists: files.has(path), isDirectory: false }),
+  readAsStringAsync: async (path: string) => {
+    const contents = files.get(path);
+    if (contents === undefined) throw new Error(`Missing ${path}`);
+    return contents;
+  },
   writeAsStringAsync: async (path: string, contents: string) => { files.set(path, contents); },
   copyAsync: async ({ from, to }: { from: string; to: string }) => {
     if (!files.has(from)) throw new Error(`Missing ${from}`);
@@ -40,8 +47,7 @@ vi.mock('expo-file-system/legacy', () => ({
 
 import { finalizeAndRenderBillingStatement } from '@/features/billing-statements/billing-statement-pdf';
 import { addServiceLine, createBillingStatementDraft, voidBillingStatement } from '@/features/billing-statements/billing-statement-repository';
-import { runShareSequence } from '@/features/documents/share-sequence';
-import { getBillingStatementShareSteps, getServiceReportShareSteps } from '@/features/documents/share-steps';
+import { getBillingStatementShareBundle, getServiceReportShareBundle, shareBundle } from '@/features/documents/share-bundle';
 import { finalizeAndRenderServiceReport } from '@/features/service-reports/service-report-pdf';
 import { addReportServiceUsage, createServiceReportDraft } from '@/features/service-reports/service-report-repository';
 
@@ -72,10 +78,25 @@ function adapter(database: DatabaseSync): SQLiteDatabase {
 
 const NOW = '2026-09-05T00:00:00.000Z';
 const DRAFT = { customerId: 'customer', businessDate: '2026-09-05' };
+const CSR_FILE = 'Laundry CSR-000001 2026-09-05.pdf';
 
-describe('sharing a CSR together with its billing statements', () => {
+async function pageSizes(base64: string): Promise<number[][]> {
+  const doc = await PDFDocument.load(base64, { ignoreEncryption: true });
+  return doc.getPages().map((page) => [page.getWidth(), page.getHeight()]);
+}
+
+describe('sending a CSR and its billing statement as one PDF', () => {
   let raw: DatabaseSync;
   let db: SQLiteDatabase;
+
+  beforeAll(async () => {
+    const legal = await PDFDocument.create();
+    legal.addPage([612, 1008]);
+    samples.legal = await legal.saveAsBase64();
+    const a4 = await PDFDocument.create();
+    a4.addPage([595, 842]);
+    samples.a4 = await a4.saveAsBase64();
+  });
 
   beforeEach(() => {
     idCounter = 0;
@@ -108,67 +129,82 @@ describe('sharing a CSR together with its billing statements', () => {
     return { reportId, statementId };
   }
 
-  const confirmYes = async () => true;
-
-  it('offers the CSR first and its billing statement next, both named from the CSR ID', async () => {
-    const { reportId } = await finalizedCsrWithStatement();
-    const steps = await getServiceReportShareSteps(db, reportId);
-    expect(steps.map((step) => step.fileName)).toEqual(['CSR-000001 Customer Service Report.pdf', 'CSR-000001 Billing Statement.pdf']);
-
-    expect(await runShareSequence(steps, confirmYes)).toBe(2);
-    expect(sharedTargets).toEqual([
-      'file://cache/shared-pdfs/CSR-000001 Customer Service Report.pdf',
-      'file://cache/shared-pdfs/CSR-000001 Billing Statement.pdf',
-    ]);
-    expect(files.has('file://docs/documents/CSR-000001.pdf')).toBe(true);
-    expect(raw.prepare("SELECT share_state FROM service_reports WHERE id=?").get(reportId)).toEqual({ share_state: 'shared' });
-    expect(raw.prepare("SELECT share_state FROM billing_statements WHERE service_report_id=?").get(reportId)).toEqual({ share_state: 'shared' });
-  });
-
-  it('shares only the CSR when the user skips the linked statement', async () => {
+  it('sending a CSR with a linked statement makes ONE PDF: the CSR page, then the statement page', async () => {
     const { reportId, statementId } = await finalizedCsrWithStatement();
-    expect(await runShareSequence(await getServiceReportShareSteps(db, reportId), async () => false)).toBe(1);
-    expect(sharedTargets).toHaveLength(1);
-    expect(raw.prepare('SELECT share_state FROM billing_statements WHERE id=?').get(statementId)).toEqual({ share_state: 'not_shared' });
+    const bundle = await getServiceReportShareBundle(db, reportId);
+    expect(bundle.fileName).toBe(CSR_FILE);
+    expect(bundle.documents).toEqual([{ kind: 'service_report', id: reportId }, { kind: 'billing_statement', id: statementId }]);
+    expect(bundle.sourceUris).toEqual(['file://docs/documents/CSR-000001.pdf', 'file://docs/documents/BS-000001.pdf']);
+
+    await shareBundle(db, bundle);
+    expect(sharedTargets).toEqual([`file://cache/shared-pdfs/${CSR_FILE}`]);
+    expect(await pageSizes(files.get(`file://cache/shared-pdfs/${CSR_FILE}`)!)).toEqual([[612, 1008], [595, 842]]);
+    expect(raw.prepare('SELECT share_state FROM service_reports WHERE id=?').get(reportId)).toEqual({ share_state: 'shared' });
+    expect(raw.prepare('SELECT share_state FROM billing_statements WHERE id=?').get(statementId)).toEqual({ share_state: 'shared' });
+    expect(raw.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type IN ('csr.share_sheet_opened','billing_statement.share_sheet_opened')").get()).toEqual({ count: 2 });
   });
 
-  it('shares just the CSR when nothing is linked', async () => {
+  it('sending the statement of a linked CSR makes the same one PDF, in the same order, with the CSR file name', async () => {
+    const { reportId, statementId } = await finalizedCsrWithStatement();
+    const bundle = await getBillingStatementShareBundle(db, statementId);
+    expect(bundle.fileName).toBe(CSR_FILE);
+    expect(bundle.documents).toEqual([{ kind: 'service_report', id: reportId }, { kind: 'billing_statement', id: statementId }]);
+    await shareBundle(db, bundle);
+    expect(sharedTargets).toEqual([`file://cache/shared-pdfs/${CSR_FILE}`]);
+    expect(await pageSizes(files.get(`file://cache/shared-pdfs/${CSR_FILE}`)!)).toEqual([[612, 1008], [595, 842]]);
+  });
+
+  it('sends a billing statement with no CSR by itself, named by its own code', async () => {
+    const statementId = await createBillingStatementDraft(db, DRAFT);
+    await addServiceLine(db, statementId, { serviceId: 'service' });
+    await finalizeAndRenderBillingStatement(db, statementId);
+    const bundle = await getBillingStatementShareBundle(db, statementId);
+    expect(bundle).toMatchObject({ fileName: 'Laundry BS-000001 2026-09-05.pdf', documents: [{ kind: 'billing_statement', id: statementId }] });
+    await shareBundle(db, bundle);
+    expect(await pageSizes(files.get('file://cache/shared-pdfs/Laundry BS-000001 2026-09-05.pdf')!)).toEqual([[595, 842]]);
+  });
+
+  it('sends a CSR with no statement by itself', async () => {
     const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer' });
     await addReportServiceUsage(db, reportId, 'service');
     await finalizeAndRenderServiceReport(db, reportId);
-    const steps = await getServiceReportShareSteps(db, reportId);
-    expect(steps.map((step) => step.fileName)).toEqual(['CSR-000001 Customer Service Report.pdf']);
+    const bundle = await getServiceReportShareBundle(db, reportId);
+    expect(bundle).toMatchObject({ fileName: CSR_FILE, documents: [{ kind: 'service_report', id: reportId }] });
+    await shareBundle(db, bundle);
+    expect(await pageSizes(files.get(`file://cache/shared-pdfs/${CSR_FILE}`)!)).toEqual([[612, 1008]]);
   });
 
-  it('adds the statement number to each name when the CSR has several statements', async () => {
-    const { reportId } = await finalizedCsrWithStatement();
+  it('with several statements the CSR sends all of them after it, but a statement sends only itself after the CSR', async () => {
+    const { reportId, statementId } = await finalizedCsrWithStatement();
     raw.exec("INSERT INTO billing_statements(id,bs_number,customer_id,service_report_id,document_state,business_date,pdf_state,created_at,finalized_at) VALUES('second','BS-000009','customer','" + reportId + "','finalized','2026-09-05','ready','now','2026-09-05T13:00:00Z')");
     raw.prepare("INSERT INTO document_attachments(id,owner_type,owner_id,attachment_type,deterministic_filename,private_path,checksum,created_at) VALUES('att','billing_statement','second','generated_pdf','BS-000009.pdf','file://docs/documents/BS-000009.pdf','x','now')").run();
-    files.set('file://docs/documents/BS-000009.pdf', 'JVBERi0xLjQK');
-    const names = (await getServiceReportShareSteps(db, reportId)).map((step) => step.fileName);
-    expect(names).toEqual([
-      'CSR-000001 Customer Service Report.pdf',
-      'CSR-000001 Billing Statement BS-000001.pdf',
-      'CSR-000001 Billing Statement BS-000009.pdf',
-    ]);
+    files.set('file://docs/documents/BS-000009.pdf', samples.a4);
+
+    expect((await getServiceReportShareBundle(db, reportId)).documents.map((document) => document.id)).toEqual([reportId, statementId, 'second']);
+    const second = await getBillingStatementShareBundle(db, 'second');
+    expect(second.documents.map((document) => document.id)).toEqual([reportId, 'second']);
+    expect(second.fileName).toBe(CSR_FILE);
   });
 
-  it('skips draft and voided statements', async () => {
+  it('leaves draft and voided statements out', async () => {
     const { reportId, statementId } = await finalizedCsrWithStatement();
     await createBillingStatementDraft(db, { ...DRAFT, serviceReportId: reportId });
     await voidBillingStatement(db, statementId, 'Entered in error', []);
-    const steps = await getServiceReportShareSteps(db, reportId);
-    expect(steps.map((step) => step.title)).toEqual(['Customer Service Report']);
+    expect((await getServiceReportShareBundle(db, reportId)).documents).toEqual([{ kind: 'service_report', id: reportId }]);
   });
 
-  it('renders a missing statement PDF before any share sheet opens', async () => {
-    const { reportId, statementId } = await finalizedCsrWithStatement();
-    raw.prepare("UPDATE billing_statements SET pdf_state='not_generated' WHERE id=?").run(statementId);
+  it('renders any missing PDF before sharing and refuses documents that are not finalized', async () => {
+    const { statementId } = await finalizedCsrWithStatement();
+    files.delete('file://docs/documents/CSR-000001.pdf');
+    files.delete('file://docs/documents/BS-000001.pdf');
     printer.mockClear();
-    await getServiceReportShareSteps(db, reportId);
-    expect(printer).toHaveBeenCalledTimes(1);
-    expect(sharedTargets).toHaveLength(0);
-    expect(raw.prepare('SELECT pdf_state FROM billing_statements WHERE id=?').get(statementId)).toEqual({ pdf_state: 'ready' });
+    const bundle = await getBillingStatementShareBundle(db, statementId);
+    expect(printer).toHaveBeenCalledTimes(2);
+    expect(bundle.sourceUris.every((uri) => files.has(uri))).toBe(true);
+    const draft = await createBillingStatementDraft(db, DRAFT);
+    await expect(getBillingStatementShareBundle(db, draft)).rejects.toThrow(/finalized/);
+    const draftCsr = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer' });
+    await expect(getServiceReportShareBundle(db, draftCsr)).rejects.toThrow(/finalized/);
   });
 
   it('prints every PDF as a portrait page at its document size', async () => {
@@ -178,37 +214,4 @@ describe('sharing a CSR together with its billing statements', () => {
     for (const [width, height] of sizes) expect(height).toBeGreaterThan(width);
     expect(printer.mock.calls.every(([options]) => !options.html.includes('device-width'))).toBe(true);
   });
-
-  it('sharing a linked Billing Statement offers its CSR next, named from the CSR ID', async () => {
-    const { statementId } = await finalizedCsrWithStatement();
-    const steps = await getBillingStatementShareSteps(db, statementId);
-    expect(steps.map((step) => step.fileName)).toEqual(['CSR-000001 Billing Statement.pdf', 'CSR-000001 Customer Service Report.pdf']);
-    expect(await runShareSequence(steps, confirmYes)).toBe(2);
-    expect(sharedTargets).toEqual([
-      'file://cache/shared-pdfs/CSR-000001 Billing Statement.pdf',
-      'file://cache/shared-pdfs/CSR-000001 Customer Service Report.pdf',
-    ]);
-    expect(await runShareSequence(await getBillingStatementShareSteps(db, statementId), async () => false)).toBe(1);
-  });
-
-  it('sharing a standalone Billing Statement offers only itself', async () => {
-    const statementId = await createBillingStatementDraft(db, DRAFT);
-    await addServiceLine(db, statementId, { serviceId: 'service' });
-    await finalizeAndRenderBillingStatement(db, statementId);
-    const steps = await getBillingStatementShareSteps(db, statementId);
-    expect(steps.map((step) => step.fileName)).toEqual(['BS-000001 Billing Statement.pdf']);
-  });
-
-  it('renders a missing CSR PDF before sharing its statement, and refuses an unfinalized statement', async () => {
-    const { reportId, statementId } = await finalizedCsrWithStatement();
-    files.delete('file://docs/documents/CSR-000001.pdf');
-    printer.mockClear();
-    await getBillingStatementShareSteps(db, statementId);
-    expect(printer).toHaveBeenCalledTimes(1);
-    expect(files.has('file://docs/documents/CSR-000001.pdf')).toBe(true);
-    expect(reportId).toBeTruthy();
-    const draft = await createBillingStatementDraft(db, DRAFT);
-    await expect(getBillingStatementShareSteps(db, draft)).rejects.toThrow(/finalized/);
-  });
 });
-

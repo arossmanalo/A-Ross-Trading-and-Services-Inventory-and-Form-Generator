@@ -9,8 +9,6 @@ import { getPreparerSignatureHtml, getSignatureCapturePreview } from '@/features
 import { buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
 import type { BillingStatementSummary } from '@/features/billing-statements/billing-statement-types';
 import { printHtmlToPdf } from '@/features/documents/pdf-output';
-import { resolveShareFileName } from '@/features/documents/share-file-name';
-import { sharePdfFile } from '@/features/documents/share-pdf';
 import { renderPaymentAcknowledgment } from '@/features/payments/payment-pdf';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
@@ -118,13 +116,6 @@ export async function listShareableStatementsForReport(db: SQLiteDatabase, repor
     reportId,
   );
   return rows.map((row) => ({ id: row.id, bsNumber: row.bs_number, pdfState: row.pdf_state }));
-}
-
-export async function shareBillingStatementPdf(db: SQLiteDatabase, statementId: string): Promise<void> {
-  const attachment=await db.getFirstAsync<{private_path:string}>(`SELECT private_path FROM document_attachments WHERE owner_type='billing_statement' AND owner_id=? AND attachment_type='generated_pdf'`,statementId);
-  if(!attachment) throw new Error('Generate the billing statement PDF before sharing.');
-  await sharePdfFile({sourceUri:attachment.private_path,fileName:await resolveShareFileName(db,'billing_statement',statementId)});
-  await db.withExclusiveTransactionAsync(async(tx)=>{await tx.runAsync("UPDATE billing_statements SET share_state='shared' WHERE id=?",statementId);await appendAuditEvent(tx,{eventType:'billing_statement.share_sheet_opened',entityType:'billing_statement',entityId:statementId,createdAt:new Date().toISOString()});await incrementDatabaseRevision(tx);});
 }
 
 async function renderFinalizedBillingStatementPdf(db: SQLiteDatabase, statementId: string, bsNumber: string, html: string): Promise<string> {
