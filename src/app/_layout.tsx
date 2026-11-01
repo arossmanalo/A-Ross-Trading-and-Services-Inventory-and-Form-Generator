@@ -90,7 +90,7 @@ export default function RootLayout() {
           <Stack.Screen name="service-reports/[report-id]" options={{ title: 'CSR' }} />
           <Stack.Screen name="service-reports/preview" options={{ title: 'CSR PDF Preview' }} />
           <Stack.Screen name="service-reports/item-usage/new" options={{ title: 'Add Item Usage', presentation: 'modal' }} />
-          <Stack.Screen name="service-reports/service-usage/new" options={{ title: 'Add Service Usage', presentation: 'modal' }} />
+          <Stack.Screen name="service-reports/machine-services" options={{ title: 'Services by machine' }} />
           <Stack.Screen name="service-reports/void" options={{ title: 'Void CSR', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/index" options={{ title: 'Billing Statements' }} />
           <Stack.Screen name="billing-statements/new" options={{ title: 'New Statement Draft', presentation: 'modal' }} />
