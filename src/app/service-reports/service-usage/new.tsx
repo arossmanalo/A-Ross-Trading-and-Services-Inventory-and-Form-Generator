@@ -72,7 +72,7 @@ export default function NewReportServiceUsageScreen() {
         >
           <View style={styles.itemCopy}>
             <Text selectable style={styles.itemName}>{item.name}</Text>
-            <Text selectable style={styles.itemMeta}>{formatCentavos(item.baseRateCentavos)} · quantity 1{item.description ? ` · ${item.description}` : ''}</Text>
+            <Text selectable style={styles.itemMeta}>{formatCentavos(item.baseRateCentavos)} per machine{item.description ? ` · ${item.description}` : ''}</Text>
           </View>
           <Text selectable style={styles.selectLabel}>{selectedService?.id === item.id ? 'SELECTED' : 'SELECT'}</Text>
         </Pressable>
@@ -81,13 +81,13 @@ export default function NewReportServiceUsageScreen() {
       ListHeaderComponent={
         <View style={styles.header}>
           <Text selectable style={styles.eyebrow}>SERVICE USED</Text>
-          <Text selectable style={styles.help}>Services use quantity one. Leave the custom rate blank to use the catalog rate.</Text>
+          <Text selectable style={styles.help}>Rates are per machine and are multiplied by the number of machines on this CSR. Leave the custom rate blank to use the catalog rate.</Text>
           <ActionButton compact onPress={() => router.push({ pathname: '/services/new', params: { returnTo: 'service-report-service-usage' } })} variant="secondary">Add new service</ActionButton>
           {selectedService ? (
             <View style={styles.editor}>
               <Text selectable style={styles.selectedName}>{selectedService.name}</Text>
               <Text selectable style={styles.itemMeta}>Catalog rate: {formatCentavos(selectedService.baseRateCentavos)}</Text>
-              <FormField keyboardType="decimal-pad" label="Custom rate (optional)" onChangeText={setRate} placeholder="Leave blank for catalog rate" value={rate} />
+              <FormField hint="Rate for ONE machine; the CSR multiplies it by its machine count." keyboardType="decimal-pad" label="Custom rate per machine (optional)" onChangeText={setRate} placeholder="Leave blank for catalog rate" value={rate} />
               <FormField label="Override reason" onChangeText={setReason} placeholder="Required when using a different rate" value={reason} />
               <ActionButton disabled={saving} onPress={() => void save()}>{saving ? 'Adding…' : 'Add service usage'}</ActionButton>
             </View>
