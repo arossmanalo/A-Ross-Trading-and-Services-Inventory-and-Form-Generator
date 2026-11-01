@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
@@ -303,7 +304,7 @@ export default function ServiceReportDetailScreen() {
             })}
             {availableMachines.map((entry) => <ActionButton key={entry.id} compact variant="secondary" disabled={busy} onPress={() => addMachine(entry.id)}>{`Add ${[entry.machineType, entry.model, entry.nicknameOrLocation].filter(Boolean).join(' · ')}`}</ActionButton>)}
             {report.machineCount > 1 ? <Text selectable style={styles.totalHelp}>Each service is priced per machine and added to the total as entered. Item charges are not multiplied.</Text> : null}
-            <FormField label="Business date" onChangeText={(v) => setField('businessDate', v)} value={form.businessDate} />
+            <DateField label="Business date" value={form.businessDate} onChange={(v) => setField('businessDate', v)} />
             <Text selectable style={styles.sectionTitle}>Status after service</Text>
             <View style={styles.outcomes}>{(['completed', 'incomplete', 'waiting_for_parts', 'under_observation'] as ServiceOutcome[]).map((outcome) => <Pressable key={outcome} onPress={() => setField('serviceOutcome', outcome)} style={[styles.outcome, form.serviceOutcome === outcome ? styles.outcomeSelected : null]}><Text selectable style={styles.outcomeText}>{formatLabel(outcome)}</Text></Pressable>)}</View>
             <Multiline label="Reported Problem" value={form.reportedProblem} onChange={(v) => setField('reportedProblem', v)} />

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { listCustomers } from '@/features/customers/customer-repository';
@@ -85,8 +86,8 @@ export default function SalesReportScreen() {
           <Text selectable>
             Sales rows use finalized Billing Statement business dates. Discounts remain statement-level and are not allocated to individual lines.
           </Text>
-          <FormField label="From (YYYY-MM-DD)" value={from} onChangeText={setFrom} editable={!busy} />
-          <FormField label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} editable={!busy} />
+          <DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture />
+          <DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture />
           <FormField label="Find customer" value={customerQuery} onChangeText={setCustomerQuery} editable={!busy} />
           <ActionButton variant={customerId ? 'secondary' : 'primary'} disabled={busy} onPress={() => setCustomerId('')}>All customers</ActionButton>
           <Text selectable>Selected customer: {selectedCustomer?.name ?? 'All customers'}</Text>

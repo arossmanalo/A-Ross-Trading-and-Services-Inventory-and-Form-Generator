@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
-import { FormField } from '@/components/form-field';
+import { DateField } from '@/components/date-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { CustomerPicker } from '@/features/customers/customer-picker';
 import { getCustomerDetail, listCustomers } from '@/features/customers/customer-repository';
@@ -157,7 +157,7 @@ export default function NewServiceReportScreen() {
         </>
       ) : null}
 
-      <FormField label="Business date" onChangeText={setBusinessDate} placeholder="YYYY-MM-DD" value={businessDate} />
+      <DateField label="Business date" value={businessDate} onChange={setBusinessDate} />
       {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
       <ActionButton disabled={saving || !customerId || machineIds.length === 0} onPress={() => void createDraft()}>
         {saving ? 'Creating…' : machineIds.length > 1 ? `Create draft for ${machineIds.length} machines` : 'Create draft'}

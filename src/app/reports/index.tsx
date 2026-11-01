@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ActionButton } from '@/components/action-button';
+import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { listCustomers } from '@/features/customers/customer-repository';
@@ -41,8 +42,8 @@ export default function FinancialReportsScreen() {
   };
   return <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:18,gap:16,paddingBottom:44}}>
     <Text selectable>Sales and expenses use statement dates. Collections use payment dates. Outstanding shows today’s balance on statements from the selected period.</Text>
-    <FormField label="From (YYYY-MM-DD)" value={from} onChangeText={setFrom} editable={!busy}/>
-    <FormField label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} editable={!busy}/>
+    <DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture />
+    <DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture />
     <FormField label="Find customer (including inactive)" value={query} onChangeText={setQuery}/>
     <ActionButton variant={customerId?'secondary':'primary'} disabled={busy} onPress={()=>setCustomerId('')}>All customers</ActionButton>
     <Text selectable>Selected: {customers.find(c=>c.id===customerId)?.name??'All customers'}</Text>

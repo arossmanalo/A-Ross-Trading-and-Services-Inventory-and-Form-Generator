@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
-import { FormField } from '@/components/form-field';
+import { DateField } from '@/components/date-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { createBillingStatementDraft, listCsrsForBilling } from '@/features/billing-statements/billing-statement-repository';
 import { CustomerPicker } from '@/features/customers/customer-picker';
@@ -104,7 +104,7 @@ export default function NewBillingStatementScreen() {
           </ScrollView>
         </>
       ) : null}
-      <FormField label="Business date" value={businessDate} onChangeText={setBusinessDate} placeholder="YYYY-MM-DD" />
+      <DateField label="Business date" value={businessDate} onChange={setBusinessDate} />
       {error ? <Text selectable style={styles.error}>{error}</Text> : null}
       <ActionButton disabled={saving || !customerId} onPress={() => void create()}>
         {saving ? 'Creating…' : 'Create draft'}

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import {
@@ -63,8 +64,8 @@ export default function AuditReportScreen() {
             Audit reports show app actions by actual timestamp, including overrides, voids,
             backdated records, PDF/share events, and settings changes.
           </Text>
-          <FormField label="From (YYYY-MM-DD)" value={from} onChangeText={setFrom} editable={!busy} />
-          <FormField label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} editable={!busy} />
+          <DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture />
+          <DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {AUDIT_ENTITY_FILTERS.map(value => (
               <ActionButton

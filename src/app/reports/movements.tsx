@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
@@ -88,8 +89,8 @@ export default function MovementReportScreen() {
             Movement reports use the actual recorded movement timestamp and include restocks, sales,
             non-billable use, manual consumption, and reversals.
           </Text>
-          <FormField label="From (YYYY-MM-DD)" value={from} onChangeText={setFrom} editable={!busy} />
-          <FormField label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} editable={!busy} />
+          <DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture />
+          <DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture />
           <FormField label="Find item for report scope" value={itemQuery} onChangeText={setItemQuery} editable={!busy} />
           <ActionButton variant={itemId ? 'secondary' : 'primary'} disabled={busy} onPress={() => setItemId('')}>All items</ActionButton>
           <Text selectable>Selected item: {selectedItem?.name ?? 'All items'}</Text>
