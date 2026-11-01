@@ -11,7 +11,7 @@ vi.mock('expo-crypto',()=>({randomUUID:()=>`test-id-${++idCounter}`,CryptoDigest
 beforeEach(() => vi.useFakeTimers({ now: new Date('2026-09-05T12:00:00.000Z') }));
 afterEach(() => vi.useRealTimers());
 
-import { addCsrUsageLine, addDirectItemLine, addServiceLine, addStatementExpense, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement, listCsrsForBilling, removeBillingLine, updateBillingStatementDraft, voidBillingStatement } from './billing-statement-repository';
+import { listBillingStatements, addCsrUsageLine, addDirectItemLine, addServiceLine, addStatementExpense, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement, listCsrsForBilling, removeBillingLine, updateBillingStatementDraft, voidBillingStatement } from './billing-statement-repository';
 import { createLaterPayment, listPaymentsForStatement, voidPayment } from '@/features/payments/payment-repository';
 import { addReportItemUsage, addReportServiceUsage, createServiceReportDraft, deleteServiceReportDraft, finalizeServiceReport, getServiceReport, removeReportItemUsage } from '@/features/service-reports/service-report-repository';
 
@@ -34,6 +34,17 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05',reuseExistingLinkedDraft:true});
     return {reportId,statementId};
   }
+
+  it('lists which CSR each statement is linked to, including a still-unnumbered draft CSR', async () => {
+    const { reportId, statementId } = await draftPair();
+    const standalone = await createBillingStatementDraft(db, { customerId: 'customer', businessDate: '2026-09-05' });
+    let rows = await listBillingStatements(db);
+    expect(rows.find((row) => row.id === statementId)).toMatchObject({ serviceReportId: reportId, serviceReportNumber: null });
+    expect(rows.find((row) => row.id === standalone)).toMatchObject({ serviceReportId: null, serviceReportNumber: null });
+    await finalizeServiceReport(db, reportId);
+    rows = await listBillingStatements(db);
+    expect(rows.find((row) => row.id === statementId)).toMatchObject({ serviceReportId: reportId, serviceReportNumber: 'CSR-000002' });
+  });
 
   it('allows backdated CSRs, statements and payments without a reason, but not future dates', async () => {
     raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now')");

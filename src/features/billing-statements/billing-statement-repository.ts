@@ -15,7 +15,7 @@ import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features
 import { kindLabel, methodLabel } from '@/features/payments/payment-template';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
-type SummaryRow = { id: string; bs_number: string | null; customer_name: string; document_state: BillingDocumentState; business_date: string; discounted_total_centavos: number; pdf_state: BillingStatementSummary['pdfState'] };
+type SummaryRow = { id: string; bs_number: string | null; customer_name: string; service_report_id: string | null; csr_number: string | null; document_state: BillingDocumentState; business_date: string; discounted_total_centavos: number; pdf_state: BillingStatementSummary['pdfState'] };
 type DetailRow = SummaryRow & { customer_id: string; customer_address: string; service_report_id: string | null; csr_number: string | null; subtotal_centavos: number; discount_type: BillingDiscountType; discount_value: number; payment_choice: BillingStatementDetail['paymentChoice']; signature_status: string; has_signed_version?: number; share_state: 'not_shared' | 'shared'; finalized_at: string | null };
 type LineRow = { id: string; line_type: BillingStatementLine['lineType']; source_csr_usage_id: string | null; source_csr_service_usage_id: string | null; item_id: string | null; service_id: string | null; expense_id: string | null; description_snapshot: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; price_source: BillingPriceSource | null; override_reason: string | null; created_at: string };
 type ExpenseRow = { id: string; description: string; actual_cost_centavos: number; billable: number; billed_amount_centavos: number | null };
@@ -83,7 +83,7 @@ export async function assertLinkedCsrChargesAreSourced(db: SQLiteDatabase, repor
 }
 
 export async function listBillingStatements(db: SQLiteDatabase): Promise<BillingStatementSummary[]> {
-  const rows = await db.getAllAsync<SummaryRow>(`SELECT b.id,b.bs_number,c.name AS customer_name,b.document_state,b.business_date,b.discounted_total_centavos,b.pdf_state FROM billing_statements b JOIN customers c ON c.id=b.customer_id ORDER BY b.created_at DESC`);
+  const rows = await db.getAllAsync<SummaryRow>(`SELECT b.id,b.bs_number,c.name AS customer_name,b.service_report_id,r.csr_number,b.document_state,b.business_date,b.discounted_total_centavos,b.pdf_state FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id ORDER BY b.created_at DESC`);
   return rows.map(mapSummary);
 }
 
@@ -566,7 +566,7 @@ async function getSubtotal(db: SQLiteDatabase, statementId: string): Promise<num
 async function refreshTotals(db: SQLiteDatabase, statementId: string): Promise<void> { const row=await db.getFirstAsync<{ discount_type:BillingDiscountType; discount_value:number }>("SELECT discount_type,discount_value FROM billing_statements WHERE id=? AND document_state='draft'",statementId); if(!row) throw new Error('Only a draft statement can be changed.'); const subtotal=await getSubtotal(db,statementId); const discount=calculateDiscountCentavos(subtotal,toDiscount(row.discount_type,row.discount_value)); await db.runAsync('UPDATE billing_statements SET subtotal_centavos=?,discounted_total_centavos=? WHERE id=?',subtotal,subtotal-discount,statementId); }
 function toDiscount(type: BillingDiscountType,value:number): Discount { return type === 'fixed' ? {type:'fixed',valueCentavos:value} : type === 'percentage' ? {type:'percentage',basisPoints:value} : null; }
 function discountLabel(type: BillingDiscountType,value:number): string|null { return type === 'fixed' ? 'Discount' : type === 'percentage' ? `Discount (${(value/100).toFixed(2).replace(/\.00$/,'')}%)` : null; }
-function mapSummary(row:SummaryRow):BillingStatementSummary{return{id:row.id,bsNumber:row.bs_number,customerName:row.customer_name,documentState:row.document_state,businessDate:row.business_date,discountedTotalCentavos:row.discounted_total_centavos,pdfState:row.pdf_state};}
+function mapSummary(row:SummaryRow):BillingStatementSummary{return{id:row.id,bsNumber:row.bs_number,customerName:row.customer_name,serviceReportId:row.service_report_id,serviceReportNumber:row.csr_number,documentState:row.document_state,businessDate:row.business_date,discountedTotalCentavos:row.discounted_total_centavos,pdfState:row.pdf_state};}
 function mapLine(row:LineRow):BillingStatementLine{return{id:row.id,lineType:row.line_type,sourceCsrUsageId:row.source_csr_usage_id,sourceCsrServiceUsageId:row.source_csr_service_usage_id,itemId:row.item_id,serviceId:row.service_id,expenseId:row.expense_id,description:row.description_snapshot,quantity:row.quantity_integer,unitPriceCentavos:row.unit_price_centavos,amountCentavos:row.amount_centavos,priceSource:row.price_source,overrideReason:row.override_reason};}
 function assertMoney(value:number,label:string):void{if(!Number.isSafeInteger(value)||value<0)throw new Error(`${label} must be a non-negative amount.`);}
 function safeMultiply(price:number,quantity:number):number{const value=price*quantity;if(!Number.isSafeInteger(value)||value<0)throw new Error('Line amount is too large.');return value;}

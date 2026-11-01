@@ -7,6 +7,10 @@ export type BillingStatementSummary = {
   id: string;
   bsNumber: string | null;
   customerName: string;
+  /** CSR this statement is billed against, if any. */
+  serviceReportId: string | null;
+  /** Null while the linked CSR is still an unnumbered draft. */
+  serviceReportNumber: string | null;
   documentState: BillingDocumentState;
   businessDate: string;
   discountedTotalCentavos: number;
