@@ -7,6 +7,7 @@ import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { createBillingStatementDraft, listCsrsForBilling } from '@/features/billing-statements/billing-statement-repository';
+import { CustomerPicker } from '@/features/customers/customer-picker';
 import { listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerSummary } from '@/features/customers/customer-types';
 import { colors } from '@/theme/colors';
@@ -29,11 +30,23 @@ export default function NewBillingStatementScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    void listCustomers(db)
-      .then((rows) => setCustomers(rows.filter((customer) => customer.active)))
-      .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Could not load customers.'));
+  const loadCustomers = useCallback(async () => {
+    try {
+      const rows = await listCustomers(db);
+      setCustomers(rows.filter((customer) => customer.active));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Could not load customers.');
+    }
   }, [db]);
+
+  useEffect(() => {
+    void loadCustomers();
+  }, [loadCustomers]);
+
+  const handleCustomerCreated = useCallback(async (newId: string) => {
+    await loadCustomers();
+    setCustomerId(newId);
+  }, [loadCustomers]);
 
   useEffect(() => {
     setCsrId('');
@@ -64,7 +77,7 @@ export default function NewBillingStatementScreen() {
   }, [businessDate, csrId, customerId, db]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.intro}>
         <Text selectable style={styles.eyebrow}>UNNUMBERED DRAFT</Text>
         <Text selectable style={styles.introText}>
@@ -72,16 +85,12 @@ export default function NewBillingStatementScreen() {
         </Text>
       </View>
       <Text selectable style={styles.title}>Customer</Text>
-      <View style={styles.choices}>
-        {customers.map((customer) => (
-          <Choice key={customer.id} label={customer.name} selected={customer.id === customerId} onPress={() => setCustomerId(customer.id)} />
-        ))}
-      </View>
+      <CustomerPicker customers={customers} selectedId={customerId} onSelect={setCustomerId} onCreated={handleCustomerCreated} />
       {customerId ? (
         <>
           <Text selectable style={styles.title}>Optional CSR</Text>
-          <View style={styles.choices}>
-            <Choice label="No linked CSR" selected={!csrId} onPress={() => setCsrId('')} />
+          <Choice label="No linked CSR" selected={!csrId} onPress={() => setCsrId('')} />
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.csrList} contentContainerStyle={styles.choices}>
             {csrs.map((csr) => (
               <Choice
                 key={csr.id}
@@ -92,7 +101,7 @@ export default function NewBillingStatementScreen() {
                 onPress={() => setCsrId(csr.id)}
               />
             ))}
-          </View>
+          </ScrollView>
         </>
       ) : null}
       <FormField label="Business date" value={businessDate} onChangeText={setBusinessDate} placeholder="YYYY-MM-DD" />
@@ -118,6 +127,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
   title: { color: colors.label, fontSize: 16, fontWeight: '900' },
+  csrList: { maxHeight: 260 },
   choices: { gap: 8 },
   choice: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 15, borderWidth: 1, borderColor: colors.separator, borderRadius: 14, borderCurve: 'continuous', backgroundColor: colors.surface },
   selected: { borderColor: colors.brandBlue, backgroundColor: '#eaf2ff' },
