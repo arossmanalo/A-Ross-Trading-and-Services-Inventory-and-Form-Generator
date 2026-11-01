@@ -39,9 +39,10 @@ vi.mock('expo-file-system/legacy', () => ({
 }));
 
 import { finalizeAndRenderBillingStatement } from '@/features/billing-statements/billing-statement-pdf';
-import { createBillingStatementDraft, voidBillingStatement } from '@/features/billing-statements/billing-statement-repository';
+import { addServiceLine, createBillingStatementDraft, voidBillingStatement } from '@/features/billing-statements/billing-statement-repository';
 import { runShareSequence } from '@/features/documents/share-sequence';
-import { finalizeAndRenderServiceReport, getServiceReportShareSteps } from '@/features/service-reports/service-report-pdf';
+import { getBillingStatementShareSteps, getServiceReportShareSteps } from '@/features/documents/share-steps';
+import { finalizeAndRenderServiceReport } from '@/features/service-reports/service-report-pdf';
 import { addReportServiceUsage, createServiceReportDraft } from '@/features/service-reports/service-report-repository';
 
 type Params = Array<string | number | null>;
@@ -177,4 +178,37 @@ describe('sharing a CSR together with its billing statements', () => {
     for (const [width, height] of sizes) expect(height).toBeGreaterThan(width);
     expect(printer.mock.calls.every(([options]) => !options.html.includes('device-width'))).toBe(true);
   });
+
+  it('sharing a linked Billing Statement offers its CSR next, named from the CSR ID', async () => {
+    const { statementId } = await finalizedCsrWithStatement();
+    const steps = await getBillingStatementShareSteps(db, statementId);
+    expect(steps.map((step) => step.fileName)).toEqual(['CSR-000001 Billing Statement.pdf', 'CSR-000001 Customer Service Report.pdf']);
+    expect(await runShareSequence(steps, confirmYes)).toBe(2);
+    expect(sharedTargets).toEqual([
+      'file://cache/shared-pdfs/CSR-000001 Billing Statement.pdf',
+      'file://cache/shared-pdfs/CSR-000001 Customer Service Report.pdf',
+    ]);
+    expect(await runShareSequence(await getBillingStatementShareSteps(db, statementId), async () => false)).toBe(1);
+  });
+
+  it('sharing a standalone Billing Statement offers only itself', async () => {
+    const statementId = await createBillingStatementDraft(db, DRAFT);
+    await addServiceLine(db, statementId, { serviceId: 'service' });
+    await finalizeAndRenderBillingStatement(db, statementId);
+    const steps = await getBillingStatementShareSteps(db, statementId);
+    expect(steps.map((step) => step.fileName)).toEqual(['BS-000001 Billing Statement.pdf']);
+  });
+
+  it('renders a missing CSR PDF before sharing its statement, and refuses an unfinalized statement', async () => {
+    const { reportId, statementId } = await finalizedCsrWithStatement();
+    files.delete('file://docs/documents/CSR-000001.pdf');
+    printer.mockClear();
+    await getBillingStatementShareSteps(db, statementId);
+    expect(printer).toHaveBeenCalledTimes(1);
+    expect(files.has('file://docs/documents/CSR-000001.pdf')).toBe(true);
+    expect(reportId).toBeTruthy();
+    const draft = await createBillingStatementDraft(db, DRAFT);
+    await expect(getBillingStatementShareSteps(db, draft)).rejects.toThrow(/finalized/);
+  });
 });
+

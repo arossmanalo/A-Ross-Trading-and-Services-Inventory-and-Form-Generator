@@ -22,9 +22,9 @@ import {
 } from '@/features/service-reports/service-report-repository';
 import {
   finalizeAndRenderServiceReport,
-  getServiceReportShareSteps,
   retryServiceReportPdf,
 } from '@/features/service-reports/service-report-pdf';
+import { getServiceReportShareSteps } from '@/features/documents/share-steps';
 import { runShareSequence } from '@/features/documents/share-sequence';
 import { confirmNextShare } from '@/components/confirm-next-share';
 import type { ServiceOutcome, ServiceReportDetail } from '@/features/service-reports/service-report-types';
@@ -361,7 +361,7 @@ export default function ServiceReportDetailScreen() {
             </View> : null}
             <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/service-reports/preview', params: { reportId } })} variant="secondary">Preview PDF</ActionButton>
             {report.pdfState !== 'ready' ? <ActionButton disabled={busy} onPress={() => void retryPdf()}>Retry PDF</ActionButton> : <ActionButton disabled={busy} onPress={() => void sharePdf()}>Share PDF</ActionButton>}
-            {report.documentState === 'finalized' && report.pdfState === 'ready' ? <Text selectable style={styles.totalHelp}>Linked finalized Billing Statements are offered for sharing right after the CSR, one share sheet per file.</Text> : null}
+            {report.documentState === 'finalized' && report.pdfState === 'ready' ? <Text selectable style={styles.totalHelp}>Its linked finalized Billing Statements are offered for sharing right after the CSR, one share sheet per file.</Text> : null}
             {report.documentState === 'finalized' ? (
               <>
                 <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId, mode: 'sign' } })} variant="secondary">Sign document</ActionButton>

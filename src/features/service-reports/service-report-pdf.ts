@@ -3,11 +3,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
-import { listShareableStatementsForReport, retryBillingStatementPdf, shareBillingStatementPdf } from '@/features/billing-statements/billing-statement-pdf';
 import { printHtmlToPdf } from '@/features/documents/pdf-output';
 import { resolveShareFileName } from '@/features/documents/share-file-name';
 import { sharePdfFile } from '@/features/documents/share-pdf';
-import type { ShareStep } from '@/features/documents/share-sequence';
 import { getBusinessLogo } from '@/features/settings/settings-repository';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
@@ -140,44 +138,6 @@ export async function getServiceReportPreview(
     return { csrNumber: preview.number, html: preview.html, isDraft: false };
   }
   return { csrNumber: row.csr_number, html: row.render_template_snapshot, isDraft: false };
-}
-
-/**
- * Everything to hand to the share sheet for a finalized CSR: the CSR itself,
- * then each finalized Billing Statement linked to it. Missing PDFs are rendered
- * first so a failure shows before any sheet opens.
- */
-export async function getServiceReportShareSteps(db: SQLiteDatabase, reportId: string): Promise<ShareStep[]> {
-  const report = await db.getFirstAsync<{ document_state: string }>('SELECT document_state FROM service_reports WHERE id = ?', reportId);
-  if (!report || report.document_state !== 'finalized') throw new Error('Only a finalized CSR can be shared.');
-
-  const stored = await db.getFirstAsync<{ private_path: string }>(
-    `SELECT private_path FROM document_attachments
-     WHERE owner_type = 'service_report' AND owner_id = ? AND attachment_type = 'generated_pdf'`,
-    reportId,
-  );
-  if (!stored?.private_path || !(await FileSystem.getInfoAsync(stored.private_path)).exists) {
-    await retryServiceReportPdf(db, reportId);
-  }
-
-  const statements = await listShareableStatementsForReport(db, reportId);
-  for (const statement of statements) {
-    if (statement.pdfState !== 'ready') await retryBillingStatementPdf(db, statement.id);
-  }
-
-  const steps: ShareStep[] = [{
-    title: 'Customer Service Report',
-    fileName: await resolveShareFileName(db, 'service_report', reportId),
-    run: () => shareServiceReportPdf(db, reportId),
-  }];
-  for (const statement of statements) {
-    steps.push({
-      title: 'Billing Statement',
-      fileName: await resolveShareFileName(db, 'billing_statement', statement.id),
-      run: () => shareBillingStatementPdf(db, statement.id),
-    });
-  }
-  return steps;
 }
 
 export async function shareServiceReportPdf(db: SQLiteDatabase, reportId: string): Promise<void> {

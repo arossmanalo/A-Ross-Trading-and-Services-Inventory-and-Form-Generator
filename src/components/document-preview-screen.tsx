@@ -184,6 +184,23 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
           });
         }
       }
+      if (kind === 'billing_statement' && !preview.isDraft) {
+        const linked = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null }>(
+          'SELECT b.service_report_id, r.document_state AS csr_state FROM billing_statements b LEFT JOIN service_reports r ON r.id = b.service_report_id WHERE b.id = ?',
+          documentId,
+        );
+        if (linked?.service_report_id && linked.csr_state === 'finalized') {
+          const reportPreview = await getServiceReportPreview(db, linked.service_report_id);
+          if (!reportPreview.isDraft) {
+            const reportFileName = await resolveShareFileName(db, 'service_report', linked.service_report_id);
+            steps.push({
+              title: 'Customer Service Report',
+              fileName: reportFileName,
+              run: async () => sharePdfFile({ sourceUri: await renderPdf(withDocumentHeaderLayout(reportPreview.html), 'csr'), fileName: reportFileName }),
+            });
+          }
+        }
+      }
       const shared = await runShareSequence(steps, confirmNextShare);
       setNotice(shared > 1 ? `${shared} PDFs were handed to the share sheet.` : preview.isDraft ? 'PDF export opened. The document remains a draft until you finalize it.' : 'PDF export opened.');
     } catch (actionError) {
