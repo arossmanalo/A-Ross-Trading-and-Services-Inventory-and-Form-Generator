@@ -45,6 +45,20 @@ describe('billing statement template', () => {
     expect(html).not.toContain('break-before:page');
   });
 
+  it('itemizes the down payment above the remaining balance', () => {
+    const html = buildBillingStatementHtml({
+      ...fixture,
+      paymentsReceivedCentavos: 200000,
+      balanceDueCentavos: 598000,
+      payments: [{ label: 'Down Payment', paNumber: 'PA-000007', businessDate: '2026-08-31', method: 'GCash / E-wallet', amountCentavos: 200000 }],
+    });
+    expect(html).toContain('Down Payment<span class="payment-ref">PA-000007 · 2026-08-31 · GCash / E-wallet</span>');
+    expect(html).toContain('− ₱2,000.00');
+    expect(html).not.toContain('Payments Received');
+    expect(html.indexOf('Down Payment')).toBeLessThan(html.indexOf('Balance Due'));
+    expect(html).toContain('₱5,980.00');
+  });
+
   it('keeps long charge tables paginable with repeated headings', () => {
     const lines = Array.from({ length: 180 }, (_, index) => ({
       description: `Service line ${index}`,

@@ -32,8 +32,8 @@ export function buildPaymentAcknowledgmentHtml(snapshot: PaymentRenderSnapshot):
 }
 
 function money(value: number): string { return PHP.format(value / 100); }
-function methodLabel(value: PaymentMethod): string { return ({ cash: 'Cash', bank_transfer: 'Bank Transfer', e_wallet: 'GCash / E-wallet', check: 'Check', other: 'Other' })[value]; }
-function kindLabel(value: PaymentKind): string { return ({ paid_in_full: 'Paid in Full', down_payment: 'Down Payment', balance_payment: 'Remaining Balance', later_full: 'Full Payment' })[value]; }
+export function methodLabel(value: PaymentMethod): string { return ({ cash: 'Cash', bank_transfer: 'Bank Transfer', e_wallet: 'GCash / E-wallet', check: 'Check', other: 'Other' })[value]; }
+export function kindLabel(value: PaymentKind): string { return ({ paid_in_full: 'Paid in Full', down_payment: 'Down Payment', balance_payment: 'Remaining Balance', later_full: 'Full Payment' })[value]; }
 export function escapeHtml(value: string): string { return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
 
 function logoHtml(logoDataUrl?: string | null): string {

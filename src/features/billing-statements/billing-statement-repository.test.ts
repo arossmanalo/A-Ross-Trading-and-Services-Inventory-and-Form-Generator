@@ -257,6 +257,27 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
 
   it('enforces one down payment followed by the exact remaining balance',async()=>{const statementId=await createBillingStatementDraft(db,{customerId:'customer',businessDate:'2026-09-05'});await addServiceLine(db,statementId,{serviceId:'service'});const initial=await finalizeBillingStatement(db,statementId,'reject',{choice:'down_payment',payment:{amountCentavos:20000,businessDate:'2026-09-05',method:'cash'}});expect(initial.initialPayment?.paNumber).toBe('PA-000001');await expect(createLaterPayment(db,statementId,{amountCentavos:20000,businessDate:'2026-09-05',method:'cash'})).rejects.toThrow(/full remaining balance/);const balance=await createLaterPayment(db,statementId,{amountCentavos:30000,businessDate:'2026-09-05',method:'e_wallet',referenceNumber:'GCASH-1'});expect(balance.paNumber).toBe('PA-000002');expect((await listPaymentsForStatement(db,statementId)).status).toBe('paid');await expect(voidPayment(db,initial.initialPayment!.paymentId,'Wrong amount')).rejects.toThrow(/remaining-balance payment/);await voidPayment(db,balance.paymentId,'Wrong reference');expect((await listPaymentsForStatement(db,statementId)).status).toBe('balance_due');});
 
+  it('shows the down payment, its PA number and the remaining balance on the issued statement', async () => {
+    const statementId = await createBillingStatementDraft(db, { customerId: 'customer', businessDate: '2026-09-05' });
+    await addServiceLine(db, statementId, { serviceId: 'service' });
+    const issued = await finalizeBillingStatement(db, statementId, 'reject', { choice: 'down_payment', payment: { amountCentavos: 20000, businessDate: '2026-09-05', method: 'e_wallet', referenceNumber: 'GCASH-9' } });
+    expect(issued.snapshot).toMatchObject({
+      paymentsReceivedCentavos: 20000,
+      balanceDueCentavos: 30000,
+      payments: [{ label: 'Down Payment', paNumber: 'PA-000001', businessDate: '2026-09-05', method: 'GCash / E-wallet', amountCentavos: 20000 }],
+    });
+    expect(issued.html).toContain('Down Payment');
+    expect(issued.html).toContain('PA-000001 · 2026-09-05 · GCash / E-wallet');
+    const stored = raw.prepare('SELECT render_template_snapshot AS html FROM billing_statements WHERE id=?').get(statementId) as { html: string };
+    expect(stored.html).toContain('PA-000001');
+
+    const unpaid = await createBillingStatementDraft(db, { customerId: 'customer', businessDate: '2026-09-05' });
+    await addServiceLine(db, unpaid, { serviceId: 'service' });
+    const later = await finalizeBillingStatement(db, unpaid);
+    expect(later.snapshot.payments).toBeUndefined();
+    expect(later.html).not.toContain('Payments Received');
+  });
+
   it('requires a single exact pay-later payment and a non-cash reference',async()=>{const statementId=await createBillingStatementDraft(db,{customerId:'customer',businessDate:'2026-09-05'});await addServiceLine(db,statementId,{serviceId:'service'});await finalizeBillingStatement(db,statementId);await expect(createLaterPayment(db,statementId,{amountCentavos:60000,businessDate:'2026-09-05',method:'cash'})).rejects.toThrow(/full remaining balance/);await expect(createLaterPayment(db,statementId,{amountCentavos:50000,businessDate:'2026-09-05',method:'bank_transfer'})).rejects.toThrow(/reference/);const input={idempotencyKey:'payment-request-1',amountCentavos:50000,businessDate:'2026-09-05',method:'bank_transfer' as const,referenceNumber:'BANK-1'};const payment=await createLaterPayment(db,statementId,input);const retry=await createLaterPayment(db,statementId,input);expect(retry.paymentId).toBe(payment.paymentId);expect(payment.snapshot.remainingBalanceCentavos).toBe(0);expect((raw.prepare("SELECT high_water_mark FROM sequences WHERE name='PA'").get() as {high_water_mark:number}).high_water_mark).toBe(1);expect((await listPaymentsForStatement(db,statementId)).status).toBe('paid');await expect(createLaterPayment(db,statementId,{amountCentavos:1,businessDate:'2026-09-05',method:'cash'})).rejects.toThrow(/no remaining balance/);});
 
   it('rolls back statement and number allocation when an initial full payment is invalid',async()=>{const statementId=await createBillingStatementDraft(db,{customerId:'customer',businessDate:'2026-09-05'});await addServiceLine(db,statementId,{serviceId:'service'});await expect(finalizeBillingStatement(db,statementId,'reject',{choice:'paid_in_full',payment:{amountCentavos:49999,businessDate:'2026-09-05',method:'cash'}})).rejects.toThrow(/must equal/);expect((raw.prepare("SELECT document_state FROM billing_statements WHERE id=?").get(statementId) as {document_state:string}).document_state).toBe('draft');expect((raw.prepare("SELECT high_water_mark FROM sequences WHERE name='BS'").get() as {high_water_mark:number}).high_water_mark).toBe(0);const result=await finalizeBillingStatement(db,statementId,'reject',{choice:'paid_in_full',payment:{amountCentavos:50000,businessDate:'2026-09-05',method:'cash'}});expect(result.bsNumber).toBe('BS-000001');expect(result.initialPayment?.paNumber).toBe('PA-000001');});
