@@ -144,11 +144,20 @@ export async function insertCsrServiceUsage(
   return usageId;
 }
 
+/** Number of machines on a CSR. Legacy rows without join entries count as one. */
+export async function countReportMachines(db: SQLiteDatabase, reportId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM service_report_equipment WHERE service_report_id = ?',
+    reportId,
+  );
+  return Math.max(1, row?.count ?? 0);
+}
+
 export async function recalculateServiceReportTotal(
   db: SQLiteDatabase,
   reportId: string,
 ): Promise<number> {
-  const [items, services] = await Promise.all([
+  const [items, services, machineCount] = await Promise.all([
     db.getAllAsync<{
       quantity_integer: number;
       billable: number;
@@ -163,6 +172,7 @@ export async function recalculateServiceReportTotal(
        FROM service_report_service_usage WHERE service_report_id = ?`,
       reportId,
     ),
+    countReportMachines(db, reportId),
   ]);
   const total = calculateServiceReportTotal(
     items.map((item) => ({
@@ -171,6 +181,7 @@ export async function recalculateServiceReportTotal(
       resolvedSellingPriceCentavos: item.resolved_selling_price_centavos,
     })),
     services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })),
+    machineCount,
   );
   await db.runAsync(
     "UPDATE service_reports SET total_bill_centavos = ? WHERE id = ? AND document_state = 'draft'",

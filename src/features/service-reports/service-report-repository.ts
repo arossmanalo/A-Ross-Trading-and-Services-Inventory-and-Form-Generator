@@ -16,6 +16,7 @@ import type {
   DocumentState,
   ServiceOutcome,
   ServiceReportDetail,
+  ServiceReportMachine,
   ServiceReportServiceUsage,
   ServiceReportSummary,
   ServiceReportUsage,
@@ -96,11 +97,49 @@ export class DraftPriceChangedError extends Error {
   }
 }
 
+type MachineRow = {
+  equipment_id: string;
+  machine_type: string;
+  model: string;
+  serial_number: string;
+  nickname_or_location: string;
+};
+
+/** Machines on a CSR in the order they were assigned; legacy rows fall back to the primary machine. */
+export async function listReportMachines(db: SQLiteDatabase, reportId: string): Promise<ServiceReportMachine[]> {
+  let rows = await db.getAllAsync<MachineRow>(
+    `SELECT e.id AS equipment_id, e.machine_type, e.model, e.serial_number, e.nickname_or_location
+     FROM service_report_equipment re
+     JOIN customer_equipment e ON e.id = re.equipment_id
+     WHERE re.service_report_id = ?
+     ORDER BY re.position ASC`,
+    reportId,
+  );
+  if (rows.length === 0) {
+    rows = await db.getAllAsync<MachineRow>(
+      `SELECT e.id AS equipment_id, e.machine_type, e.model, e.serial_number, e.nickname_or_location
+       FROM service_reports r JOIN customer_equipment e ON e.id = r.equipment_id
+       WHERE r.id = ?`,
+      reportId,
+    );
+  }
+  return rows.map((row) => ({
+    equipmentId: row.equipment_id,
+    machineType: row.machine_type,
+    model: row.model,
+    serialNumber: row.serial_number,
+    nicknameOrLocation: row.nickname_or_location,
+  }));
+}
+
 export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceReportSummary[]> {
   const rows = await db.getAllAsync<SummaryRow>(
     `SELECT r.id, r.csr_number, c.name AS customer_name,
-            e.machine_type AS equipment_name, r.document_state,
-            r.service_outcome, r.business_date, r.pdf_state
+            e.machine_type || CASE
+              WHEN (SELECT COUNT(*) FROM service_report_equipment x WHERE x.service_report_id = r.id) > 1
+              THEN ' +' || ((SELECT COUNT(*) FROM service_report_equipment x WHERE x.service_report_id = r.id) - 1) || ' more'
+              ELSE '' END AS equipment_name,
+            r.document_state, r.service_outcome, r.business_date, r.pdf_state
      FROM service_reports r
      JOIN customers c ON c.id = r.customer_id
      JOIN customer_equipment e ON e.id = r.equipment_id
@@ -132,6 +171,8 @@ export async function getServiceReport(
   if (!row) return null;
   const usages = await listReportUsages(db, reportId);
   const services = await listReportServices(db, reportId);
+  const machines = await listReportMachines(db, reportId);
+  const machineCount = Math.max(1, machines.length);
   const detail = mapDetailRow(row);
   const memberRows = await db.getAllAsync<{ name: string }>(
     `SELECT name FROM customer_members WHERE customer_id = ? AND active = 1 ORDER BY name COLLATE NOCASE ASC`,
@@ -140,8 +181,10 @@ export async function getServiceReport(
   return {
     ...detail,
     totalBillCentavos: row.document_state === 'draft'
-      ? calculateServiceReportTotal(usages, services)
+      ? calculateServiceReportTotal(usages, services, machineCount)
       : detail.totalBillCentavos,
+    machines,
+    machineCount,
     usages,
     services,
     acknowledgmentOptions: row.customer_type === 'individual' ? [row.customer_name] : memberRows.map((member) => member.name),
@@ -153,10 +196,15 @@ export async function createServiceReportDraft(
   input: CreateServiceReportDraftInput,
 ): Promise<string> {
   validateBusinessDate(input.businessDate, input.backdateReason);
+  const equipmentIds = [input.equipmentId, ...(input.additionalEquipmentIds ?? [])];
+  if (new Set(equipmentIds).size !== equipmentIds.length) throw new Error('Each machine can be listed only once on a CSR.');
   const reportId = Crypto.randomUUID();
   const now = new Date().toISOString();
 
   await db.withExclusiveTransactionAsync(async (tx) => {
+    for (const additionalId of equipmentIds.slice(1)) {
+      await assertMachineAvailable(tx, input.customerId, additionalId);
+    }
     const equipment = await tx.getFirstAsync<{
       customer_id: string;
       customer_active: number;
@@ -193,8 +241,10 @@ export async function createServiceReportDraft(
       if (!previous || previous.document_state !== 'finalized') {
         throw new Error('A follow-up must reference a finalized CSR.');
       }
-      if (previous.customer_id !== input.customerId || previous.equipment_id !== input.equipmentId) {
-        throw new Error('A follow-up must use the same customer and equipment.');
+      const previousMachineIds = new Set((await listReportMachines(tx, input.followsCsrId)).map((machine) => machine.equipmentId));
+      previousMachineIds.add(previous.equipment_id);
+      if (previous.customer_id !== input.customerId || equipmentIds.some((id) => !previousMachineIds.has(id))) {
+        throw new Error('A follow-up must use the same customer and machines from the original CSR.');
       }
     }
 
@@ -214,11 +264,17 @@ export async function createServiceReportDraft(
       acknowledgedBy,
       now,
     );
+    for (const [index, equipmentId] of equipmentIds.entries()) {
+      await tx.runAsync(
+        'INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at) VALUES (?, ?, ?, ?)',
+        reportId, equipmentId, index + 1, now,
+      );
+    }
     await appendAuditEvent(tx, {
       eventType: input.followsCsrId ? 'csr.follow_up_draft_created' : 'csr.draft_created',
       entityType: 'service_report',
       entityId: reportId,
-      details: { followsCsrId: input.followsCsrId ?? null },
+      details: { followsCsrId: input.followsCsrId ?? null, machineCount: equipmentIds.length },
       createdAt: now,
     });
     await incrementDatabaseRevision(tx);
@@ -359,6 +415,88 @@ export async function removeReportServiceUsage(
   });
 }
 
+async function assertMachineAvailable(db: SQLiteDatabase, customerId: string, equipmentId: string): Promise<void> {
+  const machine = await db.getFirstAsync<{ customer_id: string; customer_active: number; equipment_active: number }>(
+    `SELECT e.customer_id, c.active AS customer_active, e.active AS equipment_active
+     FROM customer_equipment e JOIN customers c ON c.id = e.customer_id
+     WHERE e.id = ? AND c.merged_into_customer_id IS NULL`,
+    equipmentId,
+  );
+  if (!machine || machine.customer_id !== customerId) throw new Error('Selected equipment does not belong to this customer.');
+  if (machine.customer_active !== 1 || machine.equipment_active !== 1) {
+    throw new Error('Customer and equipment must be active for new service work.');
+  }
+}
+
+/** Adds a machine to a draft CSR. Service charges are re-multiplied and linked statement drafts re-synchronized. */
+export async function addReportEquipment(db: SQLiteDatabase, reportId: string, equipmentId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const report = await tx.getFirstAsync<{ customer_id: string }>(
+      "SELECT customer_id FROM service_reports WHERE id = ? AND document_state = 'draft'",
+      reportId,
+    );
+    if (!report) throw new Error('Machines can only be changed on a draft CSR.');
+    await assertMachineAvailable(tx, report.customer_id, equipmentId);
+    const machines = await listReportMachines(tx, reportId);
+    if (machines.some((machine) => machine.equipmentId === equipmentId)) throw new Error('This machine is already listed on the CSR.');
+    // Legacy drafts may have no join rows; materialize the primary machine first.
+    await tx.runAsync(
+      `INSERT OR IGNORE INTO service_report_equipment (service_report_id, equipment_id, position, created_at)
+       SELECT id, equipment_id, 1, created_at FROM service_reports WHERE id = ?`,
+      reportId,
+    );
+    await tx.runAsync(
+      'INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at) VALUES (?, ?, ?, ?)',
+      reportId, equipmentId, machines.length + 1, now,
+    );
+    await recalculateServiceReportTotal(tx, reportId);
+    await syncLinkedCsrDraftLines(tx, reportId);
+    await appendAuditEvent(tx, {
+      eventType: 'csr.machine_added',
+      entityType: 'service_report',
+      entityId: reportId,
+      details: { equipmentId, machineCount: machines.length + 1 },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
+/** Removes a machine from a draft CSR. At least one machine must remain; the first remaining machine becomes primary. */
+export async function removeReportEquipment(db: SQLiteDatabase, reportId: string, equipmentId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const report = await tx.getFirstAsync<{ id: string }>(
+      "SELECT id FROM service_reports WHERE id = ? AND document_state = 'draft'",
+      reportId,
+    );
+    if (!report) throw new Error('Machines can only be changed on a draft CSR.');
+    const machines = await listReportMachines(tx, reportId);
+    if (!machines.some((machine) => machine.equipmentId === equipmentId)) throw new Error('This machine is not listed on the CSR.');
+    if (machines.length <= 1) throw new Error('A CSR needs at least one machine.');
+    const remaining = machines.filter((machine) => machine.equipmentId !== equipmentId);
+    await tx.runAsync('DELETE FROM service_report_equipment WHERE service_report_id = ?', reportId);
+    for (const [index, machine] of remaining.entries()) {
+      await tx.runAsync(
+        'INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at) VALUES (?, ?, ?, ?)',
+        reportId, machine.equipmentId, index + 1, now,
+      );
+    }
+    await tx.runAsync('UPDATE service_reports SET equipment_id = ? WHERE id = ?', remaining[0].equipmentId, reportId);
+    await recalculateServiceReportTotal(tx, reportId);
+    await syncLinkedCsrDraftLines(tx, reportId);
+    await appendAuditEvent(tx, {
+      eventType: 'csr.machine_removed',
+      entityType: 'service_report',
+      entityId: reportId,
+      details: { equipmentId, machineCount: remaining.length },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
 export async function deleteServiceReportDraft(
   db: SQLiteDatabase,
   reportId: string,
@@ -373,6 +511,7 @@ export async function deleteServiceReportDraft(
     await deleteLinkedBillingStatementDrafts(tx, reportId, now);
     await tx.runAsync('DELETE FROM service_report_item_usage WHERE service_report_id = ?', reportId);
     await tx.runAsync('DELETE FROM service_report_service_usage WHERE service_report_id = ?', reportId);
+    await tx.runAsync('DELETE FROM service_report_equipment WHERE service_report_id = ?', reportId);
     await tx.runAsync("DELETE FROM service_reports WHERE id = ? AND document_state = 'draft'", reportId);
     await appendAuditEvent(tx, {
       eventType: 'csr.draft_deleted',
@@ -432,6 +571,8 @@ export async function finalizeServiceReport(
     await assertLinkedCsrChargesAreSourced(tx, reportId);
     let usages = await listFinalizationUsages(tx, reportId, row.customer_id);
     let services = await listFinalizationServices(tx, reportId);
+    const machines = await listReportMachines(tx, reportId);
+    const machineCount = Math.max(1, machines.length);
     const priceChanges: string[] = [];
     for (const usage of usages) {
       if (usage.quantity_integer > usage.current_stock) {
@@ -496,7 +637,7 @@ export async function finalizeServiceReport(
       quantity: usage.quantity_integer,
       billable: usage.billable === 1,
       resolvedSellingPriceCentavos: usage.resolved_selling_price_centavos,
-    })), services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })));
+    })), services.map((service) => ({ resolvedRateCentavos: service.resolved_rate_centavos })), machineCount);
     await tx.runAsync('UPDATE service_reports SET total_bill_centavos = ? WHERE id = ?', totalBillCentavos, reportId);
 
     const csrNumber = await allocateDocumentNumber(tx, 'CSR');
@@ -513,6 +654,8 @@ export async function finalizeServiceReport(
         serialNumber: row.serial_number,
         nicknameOrLocation: row.nickname_or_location,
       },
+      machines: machines.map(({ machineType, model, serialNumber, nicknameOrLocation }) => ({ machineType, model, serialNumber, nicknameOrLocation })),
+      machineCount,
       serviceOutcome: row.service_outcome,
       reportedProblem: parseEntries(row.reported_problem_json),
       diagnosis: parseEntries(row.diagnosis_json),
@@ -703,6 +846,12 @@ export async function voidServiceReport(
          VALUES (?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
         reissueId, report.customer_id, report.equipment_id, reportId, getLocalBusinessDate(), now,
       );
+      for (const [index, machine] of (await listReportMachines(tx, reportId)).entries()) {
+        await tx.runAsync(
+          'INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at) VALUES (?, ?, ?, ?)',
+          reissueId, machine.equipmentId, index + 1, now,
+        );
+      }
     }
 
     await appendAuditEvent(tx, {
@@ -796,7 +945,7 @@ function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
   };
 }
 
-function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'services'> {
+function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'services' | 'machines' | 'machineCount'> {
   return {
     ...mapSummaryRow(row),
     customerId: row.customer_id,

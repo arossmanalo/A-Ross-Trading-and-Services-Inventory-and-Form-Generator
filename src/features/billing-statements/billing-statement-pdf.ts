@@ -83,7 +83,7 @@ export async function getBillingStatementPreview(
       lines: statement.lines.map((line) => ({
         description: line.description,
         quantity: line.quantity,
-        unitLabel: line.lineType === 'item' ? unitLabels.get(line.id) ?? 'item' : line.lineType,
+        unitLabel: line.lineType === 'item' ? unitLabels.get(line.id) ?? 'item' : line.lineType === 'service' && line.quantity > 1 ? 'machines' : line.lineType,
         unitPriceCentavos: line.unitPriceCentavos,
         amountCentavos: line.amountCentavos,
       })),

@@ -52,9 +52,20 @@ export type ServiceReportServiceUsage = {
   overrideReason: string | null;
 };
 
+export type ServiceReportMachine = {
+  equipmentId: string;
+  machineType: string;
+  model: string;
+  serialNumber: string;
+  nicknameOrLocation: string;
+};
+
 export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   customerId: string;
+  /** Primary machine. Every machine, including this one, is listed in `machines`. */
   equipmentId: string;
+  machines: ServiceReportMachine[];
+  machineCount: number;
   followsCsrId: string | null;
   backdateReason: string | null;
   signatureStatus: string;
@@ -69,7 +80,10 @@ export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
 
 export type CreateServiceReportDraftInput = {
   customerId: string;
+  /** Primary machine. */
   equipmentId: string;
+  /** Further machines serviced during the same visit. */
+  additionalEquipmentIds?: string[];
   followsCsrId?: string;
   businessDate: string;
   backdateReason?: string;

@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 9;
+export const DATABASE_VERSION = 10;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -423,4 +423,20 @@ CREATE TABLE signature_drafts (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (owner_type, owner_id, role)
 );
+`;
+
+export const SCHEMA_V10 = `
+CREATE TABLE service_report_equipment (
+  service_report_id TEXT NOT NULL REFERENCES service_reports(id),
+  equipment_id TEXT NOT NULL REFERENCES customer_equipment(id),
+  position INTEGER NOT NULL CHECK (position >= 1),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (service_report_id, equipment_id)
+);
+
+CREATE INDEX service_report_equipment_equipment_idx
+  ON service_report_equipment(equipment_id);
+
+INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at)
+SELECT id, equipment_id, 1, created_at FROM service_reports;
 `;

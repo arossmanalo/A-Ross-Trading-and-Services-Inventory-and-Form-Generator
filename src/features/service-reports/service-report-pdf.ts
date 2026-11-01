@@ -97,6 +97,8 @@ export async function getServiceReportPreview(
         serialNumber: identity.serial_number,
         nicknameOrLocation: identity.nickname_or_location,
       },
+      machines: report.machines.map(({ machineType, model, serialNumber, nicknameOrLocation }) => ({ machineType, model, serialNumber, nicknameOrLocation })),
+      machineCount: report.machineCount,
       serviceOutcome: report.serviceOutcome,
       reportedProblem: report.reportedProblem,
       diagnosis: report.diagnosis,

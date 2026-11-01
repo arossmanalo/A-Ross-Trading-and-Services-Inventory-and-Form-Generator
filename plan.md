@@ -121,8 +121,8 @@ Expo Go is not a production requirement. Phase 0 must verify release builds on t
 
 1. Select/create a registered customer with name, address, contact number, and email as applicable.
 2. Duplicate customer names are allowed with warnings. Referenced customers are deactivated, not deleted; duplicates can be merged with an audit trail.
-3. Each CSR references one reusable equipment record with free-form machine details, model, serial number, nickname/location, and active state.
-4. Serial numbers have no validation. A multi-machine visit uses separate CSRs.
+3. Each CSR references one or more reusable equipment records (free-form machine details, model, serial number, nickname/location, and active state) belonging to one customer.
+4. Serial numbers have no validation. A multi-machine visit uses one CSR; each service on it is billed once per machine, while item charges are not multiplied. Machines can change only while the CSR is a draft.
 
 ### CSR
 

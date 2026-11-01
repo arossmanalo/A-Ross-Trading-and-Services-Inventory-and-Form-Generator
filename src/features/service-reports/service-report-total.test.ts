@@ -10,6 +10,16 @@ describe('service report totals', () => {
     ], [{ resolvedRateCentavos: 50000 }])).toBe(75000);
   });
 
+  it('multiplies only service rates by the machine count', () => {
+    expect(calculateServiceReportTotal([
+      { quantity: 2, billable: true, resolvedSellingPriceCentavos: 12500 },
+    ], [{ resolvedRateCentavos: 50000 }, { resolvedRateCentavos: 20000 }], 3)).toBe(25000 + 3 * 70000);
+  });
+
+  it('requires at least one machine', () => {
+    expect(() => calculateServiceReportTotal([], [], 0)).toThrow(/at least one machine/);
+  });
+
   it('excludes non-billable and unresolved item prices', () => {
     expect(calculateServiceReportTotal([
       { quantity: 3, billable: false, resolvedSellingPriceCentavos: 10000 },

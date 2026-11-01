@@ -56,6 +56,7 @@ export function parseBackupPackage(bytes: Uint8Array): ParsedBackupPackage {
     ...(manifest.schemaVersion < 5 ? ['signature_captures'] : []),
     ...(manifest.schemaVersion < 8 ? ['customer_members'] : []),
     ...(manifest.schemaVersion < 9 ? ['signature_drafts'] : []),
+    ...(manifest.schemaVersion < 10 ? ['service_report_equipment'] : []),
   ];
   if (tableKeys.some(table => !DATA_TABLES.includes(table as BackupTableName)) || DATA_TABLES.some(table => !tableKeys.includes(table) && !legacyMissing.includes(table))) {
     throw new Error('Backup table set does not match the supported schema.');
@@ -270,6 +271,7 @@ function parseManifest(value: unknown): BackupFileManifest {
     if (table === 'signature_captures') return value.schemaVersion >= 5;
     if (table === 'customer_members') return value.schemaVersion >= 8;
     if (table === 'signature_drafts') return value.schemaVersion >= 9;
+    if (table === 'service_report_equipment') return value.schemaVersion >= 10;
     return true;
   });
   if (countKeys.some(table => !expectedCountTables.includes(table as BackupTableName)) || expectedCountTables.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
@@ -315,6 +317,15 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
   }
   if (parsed.manifest.schemaVersion < 9) {
     tables.signature_drafts = [];
+  }
+  if (parsed.manifest.schemaVersion < 10) {
+    // Every earlier CSR had exactly one machine: its primary equipment record.
+    tables.service_report_equipment = tables.service_reports.map(row => ({
+      service_report_id: row.id,
+      equipment_id: row.equipment_id,
+      position: 1,
+      created_at: row.created_at,
+    }));
   }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };

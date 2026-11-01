@@ -8,10 +8,14 @@ import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
 import { createBillingStatementDraft } from '@/features/billing-statements/billing-statement-repository';
+import { getCustomerDetail } from '@/features/customers/customer-repository';
+import type { CustomerEquipment } from '@/features/customers/customer-types';
 import {
   DraftPriceChangedError,
+  addReportEquipment,
   deleteServiceReportDraft,
   getServiceReport,
+  removeReportEquipment,
   removeReportServiceUsage,
   removeReportItemUsage,
   updateServiceReportDraft,
@@ -48,6 +52,7 @@ export default function ServiceReportDetailScreen() {
   const { 'report-id': reportId } = useLocalSearchParams<{ 'report-id': string }>();
   const db = useSQLiteContext();
   const [report, setReport] = useState<ServiceReportDetail | null>(null);
+  const [availableMachines, setAvailableMachines] = useState<CustomerEquipment[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -64,6 +69,13 @@ export default function ServiceReportDetailScreen() {
       const result = await getServiceReport(db, reportId);
       if (!result) throw new Error('CSR was not found.');
       setReport(result);
+      if (result.documentState === 'draft') {
+        const customer = await getCustomerDetail(db, result.customerId);
+        const listed = new Set(result.machines.map((machine) => machine.equipmentId));
+        setAvailableMachines((customer?.equipment ?? []).filter((entry) => entry.active && !listed.has(entry.id)));
+      } else {
+        setAvailableMachines([]);
+      }
       setForm(toForm(result));
       setDirty(false);
       setError(null);
@@ -144,6 +156,28 @@ export default function ServiceReportDetailScreen() {
     ]);
   }, [db, loadReport, reportId]);
 
+  const changeMachines = useCallback((action: () => Promise<void>, failure: string) => {
+    void action()
+      .then(loadReport)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : failure));
+  }, [loadReport]);
+
+  const removeMachine = useCallback((equipmentId: string, label: string) => {
+    if (!reportId) return;
+    Alert.alert('Remove machine?', `${label} will be removed from this draft. Service charges are recalculated for the remaining machines.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => changeMachines(() => removeReportEquipment(db, reportId, equipmentId), 'Could not remove machine.') },
+    ]);
+  }, [changeMachines, db, reportId]);
+
+  const addMachine = useCallback((equipmentId: string) => {
+    if (!reportId) return;
+    changeMachines(async () => {
+      if (dirty) await saveDraft();
+      await addReportEquipment(db, reportId, equipmentId);
+    }, 'Could not add machine.');
+  }, [changeMachines, db, dirty, reportId, saveDraft]);
+
   const runFinalize = useCallback(async (policy: 'keep-draft' | 'reject' | 'use-current') => {
     if (!reportId) return;
     setBusy(true);
@@ -211,7 +245,7 @@ export default function ServiceReportDetailScreen() {
 
   const followUp = useCallback(() => {
     if (!report) return;
-    router.push({ pathname: '/service-reports/new', params: { followsCsrId: report.id, customerId: report.customerId, equipmentId: report.equipmentId } });
+    router.push({ pathname: '/service-reports/new', params: { followsCsrId: report.id, customerId: report.customerId, equipmentId: report.equipmentId, equipmentIds: report.machines.map((machine) => machine.equipmentId).join(',') } });
   }, [report]);
 
   const openDraftPreview = useCallback(async () => {
@@ -263,7 +297,7 @@ export default function ServiceReportDetailScreen() {
           <View style={styles.summary}>
             <View style={styles.summaryHeader}><Text selectable style={styles.eyebrow}>{report.csrNumber ?? 'UNNUMBERED DRAFT'}</Text><Text selectable style={styles.state}>{report.documentState.toUpperCase()}</Text></View>
             <Text selectable style={styles.customer}>{report.customerName}</Text>
-            <Text selectable style={styles.meta}>{report.equipmentName} · {report.businessDate}</Text>
+            <Text selectable style={styles.meta}>{report.machines.map((machine) => machine.machineType).join(' + ')} · {report.businessDate}</Text>
             <Text selectable style={styles.meta}>PDF {report.pdfState} · {report.shareState === 'shared' ? 'share sheet opened' : 'not shared'}</Text>
           </View>
         ) : null}
@@ -271,6 +305,13 @@ export default function ServiceReportDetailScreen() {
         {editable ? (
           <>
             <Text selectable style={styles.saveStatus}>{status}</Text>
+            <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Machines serviced ({report.machineCount})</Text></View>
+            {report.machines.map((machine) => {
+              const label = [machine.machineType, machine.model, machine.nicknameOrLocation].filter(Boolean).join(' · ');
+              return <View key={machine.equipmentId} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{label}</Text>{machine.serialNumber ? <Text selectable style={styles.meta}>Serial {machine.serialNumber}</Text> : null}</View>{report.machines.length > 1 ? <Pressable onPress={() => removeMachine(machine.equipmentId, label)}><Text selectable style={styles.remove}>Remove</Text></Pressable> : null}</View>;
+            })}
+            {availableMachines.map((entry) => <ActionButton key={entry.id} compact variant="secondary" disabled={busy} onPress={() => addMachine(entry.id)}>{`Add ${[entry.machineType, entry.model, entry.nicknameOrLocation].filter(Boolean).join(' · ')}`}</ActionButton>)}
+            {report.machineCount > 1 ? <Text selectable style={styles.totalHelp}>Each service is billed once per machine (× {report.machineCount}). Item charges are not multiplied.</Text> : null}
             <FormField label="Business date" onChangeText={(v) => setField('businessDate', v)} value={form.businessDate} />
             <FormField label="Backdate reason" onChangeText={(v) => setField('backdateReason', v)} value={form.backdateReason} />
             <Text selectable style={styles.sectionTitle}>Status after service</Text>
@@ -288,13 +329,13 @@ export default function ServiceReportDetailScreen() {
               <Text selectable style={styles.pickerLabel}>Acknowledged By</Text>
               <View style={styles.outcomes}>{report.acknowledgmentOptions.map((name) => <Pressable key={name} onPress={() => setField('acknowledgedBy', name)} style={[styles.outcome, form.acknowledgedBy === name ? styles.outcomeSelected : null]}><Text selectable style={styles.outcomeText}>{name}</Text></Pressable>)}</View>
             </View> : <FormField label="Acknowledged By" onChangeText={(v) => setField('acknowledgedBy', v)} value={form.acknowledgedBy} />}
-            <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus selected service rates. Non-billable items are excluded.</Text></View>
+            <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>AUTO-COMPUTED TOTAL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Billable inventory items plus selected service rates (× the number of machines). Non-billable items are excluded.</Text></View>
             <ActionButton disabled={busy} variant="secondary" onPress={() => void openDraftPreview()}>Preview PDF before finalizing</ActionButton>
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Items used</Text><ActionButton compact onPress={addItem}>Add item</ActionButton></View>
             {report?.usages.map((usage) => <View key={usage.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{usage.itemName}</Text><Text selectable style={styles.meta}>{usage.quantity} {usage.unitLabel} · {usage.billable ? `Billable ${formatCentavos(usage.resolvedSellingPriceCentavos ?? 0)}` : 'Non-billable'}</Text></View><Pressable onPress={() => removeUsage(usage.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.usages.length ? <Text selectable style={styles.emptyHint}>No inventory items added yet.</Text> : null}
             <View style={styles.sectionHeader}><Text selectable style={styles.sectionTitle}>Services used</Text><ActionButton compact onPress={addService}>Add service</ActionButton></View>
-            {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{formatCentavos(service.resolvedRateCentavos)} · quantity 1{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
+            {report.services.map((service) => <View key={service.id} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{service.serviceName}</Text><Text selectable style={styles.meta}>{report.machineCount > 1 ? `${formatCentavos(service.resolvedRateCentavos)} × ${report.machineCount} machines = ${formatCentavos(service.resolvedRateCentavos * report.machineCount)}` : `${formatCentavos(service.resolvedRateCentavos)} · quantity 1`}{service.rateSource === 'override' ? ' · custom rate' : ''}</Text></View><Pressable onPress={() => removeService(service.id)}><Text selectable style={styles.remove}>Remove</Text></Pressable></View>)}
             {!report.services.length ? <Text selectable style={styles.emptyHint}>No services added yet.</Text> : null}
             <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Open or create linked Billing Statement draft</ActionButton>
             {error ? <Text accessibilityLiveRegion="polite" selectable style={styles.errorText}>{error}</Text> : null}
@@ -303,6 +344,7 @@ export default function ServiceReportDetailScreen() {
           </>
         ) : report ? (
           <>
+            <ReadSection label="Machines serviced" values={report.machines.map((machine) => [machine.machineType, machine.model && `Model ${machine.model}`, machine.serialNumber && `Serial ${machine.serialNumber}`, machine.nicknameOrLocation].filter(Boolean).join(' · '))} />
             <ReadSection label="Reported Problem" values={report.reportedProblem} />
             <ReadSection label="Diagnosis" values={report.diagnosis} />
             <ReadSection label="Action Taken" values={report.actionTaken} />
@@ -310,7 +352,7 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Machine Status" values={[report.machineStatus]} />
             <ReadSection label="Warranty" values={[report.warrantyText]} />
             <ReadSection label="Items used" values={report.usages.map((usage) => `${usage.itemName} · ${usage.quantity} ${usage.unitLabel} · ${usage.billable ? formatCentavos(usage.quantity * (usage.resolvedSellingPriceCentavos ?? 0)) : 'Non-billable'}`)} />
-            <ReadSection label="Services used" values={report.services.map((service) => `${service.serviceName} · ${formatCentavos(service.resolvedRateCentavos)}`)} />
+            <ReadSection label="Services used" values={report.services.map((service) => report.machineCount > 1 ? `${service.serviceName} · ${formatCentavos(service.resolvedRateCentavos)} × ${report.machineCount} machines = ${formatCentavos(service.resolvedRateCentavos * report.machineCount)}` : `${service.serviceName} · ${formatCentavos(service.resolvedRateCentavos)}`)} />
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>TOTAL BILL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Derived from billable inventory items and service rates.</Text></View>
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>SIGNATURE STATUS</Text>

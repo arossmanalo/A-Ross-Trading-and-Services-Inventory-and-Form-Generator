@@ -1,7 +1,7 @@
 import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v6';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v7';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -25,6 +25,15 @@ export type CsrRenderSnapshot = {
     serialNumber: string;
     nicknameOrLocation: string;
   };
+  /** Every machine serviced on this CSR. `equipment` is the primary machine. */
+  machines?: Array<{
+    machineType: string;
+    model: string;
+    serialNumber: string;
+    nicknameOrLocation: string;
+  }>;
+  /** Services are billed once per machine. Omitted on older snapshots (one machine). */
+  machineCount?: number;
   serviceOutcome: string;
   reportedProblem: string[];
   diagnosis: string[];
@@ -105,10 +114,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     ${cell('Customer Name', snapshot.customer.name, true)}
     ${cell('Address', snapshot.customer.address)}
     ${cell('Date', snapshot.businessDate)}
-    ${cell('Machine', [snapshot.equipment.machineType, snapshot.equipment.nicknameOrLocation].filter(Boolean).join(' - '))}
-    ${cell('CSR No.', snapshot.csrNumber)}
-    ${cell('Model', snapshot.equipment.model)}
-    ${cell('Serial No.', snapshot.equipment.serialNumber)}
+    ${machineCells(snapshot)}
   </section>
   ${listSection('Reported Problem', snapshot.reportedProblem)}
   ${listSection('Diagnosis', snapshot.diagnosis)}
@@ -118,7 +124,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   ${textSection('Machine Status', snapshot.machineStatus)}
   ${listSection('Billing', snapshot.billing)}
   ${usageSection(snapshot.usages)}
-  ${serviceSection(snapshot.services)}
+  ${serviceSection(snapshot.services, snapshot.machineCount ?? 1)}
   ${textSection('Warranty', snapshot.warrantyText)}
   ${listSection("Customer's Remarks", snapshot.customerRemarks)}
   <div class="total-row"><div class="total-box"><span>Total Bill</span><span>${escapeHtml(PHP_FORMATTER.format(snapshot.totalBillCentavos / 100))}</span></div></div>
@@ -133,6 +139,31 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
   return snapshot.includeSignatureLines === false
     ? preparedHtml
     : applySignatureCapturesToDocument(preparedHtml, [snapshot.preparerSignatureHtml ?? '']);
+}
+
+function machineLabel(machine: { machineType: string; nicknameOrLocation: string }): string {
+  return [machine.machineType, machine.nicknameOrLocation].filter(Boolean).join(' - ');
+}
+
+/** One machine keeps the sample's Machine/CSR No./Model/Serial layout; several machines get their own numbered rows. */
+function machineCells(snapshot: CsrRenderSnapshot): string {
+  const machines = snapshot.machines && snapshot.machines.length > 1 ? snapshot.machines : null;
+  if (!machines) {
+    return [
+      cell('Machine', machineLabel(snapshot.equipment)),
+      cell('CSR No.', snapshot.csrNumber),
+      cell('Model', snapshot.equipment.model),
+      cell('Serial No.', snapshot.equipment.serialNumber),
+    ].join('');
+  }
+  return [
+    cell('CSR No.', snapshot.csrNumber, true),
+    ...machines.map((machine, index) => cell(
+      `Machine ${index + 1} of ${machines.length}`,
+      [machineLabel(machine), machine.model && `Model ${machine.model}`, machine.serialNumber && `Serial ${machine.serialNumber}`].filter(Boolean).join(' | '),
+      true,
+    )),
+  ].join('');
 }
 
 function cell(label: string, value: string, full = false): string {
@@ -158,10 +189,15 @@ function usageSection(usages: CsrRenderSnapshot['usages']): string {
     .join('')}</tbody></table></section>`;
 }
 
-function serviceSection(services: CsrRenderSnapshot['services'] = []): string {
+function serviceSection(services: CsrRenderSnapshot['services'] = [], machineCount = 1): string {
   if (!services.length) return '';
-  return `<section class="section"><div class="section-title">Services Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Rate</th></tr></thead><tbody>${services
-    .map((service) => `<tr><td>${escapeHtml(service.description)}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(service.rateCentavos / 100))}</td></tr>`)
+  if (machineCount <= 1) {
+    return `<section class="section"><div class="section-title">Services Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Rate</th></tr></thead><tbody>${services
+      .map((service) => `<tr><td>${escapeHtml(service.description)}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(service.rateCentavos / 100))}</td></tr>`)
+      .join('')}</tbody></table></section>`;
+  }
+  return `<section class="section"><div class="section-title">Services Used (per machine &times; ${machineCount} machines)</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Rate</th><th class="qty">Machines</th><th class="qty">Amount</th></tr></thead><tbody>${services
+    .map((service) => `<tr><td>${escapeHtml(service.description)}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format(service.rateCentavos / 100))}</td><td class="qty">&times; ${machineCount}</td><td class="qty">${escapeHtml(PHP_FORMATTER.format((service.rateCentavos * machineCount) / 100))}</td></tr>`)
     .join('')}</tbody></table></section>`;
 }
 

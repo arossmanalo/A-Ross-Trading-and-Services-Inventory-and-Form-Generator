@@ -68,6 +68,7 @@ export const DATA_TABLES = [
   'service_reports',
   'service_report_item_usage',
   'service_report_service_usage',
+  'service_report_equipment',
   'billing_statements',
   'expenses',
   'billing_statement_lines',

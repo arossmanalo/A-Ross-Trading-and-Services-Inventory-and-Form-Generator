@@ -9,7 +9,7 @@ import { calculateDiscountCentavos, type Discount } from '@/domain/money';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { BILLING_STATEMENT_TEMPLATE_VERSION, buildBillingStatementHtml, type BillingStatementRenderSnapshot } from '@/features/billing-statements/billing-statement-template';
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
-import { insertCsrItemUsage, insertCsrServiceUsage } from '@/features/service-reports/csr-charge-repository';
+import { countReportMachines, insertCsrItemUsage, insertCsrServiceUsage } from '@/features/service-reports/csr-charge-repository';
 import type { BillingDiscountType, BillingDocumentState, BillingExpense, BillingPriceSource, BillingStatementDetail, BillingStatementLine, BillingStatementSummary, EligibleCsrUsage } from '@/features/billing-statements/billing-statement-types';
 import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features/payments/payment-repository';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
@@ -57,7 +57,7 @@ async function validateCsrSourceLine(db: SQLiteDatabase, reportId: string | null
        FROM service_report_item_usage u WHERE u.id=? AND u.service_report_id=? AND u.billable=1`, line.source_csr_usage_id, reportId,
     )
     : await db.getFirstAsync<{ catalog_id: string; quantity: number; price: number; posted?: number }>(
-      `SELECT service_id AS catalog_id,quantity_integer AS quantity,resolved_rate_centavos AS price
+      `SELECT service_id AS catalog_id,MAX(1,(SELECT COUNT(*) FROM service_report_equipment e WHERE e.service_report_id=service_report_service_usage.service_report_id)) AS quantity,resolved_rate_centavos AS price
        FROM service_report_service_usage WHERE id=? AND service_report_id=?`, line.source_csr_service_usage_id, reportId,
     );
   if (!source || source.catalog_id !== (line.source_csr_usage_id ? line.item_id : line.service_id)
@@ -239,7 +239,7 @@ export async function syncLinkedCsrDraftLines(db: SQLiteDatabase, serviceReportI
       price: number; price_source: BillingPriceSource; override_reason: string | null; created_at: string;
     }>(
       `SELECT u.id,s.id AS service_id,u.description_snapshot AS description,
-              u.quantity_integer AS quantity,u.resolved_rate_centavos AS price,
+              MAX(1,(SELECT COUNT(*) FROM service_report_equipment e WHERE e.service_report_id=u.service_report_id)) AS quantity,u.resolved_rate_centavos AS price,
               u.rate_source AS price_source,u.override_reason,u.created_at
        FROM service_report_service_usage u
        JOIN services s ON s.id=u.service_id
@@ -407,10 +407,11 @@ export async function addServiceLine(db: SQLiteDatabase, statementId: string, in
         if (input.rateCentavos !== undefined && input.rateCentavos !== source.resolved_rate_centavos) throw new Error('Use the finalized CSR service rate; its source charge cannot be repriced.');
         const billed = await tx.getFirstAsync<{ id: string }>('SELECT id FROM billing_statement_lines WHERE source_csr_service_usage_id=?', source.id);
         if (billed) throw new Error('This CSR service has already been included in a Billing Statement.');
+        const machineCount = await countReportMachines(tx, linked.service_report_id);
         await tx.runAsync(
           `INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_service_usage_id,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at)
-           VALUES(?,?,'service',?,?,?,1,?,?,?,?,?)`,
-          Crypto.randomUUID(), statementId, source.id, input.serviceId, source.description_snapshot, source.resolved_rate_centavos, source.resolved_rate_centavos, source.rate_source, source.override_reason, now,
+           VALUES(?,?,'service',?,?,?,?,?,?,?,?,?)`,
+          Crypto.randomUUID(), statementId, source.id, input.serviceId, source.description_snapshot, machineCount, source.resolved_rate_centavos, safeMultiply(source.resolved_rate_centavos, machineCount), source.rate_source, source.override_reason, now,
         );
         await refreshTotals(tx, statementId);
         await auditAndRevise(tx, 'billing_statement.csr_service_linked', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId }, now);
@@ -533,7 +534,7 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
     const subtotal = lines.reduce((sum,line)=>sum+line.amount_centavos,0); const discountCentavos = calculateDiscountCentavos(subtotal,toDiscount(row.discount_type,row.discount_value)); const total=subtotal-discountCentavos; const bsNumber=await allocateDocumentNumber(tx,'BS');
     const initialPayment = await createInitialPaymentRecord(tx, { statementId, billingStatementNumber: bsNumber, statementTotalCentavos: total, business: { name: row.business_name, address: row.business_address, contactDetails: row.contact_details }, customer: { name: row.customer_name, address: row.customer_address } }, paymentSelection);
     const paid = initialPayment?.snapshot.amountCentavos ?? 0;
-    const snapshot: BillingStatementRenderSnapshot = { bsNumber,businessDate:row.business_date,fingerprint:'',business:{name:row.business_name,address:row.business_address,contactDetails:row.contact_details},customer:{name:row.customer_name,address:row.customer_address},serviceReportNumber:row.csr_number,lines:lines.map((line)=>({description:line.description_snapshot,quantity:line.quantity_integer,unitLabel:line.line_type === 'item' ? line.unit_label || 'pc' : line.line_type === 'service' ? 'service' : 'expense',unitPriceCentavos:line.unit_price_centavos,amountCentavos:line.amount_centavos})),subtotalCentavos:subtotal,discountLabel:discountLabel(row.discount_type,row.discount_value),discountCentavos,totalCentavos:total,paymentsReceivedCentavos:paid,balanceDueCentavos:total-paid,vatDisplayMode:row.vat_display_mode,vatRateBasisPoints:row.vat_rate_basis_points };
+    const snapshot: BillingStatementRenderSnapshot = { bsNumber,businessDate:row.business_date,fingerprint:'',business:{name:row.business_name,address:row.business_address,contactDetails:row.contact_details},customer:{name:row.customer_name,address:row.customer_address},serviceReportNumber:row.csr_number,lines:lines.map((line)=>({description:line.description_snapshot,quantity:line.quantity_integer,unitLabel:line.line_type === 'item' ? line.unit_label || 'pc' : line.line_type === 'service' ? (line.quantity_integer > 1 ? 'machines' : 'service') : 'expense',unitPriceCentavos:line.unit_price_centavos,amountCentavos:line.amount_centavos})),subtotalCentavos:subtotal,discountLabel:discountLabel(row.discount_type,row.discount_value),discountCentavos,totalCentavos:total,paymentsReceivedCentavos:paid,balanceDueCentavos:total-paid,vatDisplayMode:row.vat_display_mode,vatRateBasisPoints:row.vat_rate_basis_points };
     snapshot.preparerSignatureHtml = await getPreparerSignatureHtml(tx);
     snapshot.business.logoDataUrl = await getBusinessLogo(tx);
     snapshot.fingerprint=(await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,JSON.stringify(snapshot))).slice(0,12).toUpperCase(); const html=buildBillingStatementHtml(snapshot); const now=new Date().toISOString();

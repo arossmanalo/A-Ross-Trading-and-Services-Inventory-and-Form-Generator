@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCsrHtml, escapeHtml, type CsrRenderSnapshot } from './csr-template';
+import { buildCsrHtml, CSR_TEMPLATE_VERSION, escapeHtml, type CsrRenderSnapshot } from './csr-template';
 import { DEFAULT_BUSINESS_LOGO_DATA_URL } from '@/features/settings/default-business-logo';
 
 const SNAPSHOT: CsrRenderSnapshot = {
@@ -41,6 +41,33 @@ describe('CSR template', () => {
     expect(html).toContain('Services Used');
     expect(html).toContain('Preventive maintenance');
     expect(html).toContain(DEFAULT_BUSINESS_LOGO_DATA_URL);
+  });
+
+  it('lists every machine and shows the per-machine service multiplier', () => {
+    const html = buildCsrHtml({
+      ...SNAPSHOT,
+      machines: [
+        { machineType: 'Washer', model: 'M1', serialNumber: 'S1', nicknameOrLocation: 'Front' },
+        { machineType: 'Dryer <XL>', model: '', serialNumber: 'S2', nicknameOrLocation: '' },
+      ],
+      machineCount: 2,
+      totalBillCentavos: 100000,
+    });
+    expect(html).toContain('Machine 1 of 2');
+    expect(html).toContain('Washer - Front | Model M1 | Serial S1');
+    expect(html).toContain('Machine 2 of 2');
+    expect(html).toContain('Dryer &lt;XL&gt; | Serial S2');
+    expect(html).toContain('Services Used (per machine &times; 2 machines)');
+    expect(html).toContain('&times; 2');
+    expect(html).toContain('₱1,000.00');
+    expect(html).toContain(CSR_TEMPLATE_VERSION);
+  });
+
+  it('keeps the original single-machine layout for older snapshots', () => {
+    const html = buildCsrHtml(SNAPSHOT);
+    expect(html).not.toContain('Machine 1 of');
+    expect(html).not.toContain('&times;');
+    expect(html).toContain('Serial No.');
   });
 
   it('escapes owner-entered content', () => {

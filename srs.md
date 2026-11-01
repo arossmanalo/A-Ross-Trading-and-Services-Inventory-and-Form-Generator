@@ -66,8 +66,8 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 
 - **FR-3.1:** Equipment shall contain customer ID, machine/type, model, serial number, nickname/location, notes, active state, and timestamps.
 - **FR-3.2:** Serial numbers shall have no uniqueness or duplicate validation.
-- **FR-3.3:** Each CSR shall reference exactly one Equipment record; a multi-machine visit requires separate CSRs.
-- **FR-3.4:** A finalized CSR shall snapshot its rendered equipment data.
+- **FR-3.3:** Each CSR shall reference one or more Equipment records belonging to its Customer, listed once each in assignment order (`service_report_equipment`; the first is the primary `equipment_id`). Machines may be added or removed only while the CSR is a draft, and at least one must remain. A follow-up CSR may use only machines from the CSR it follows.
+- **FR-3.4:** A finalized CSR shall snapshot its rendered equipment data, including every assigned machine and the machine count.
 - **FR-3.5:** A follow-up visit shall create a new CSR linked to the preceding CSR rather than modifying it.
 
 ### 4.4 Inventory catalog and movement
@@ -99,7 +99,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 
 - **FR-6.1:** Service fields shall include name, description, base rate, active state, and timestamps.
 - **FR-6.2:** Services may be added, edited, deactivated, or reactivated.
-- **FR-6.3:** Service-line quantity shall be one. The owner may customize its customer rate on a draft.
+- **FR-6.3:** A service usage stores quantity one and a per-machine rate; the owner may customize that rate on a draft. On a CSR the service is billed once per assigned machine (rate × machine count). Standalone Billing Statement services remain quantity one.
 - **FR-6.4:** The finalized rate shall be frozen and shall update the catalog only when explicitly saved.
 - **FR-6.5:** Ad-hoc services shall preserve entered descriptions/rates and have no Service link unless saved to the catalog.
 - **FR-6.6:** Services shall not affect inventory or carry internal labor/service cost.
@@ -133,7 +133,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-8.17:** Status After Service shall render the four confirmed choices in one ruled selection row when space permits.
 - **FR-8.18:** The blank second page in the supplied source PDF shall be treated as a scan/export artifact and shall not be generated.
 - **FR-8.19:** A CSR may contain inventory item usage, service usage, or both. Each selected service has quantity one and stores the catalog rate or an owner-authorized override with its reason.
-- **FR-8.20:** CSR Total Bill shall be read-only and automatically equal the sum of billable item quantities at their resolved selling prices plus all selected service rates. Non-billable item usage is excluded.
+- **FR-8.20:** CSR Total Bill shall be read-only and automatically equal the sum of billable item quantities at their resolved selling prices plus all selected service rates, each multiplied by the number of machines on the CSR. Item charges are not multiplied. Non-billable item usage is excluded.
 - **FR-8.21:** Draft totals shall recalculate whenever CSR fields, item usage, service usage, or service-rate overrides change. Finalization shall recheck current prices according to the selected policy and freeze the computed total in the CSR snapshot.
 - **FR-8.22:** A CSR draft shall be previewable and exportable as a temporary PDF before finalization. This preview shall use the current saved draft data and shall not allocate a number, post stock movements, or change document state.
 
@@ -168,7 +168,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 ### 4.10 Money, discounts, and VAT display
 
 - **FR-10.1:** Currency shall be PHP stored as integer centavos.
-- **FR-10.2:** Inventory quantities shall be integers; service quantity shall be one.
+- **FR-10.2:** Inventory quantities shall be integers; a service usage's stored quantity shall be one. A CSR-sourced Billing Statement service line carries the CSR machine count as its quantity at the per-machine rate.
 - **FR-10.3:** Each line is rounded to two decimals; rounded lines are summed; percentage discount is calculated/rounded once on the combined subtotal.
 - **FR-10.4:** `Subtotal = billable items + services + billable expense amounts`.
 - **FR-10.5:** Discount is optional and fixed or percentage.
