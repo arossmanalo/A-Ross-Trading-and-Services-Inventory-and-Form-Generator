@@ -13,7 +13,7 @@ afterEach(() => vi.useRealTimers());
 
 import { listBillingStatements, addCsrUsageLine, addDirectItemLine, addServiceLine, addStatementExpense, createBillingStatementDraft, finalizeBillingStatement, getBillingStatement, listCsrsForBilling, removeBillingLine, updateBillingStatementDraft, voidBillingStatement } from './billing-statement-repository';
 import { createLaterPayment, listPaymentsForStatement, voidPayment } from '@/features/payments/payment-repository';
-import { addReportItemUsage, addReportServiceUsage, createServiceReportDraft, deleteServiceReportDraft, finalizeServiceReport, getServiceReport, removeReportItemUsage } from '@/features/service-reports/service-report-repository';
+import { addReportItemUsage, addReportServiceUsage, createServiceReportDraft, deleteServiceReportDraft, finalizeServiceReport, getServiceReport, listServiceReports, removeReportItemUsage } from '@/features/service-reports/service-report-repository';
 
 type Params=Array<string|number|null>;
 function adapter(database:DatabaseSync):SQLiteDatabase {
@@ -34,6 +34,24 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     const statementId=await createBillingStatementDraft(db,{customerId:'customer',serviceReportId:reportId,businessDate:'2026-09-05',reuseExistingLinkedDraft:true});
     return {reportId,statementId};
   }
+
+  it('lets a finalized CSR get a linked statement afterwards, reuses its open draft, and reports the link on the CSR', async () => {
+    raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now')");
+    const reportId = await createServiceReportDraft(db, { customerId: 'customer', equipmentId: 'equipment', businessDate: '2026-09-05' });
+    await addReportServiceUsage(db, reportId, 'service');
+    await finalizeServiceReport(db, reportId);
+    expect((await getServiceReport(db, reportId))?.linkedStatements).toEqual([]);
+
+    const input = { customerId: 'customer', serviceReportId: reportId, businessDate: '2026-09-05', reuseExistingLinkedDraft: true };
+    const statementId = await createBillingStatementDraft(db, input);
+    expect(await createBillingStatementDraft(db, input)).toBe(statementId);
+    expect((await getBillingStatement(db, statementId))?.lines).toMatchObject([{ description: 'Labor — Washer', amountCentavos: 50000 }]);
+    expect((await getServiceReport(db, reportId))?.linkedStatements).toEqual([{ id: statementId, bsNumber: null, documentState: 'draft', totalCentavos: 50000 }]);
+
+    await finalizeBillingStatement(db, statementId);
+    expect((await getServiceReport(db, reportId))?.linkedStatements).toMatchObject([{ id: statementId, bsNumber: 'BS-000001', documentState: 'finalized' }]);
+    expect((await listServiceReports(db)).find((report) => report.id === reportId)?.linkedStatements).toHaveLength(1);
+  });
 
   it('lists which CSR each statement is linked to, including a still-unnumbered draft CSR', async () => {
     const { reportId, statementId } = await draftPair();

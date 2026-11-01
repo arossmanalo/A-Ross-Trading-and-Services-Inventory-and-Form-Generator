@@ -17,6 +17,7 @@ import type {
   ServiceOutcome,
   ServiceReportDetail,
   ServiceReportMachine,
+  ServiceReportLinkedStatement,
   ServiceReportMachineService,
   ServiceReportSummary,
   ServiceReportUsage,
@@ -128,6 +129,25 @@ export async function listReportMachines(db: SQLiteDatabase, reportId: string): 
   }));
 }
 
+/** Billing Statements per CSR; pass a report id to load just that CSR's. */
+async function loadLinkedStatements(db: SQLiteDatabase, reportId?: string): Promise<Map<string, ServiceReportLinkedStatement[]>> {
+  const rows = await db.getAllAsync<{ id: string; service_report_id: string; bs_number: string | null; document_state: DocumentState; discounted_total_centavos: number }>(
+    `SELECT id, service_report_id, bs_number, document_state, discounted_total_centavos
+     FROM billing_statements
+     WHERE service_report_id IS NOT NULL AND (? IS NULL OR service_report_id = ?)
+     ORDER BY created_at ASC, rowid ASC`,
+    reportId ?? null,
+    reportId ?? null,
+  );
+  const grouped = new Map<string, ServiceReportLinkedStatement[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.service_report_id) ?? [];
+    list.push({ id: row.id, bsNumber: row.bs_number, documentState: row.document_state, totalCentavos: row.discounted_total_centavos });
+    grouped.set(row.service_report_id, list);
+  }
+  return grouped;
+}
+
 export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceReportSummary[]> {
   const rows = await db.getAllAsync<SummaryRow>(
     `SELECT r.id, r.csr_number, c.name AS customer_name,
@@ -141,7 +161,8 @@ export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceRep
      JOIN customer_equipment e ON e.id = r.equipment_id
      ORDER BY r.created_at DESC`,
   );
-  return rows.map(mapSummaryRow);
+  const linked = await loadLinkedStatements(db);
+  return rows.map((row) => ({ ...mapSummaryRow(row), linkedStatements: linked.get(row.id) ?? [] }));
 }
 
 export async function getServiceReport(
@@ -169,7 +190,7 @@ export async function getServiceReport(
   const machineServices = await listReportMachineServices(db, reportId);
   const machines = await listReportMachines(db, reportId);
   const machineCount = Math.max(1, machines.length);
-  const detail = mapDetailRow(row);
+  const detail = { ...mapDetailRow(row), linkedStatements: (await loadLinkedStatements(db, reportId)).get(reportId) ?? [] };
   const memberRows = await db.getAllAsync<{ name: string }>(
     `SELECT name FROM customer_members WHERE customer_id = ? AND active = 1 ORDER BY name COLLATE NOCASE ASC`,
     row.customer_id,
@@ -983,6 +1004,7 @@ function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
     serviceOutcome: row.service_outcome,
     businessDate: row.business_date,
     pdfState: row.pdf_state,
+    linkedStatements: [],
   };
 }
 

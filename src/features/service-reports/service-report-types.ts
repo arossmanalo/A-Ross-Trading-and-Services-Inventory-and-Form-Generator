@@ -17,6 +17,15 @@ export type ServiceReportFields = {
 
 export type EditableServiceReportFields = Omit<ServiceReportFields, 'totalBillCentavos'>;
 
+/** A Billing Statement billed against a CSR. */
+export type ServiceReportLinkedStatement = {
+  id: string;
+  /** Null while the statement is still an unnumbered draft. */
+  bsNumber: string | null;
+  documentState: DocumentState;
+  totalCentavos: number;
+};
+
 export type ServiceReportSummary = {
   id: string;
   csrNumber: string | null;
@@ -26,6 +35,8 @@ export type ServiceReportSummary = {
   serviceOutcome: ServiceOutcome;
   businessDate: string;
   pdfState: 'error' | 'not_generated' | 'pending' | 'ready';
+  /** Billing Statements linked to this CSR, oldest first (voided ones included). */
+  linkedStatements: ServiceReportLinkedStatement[];
 };
 
 export type ServiceReportUsage = {

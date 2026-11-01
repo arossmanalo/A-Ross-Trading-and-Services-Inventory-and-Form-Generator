@@ -11,6 +11,7 @@ const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSum
   const openReport = useCallback(() => {
     router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': report.id } });
   }, [report.id]);
+  const billed = report.linkedStatements.filter((statement) => statement.documentState !== 'voided');
   return (
     <Pressable accessibilityRole="button" onPress={openReport} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
       <View style={styles.rowCopy}>
@@ -22,6 +23,19 @@ const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSum
         </View>
         <Text selectable style={styles.customer}>{report.customerName}</Text>
         <Text selectable style={styles.meta}>{report.equipmentName} · {report.businessDate}</Text>
+        {billed.length ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={billed.length === 1 ? `Open ${billed[0].bsNumber ?? 'draft Billing Statement'}` : 'Open this CSR to see its Billing Statements'}
+            hitSlop={6}
+            onPress={() => (billed.length === 1
+              ? router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': billed[0].id } })
+              : openReport())}
+            style={styles.billingChip}
+          >
+            <Text style={styles.billingChipText}>{billed[0].bsNumber ?? 'Draft statement'}{billed.length > 1 ? ` +${billed.length - 1} more` : ''} ›</Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.stateCopy}>
         <Text selectable style={styles.outcome}>{formatOutcome(report.serviceOutcome)}</Text>
@@ -90,6 +104,8 @@ function formatOutcome(value: string) {
 }
 
 const styles = StyleSheet.create({
+  billingChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.brandBlue, backgroundColor: '#eaf2ff' },
+  billingChipText: { color: colors.brandNavy, fontSize: 11, fontWeight: '800' },
   content: { paddingHorizontal: 18, paddingBottom: 44 },
   emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
   header: { gap: 10, paddingVertical: 18 },

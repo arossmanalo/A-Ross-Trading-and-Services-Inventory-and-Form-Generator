@@ -256,11 +256,11 @@ export default function ServiceReportDetailScreen() {
   }, [dirty, reportId, saveDraft]);
 
   const createBillingDraft = useCallback(async () => {
-    if (!reportId || !report || report.documentState !== 'draft') return;
+    if (!reportId || !report || (report.documentState !== 'draft' && report.documentState !== 'finalized')) return;
     setBusy(true);
     setError(null);
     try {
-      if (dirty) await saveDraft();
+      if (dirty && report.documentState === 'draft') await saveDraft();
       const statementId = await createBillingStatementDraft(db, {
         customerId: report.customerId,
         serviceReportId: reportId,
@@ -331,6 +331,7 @@ export default function ServiceReportDetailScreen() {
               const rows = report.machineServices.filter((service) => service.equipmentId === machine.equipmentId);
               return <View key={machine.equipmentId} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{[machine.machineType, machine.nicknameOrLocation || (machine.serialNumber ? `SN ${machine.serialNumber}` : '')].filter(Boolean).join(' · ')}</Text>{rows.length ? rows.map((row) => <Text key={row.id} selectable style={styles.meta}>{row.serviceName} · {formatCentavos(row.rateCentavos)}{row.note ? ` · ${row.note}` : ''}</Text>) : <Text selectable style={styles.emptyHint}>No services yet.</Text>}</View><Text selectable style={styles.usageName}>{formatCentavos(rows.reduce((sum, row) => sum + row.rateCentavos, 0))}</Text></View>;
             })}
+            <LinkedStatements statements={report.linkedStatements} />
             <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Open or create linked Billing Statement draft</ActionButton>
             {error ? <Text accessibilityLiveRegion="polite" selectable style={styles.errorText}>{error}</Text> : null}
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
@@ -348,6 +349,11 @@ export default function ServiceReportDetailScreen() {
             <ReadSection label="Items used" values={report.usages.map((usage) => `${usage.itemName} · ${usage.quantity} ${usage.unitLabel} · ${usage.billable ? formatCentavos(usage.quantity * (usage.resolvedSellingPriceCentavos ?? 0)) : 'Non-billable'}`)} />
             <ReadSection label="Services used" values={report.machineServices.map((service) => `${service.serviceName} · ${service.machineLabel} · ${formatCentavos(service.rateCentavos)}`)} />
             <View style={styles.totalCard}><Text selectable style={styles.eyebrow}>TOTAL BILL</Text><Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text><Text selectable style={styles.totalHelp}>Derived from billable inventory items and service rates.</Text></View>
+            {report.documentState === 'finalized' ? <View style={styles.readSection}>
+              <Text selectable style={styles.eyebrow}>BILLING STATEMENTS</Text>
+              <LinkedStatements statements={report.linkedStatements} bare />
+              <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>{report.linkedStatements.some((statement) => statement.documentState === 'draft') ? 'Open the linked Billing Statement draft' : 'Create a linked Billing Statement'}</ActionButton>
+            </View> : null}
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>SIGNATURE STATUS</Text>
               <Text selectable style={styles.readText}>{report.signatureStatus.replaceAll('_',' ')}</Text>
@@ -379,6 +385,30 @@ function Multiline({ label, value, onChange }: { label: string; value: string; o
   return <FormField label={label} multiline onChangeText={onChange} style={styles.multiline} textAlignVertical="top" value={value} hint={label === 'Machine Status' || label === 'Warranty' ? undefined : 'One entry per line'} />;
 }
 
+/** Tappable list of the Billing Statements billed against this CSR. */
+function LinkedStatements({ statements, bare = false }: { statements: ServiceReportDetail['linkedStatements']; bare?: boolean }) {
+  if (!statements.length) return bare ? <Text selectable style={styles.emptyHint}>No Billing Statement is linked to this CSR yet.</Text> : null;
+  return (
+    <View style={bare ? styles.linkedList : [styles.readSection, styles.linkedList]}>
+      {bare ? null : <Text selectable style={styles.eyebrow}>LINKED BILLING STATEMENTS</Text>}
+      {statements.map((statement) => (
+        <Pressable
+          key={statement.id}
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${statement.bsNumber ?? 'draft Billing Statement'}`}
+          onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statement.id } })}
+          style={styles.linkedRow}
+        >
+          <View style={styles.usageCopy}>
+            <Text selectable style={styles.linkedName}>{statement.bsNumber ?? 'Draft Billing Statement'} ›</Text>
+            <Text selectable style={styles.meta}>{statement.documentState.toUpperCase()} · {formatCentavos(statement.totalCentavos)}</Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function ReadSection({ label, values }: { label: string; values: string[] }) {
   return <View style={styles.readSection}><Text selectable style={styles.eyebrow}>{label.toUpperCase()}</Text><Text selectable style={styles.readText}>{values.filter(Boolean).join('\n') || '-'}</Text></View>;
 }
@@ -395,6 +425,9 @@ function toDraftInput(form: FormState) {
 function formatLabel(value: string) { return value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase()); }
 
 const styles = StyleSheet.create({
+  linkedList: { gap: 8 },
+  linkedRow: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.brandBlue, borderRadius: 12, borderCurve: 'continuous', backgroundColor: '#eaf2ff' },
+  linkedName: { color: colors.brandNavy, fontSize: 14, fontWeight: '800' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { gap: 16, padding: 18, paddingBottom: 44 },
   summary: { gap: 5, padding: 17, backgroundColor: '#eaf2ff', borderRadius: 17, borderCurve: 'continuous' },

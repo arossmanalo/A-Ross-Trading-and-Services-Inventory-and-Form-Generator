@@ -158,13 +158,11 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
   await db.withExclusiveTransactionAsync(async (tx) => {
     const customer = await tx.getFirstAsync<{ active: number; merged_into_customer_id: string | null }>('SELECT active,merged_into_customer_id FROM customers WHERE id=?', input.customerId);
     if (!customer || customer.active !== 1 || customer.merged_into_customer_id) throw new Error('Select an active registered customer.');
-    let linkedReportState: string | null = null;
     if (input.serviceReportId) {
       const report = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM service_reports WHERE id=?', input.serviceReportId);
       if (!report || !['draft', 'finalized'].includes(report.document_state) || report.customer_id !== input.customerId) throw new Error('Select a draft or finalized CSR for the same customer.');
-      linkedReportState = report.document_state;
     }
-    if (input.reuseExistingLinkedDraft && input.serviceReportId && linkedReportState === 'draft') {
+    if (input.reuseExistingLinkedDraft && input.serviceReportId) {
       const existing = await tx.getFirstAsync<{ id: string }>(
         `SELECT b.id FROM billing_statements b
          WHERE b.service_report_id=? AND b.document_state='draft'
