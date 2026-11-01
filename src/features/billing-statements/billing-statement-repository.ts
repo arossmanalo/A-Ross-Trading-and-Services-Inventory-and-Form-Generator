@@ -15,7 +15,7 @@ import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
 type SummaryRow = { id: string; bs_number: string | null; customer_name: string; document_state: BillingDocumentState; business_date: string; discounted_total_centavos: number; pdf_state: BillingStatementSummary['pdfState'] };
-type DetailRow = SummaryRow & { customer_id: string; customer_address: string; service_report_id: string | null; csr_number: string | null; backdate_reason: string | null; subtotal_centavos: number; discount_type: BillingDiscountType; discount_value: number; payment_choice: BillingStatementDetail['paymentChoice']; signature_status: string; has_signed_version?: number; share_state: 'not_shared' | 'shared'; finalized_at: string | null };
+type DetailRow = SummaryRow & { customer_id: string; customer_address: string; service_report_id: string | null; csr_number: string | null; subtotal_centavos: number; discount_type: BillingDiscountType; discount_value: number; payment_choice: BillingStatementDetail['paymentChoice']; signature_status: string; has_signed_version?: number; share_state: 'not_shared' | 'shared'; finalized_at: string | null };
 type LineRow = { id: string; line_type: BillingStatementLine['lineType']; source_csr_usage_id: string | null; source_csr_service_usage_id: string | null; item_id: string | null; service_id: string | null; expense_id: string | null; description_snapshot: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; price_source: BillingPriceSource | null; override_reason: string | null; created_at: string };
 type ExpenseRow = { id: string; description: string; actual_cost_centavos: number; billable: number; billed_amount_centavos: number | null };
 type FinalLineRow = LineRow & { unit_label: string | null; item_active: number | null; current_stock: number | null; base_selling_price_centavos: number | null; customer_price_centavos: number | null; service_active: number | null; base_rate_centavos: number | null };
@@ -95,7 +95,7 @@ export async function getBillingStatement(db: SQLiteDatabase, statementId: strin
     FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id WHERE b.id=?`, statementId);
   if (!row) return null;
   const [lines, expenses] = await Promise.all([listLines(db, statementId), listExpenses(db, statementId)]);
-  return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, backdateReason: row.backdate_reason, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, signatureStatus: row.signature_status === 'signed_document_attached' ? row.signature_status : row.has_signed_version === 1 ? 'signed_in_person' : row.signature_status, hasSignedVersion: row.has_signed_version === 1, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
+  return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, signatureStatus: row.signature_status === 'signed_document_attached' ? row.signature_status : row.has_signed_version === 1 ? 'signed_in_person' : row.signature_status, hasSignedVersion: row.has_signed_version === 1, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
 }
 
 export async function listFinalizedCsrsForCustomer(db: SQLiteDatabase, customerId: string): Promise<Array<{ id: string; csrNumber: string; businessDate: string; availableLineCount: number }>> {
@@ -140,8 +140,8 @@ export async function listCsrsForBilling(db: SQLiteDatabase, customerId: string)
   }));
 }
 
-export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; businessDate: string; backdateReason?: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
-  validateBusinessDate(input.businessDate, input.backdateReason);
+export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; businessDate: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
+  validateBusinessDate(input.businessDate);
   const id = Crypto.randomUUID(); const now = new Date().toISOString();
   let statementId = id;
   await db.withExclusiveTransactionAsync(async (tx) => {
@@ -175,7 +175,7 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
         return;
       }
     }
-    await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,business_date,backdate_reason,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.businessDate, input.backdateReason?.trim() || null, now);
+    await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,business_date,document_state,created_at) VALUES(?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.businessDate, now);
     if (input.serviceReportId) {
       await syncLinkedCsrDraftLines(tx, input.serviceReportId);
     }
@@ -184,15 +184,15 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
   return statementId;
 }
 
-export async function updateBillingStatementDraft(db: SQLiteDatabase, statementId: string, input: { businessDate: string; backdateReason?: string; discountType: BillingDiscountType; discountValue: number }): Promise<void> {
-  validateBusinessDate(input.businessDate, input.backdateReason);
+export async function updateBillingStatementDraft(db: SQLiteDatabase, statementId: string, input: { businessDate: string; discountType: BillingDiscountType; discountValue: number }): Promise<void> {
+  validateBusinessDate(input.businessDate);
   if (!Number.isSafeInteger(input.discountValue) || input.discountValue < 0) throw new Error('Discount must be non-negative.');
   if (input.discountType === 'percentage' && input.discountValue > 10_000) throw new Error('Percentage discount cannot exceed 100%.');
   await db.withExclusiveTransactionAsync(async (tx) => {
     const subtotal = await getSubtotal(tx, statementId);
     const discount = toDiscount(input.discountType, input.discountValue);
     const discountCentavos = calculateDiscountCentavos(subtotal, discount);
-    const result = await tx.runAsync(`UPDATE billing_statements SET business_date=?,backdate_reason=?,discount_type=?,discount_value=?,subtotal_centavos=?,discounted_total_centavos=? WHERE id=? AND document_state='draft'`, input.businessDate, input.backdateReason?.trim() || null, input.discountType, input.discountType ? input.discountValue : 0, subtotal, subtotal - discountCentavos, statementId);
+    const result = await tx.runAsync(`UPDATE billing_statements SET business_date=?,discount_type=?,discount_value=?,subtotal_centavos=?,discounted_total_centavos=? WHERE id=? AND document_state='draft'`, input.businessDate, input.discountType, input.discountType ? input.discountValue : 0, subtotal, subtotal - discountCentavos, statementId);
     if (result.changes !== 1) throw new Error('Only a draft billing statement can be edited.');
     await auditAndRevise(tx, 'billing_statement.draft_saved', statementId, { discountCentavos }, new Date().toISOString());
   });
@@ -507,7 +507,7 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
     const row = await tx.getFirstAsync<DetailRow & { business_name: string; business_address: string; contact_details: string; vat_display_mode: BillingStatementRenderSnapshot['vatDisplayMode']; vat_rate_basis_points: number; content_snapshot_json: string | null; render_template_snapshot: string | null }>(`SELECT b.*,c.name AS customer_name,c.address AS customer_address,r.csr_number,s.business_name,s.business_address,s.contact_details,s.vat_display_mode,s.vat_rate_basis_points FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id JOIN settings s ON s.id='business' WHERE b.id=?`, statementId);
     if (!row) throw new Error('Billing statement was not found.');
     if (row.document_state === 'finalized') { if (!row.bs_number || !row.content_snapshot_json || !row.render_template_snapshot) throw new Error('Finalized statement snapshot is incomplete.'); result = { bsNumber: row.bs_number, html: row.render_template_snapshot, snapshot: JSON.parse(row.content_snapshot_json) as BillingStatementRenderSnapshot, initialPayment: null }; return; }
-    if (row.document_state !== 'draft') throw new Error('Only a draft billing statement can be finalized.'); validateBusinessDate(row.business_date,row.backdate_reason ?? undefined);
+    if (row.document_state !== 'draft') throw new Error('Only a draft billing statement can be finalized.'); validateBusinessDate(row.business_date);
     if (row.service_report_id) {
       const linkedCsr = await tx.getFirstAsync<{ document_state: string }>('SELECT document_state FROM service_reports WHERE id=?', row.service_report_id);
       if (!linkedCsr || linkedCsr.document_state !== 'finalized') throw new Error('Finalize the linked CSR before finalizing its Billing Statement.');

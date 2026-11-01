@@ -26,7 +26,6 @@ export default function NewBillingStatementScreen() {
   const [csrs, setCsrs] = useState<CsrChoice[]>([]);
   const [csrId, setCsrId] = useState('');
   const [businessDate, setBusinessDate] = useState(getLocalBusinessDate());
-  const [backdateReason, setBackdateReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +54,6 @@ export default function NewBillingStatementScreen() {
         customerId,
         serviceReportId: csrId || undefined,
         businessDate,
-        backdateReason,
       });
       router.replace({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': id } });
     } catch (createError) {
@@ -63,7 +61,7 @@ export default function NewBillingStatementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [backdateReason, businessDate, csrId, customerId, db]);
+  }, [businessDate, csrId, customerId, db]);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
@@ -98,9 +96,6 @@ export default function NewBillingStatementScreen() {
         </>
       ) : null}
       <FormField label="Business date" value={businessDate} onChangeText={setBusinessDate} placeholder="YYYY-MM-DD" />
-      {businessDate < getLocalBusinessDate() ? (
-        <FormField label="Backdate reason" value={backdateReason} onChangeText={setBackdateReason} placeholder="Why this statement uses an earlier date" />
-      ) : null}
       {error ? <Text selectable style={styles.error}>{error}</Text> : null}
       <ActionButton disabled={saving || !customerId} onPress={() => void create()}>
         {saving ? 'Creating…' : 'Create draft'}

@@ -142,14 +142,14 @@ async function insertPayment(db: SQLiteDatabase, context: InitialPaymentContext,
   snapshot.fingerprint = (await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify(snapshot))).slice(0,12).toUpperCase();
   const html = buildPaymentAcknowledgmentHtml(snapshot);
   const now = new Date().toISOString();
-  await db.runAsync(`INSERT INTO payments(id,pa_number,billing_statement_id,amount_centavos,business_date,backdate_reason,method,reference_number,note,state,payment_kind,content_snapshot_json,render_template_snapshot,template_version,pdf_state,share_state,idempotency_key,created_at,finalized_at) VALUES(?,?,?,?,?,?,?,?,?,'active',?,?,?,?, 'pending','not_shared',?,?,?)`, paymentId, paNumber, context.statementId, input.amountCentavos, input.businessDate, input.backdateReason?.trim() || null, input.method, input.referenceNumber?.trim() || null, input.note?.trim() || null, kind, JSON.stringify(snapshot), html, PAYMENT_ACKNOWLEDGMENT_TEMPLATE_VERSION, input.idempotencyKey?.trim() || null, now, now);
+  await db.runAsync(`INSERT INTO payments(id,pa_number,billing_statement_id,amount_centavos,business_date,method,reference_number,note,state,payment_kind,content_snapshot_json,render_template_snapshot,template_version,pdf_state,share_state,idempotency_key,created_at,finalized_at) VALUES(?,?,?,?,?,?,?,?,'active',?,?,?,?, 'pending','not_shared',?,?,?)`, paymentId, paNumber, context.statementId, input.amountCentavos, input.businessDate, input.method, input.referenceNumber?.trim() || null, input.note?.trim() || null, kind, JSON.stringify(snapshot), html, PAYMENT_ACKNOWLEDGMENT_TEMPLATE_VERSION, input.idempotencyKey?.trim() || null, now, now);
   await appendAuditEvent(db, { eventType: 'payment.finalized', entityType: 'payment', entityId: paymentId, details: { paNumber, billingStatementId: context.statementId, amountCentavos: input.amountCentavos, paymentKind: kind }, createdAt: now });
   return { paymentId, paNumber, html, snapshot };
 }
 
 function validatePaymentInput(input: PaymentEntryInput): void {
   if (!Number.isSafeInteger(input.amountCentavos) || input.amountCentavos <= 0) throw new Error('Payment amount must be above zero.');
-  validateBusinessDate(input.businessDate, input.backdateReason);
+  validateBusinessDate(input.businessDate);
   if (!['cash','bank_transfer','e_wallet','check','other'].includes(input.method)) throw new Error('Select a valid payment method.');
   if (input.method !== 'cash' && !input.referenceNumber?.trim()) throw new Error('A reference number is required for non-cash payments.');
 }

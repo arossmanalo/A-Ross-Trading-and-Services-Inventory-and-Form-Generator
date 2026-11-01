@@ -30,7 +30,6 @@ import { colors } from '@/theme/colors';
 
 type FormState = {
   businessDate: string;
-  backdateReason: string;
   serviceOutcome: ServiceOutcome;
   reportedProblem: string;
   diagnosis: string;
@@ -45,7 +44,7 @@ type FormState = {
 };
 
 const EMPTY_FORM: FormState = {
-  businessDate: '', backdateReason: '', serviceOutcome: 'incomplete', reportedProblem: '', diagnosis: '', actionTaken: '', recommendations: '', billing: '', customerRemarks: '', machineStatus: '', warrantyText: '', servicedBy: '', acknowledgedBy: '',
+  businessDate: '', serviceOutcome: 'incomplete', reportedProblem: '', diagnosis: '', actionTaken: '', recommendations: '', billing: '', customerRemarks: '', machineStatus: '', warrantyText: '', servicedBy: '', acknowledgedBy: '',
 };
 
 export default function ServiceReportDetailScreen() {
@@ -313,7 +312,6 @@ export default function ServiceReportDetailScreen() {
             {availableMachines.map((entry) => <ActionButton key={entry.id} compact variant="secondary" disabled={busy} onPress={() => addMachine(entry.id)}>{`Add ${[entry.machineType, entry.model, entry.nicknameOrLocation].filter(Boolean).join(' · ')}`}</ActionButton>)}
             {report.machineCount > 1 ? <Text selectable style={styles.totalHelp}>Each service is billed once per machine (× {report.machineCount}). Item charges are not multiplied.</Text> : null}
             <FormField label="Business date" onChangeText={(v) => setField('businessDate', v)} value={form.businessDate} />
-            <FormField label="Backdate reason" onChangeText={(v) => setField('backdateReason', v)} value={form.backdateReason} />
             <Text selectable style={styles.sectionTitle}>Status after service</Text>
             <View style={styles.outcomes}>{(['completed', 'incomplete', 'waiting_for_parts', 'under_observation'] as ServiceOutcome[]).map((outcome) => <Pressable key={outcome} onPress={() => setField('serviceOutcome', outcome)} style={[styles.outcome, form.serviceOutcome === outcome ? styles.outcomeSelected : null]}><Text selectable style={styles.outcomeText}>{formatLabel(outcome)}</Text></Pressable>)}</View>
             <Multiline label="Reported Problem" value={form.reportedProblem} onChange={(v) => setField('reportedProblem', v)} />
@@ -389,12 +387,12 @@ function ReadSection({ label, values }: { label: string; values: string[] }) {
 }
 
 function toForm(report: ServiceReportDetail): FormState {
-  return { businessDate: report.businessDate, backdateReason: report.backdateReason ?? '', serviceOutcome: report.serviceOutcome, reportedProblem: report.reportedProblem.join('\n'), diagnosis: report.diagnosis.join('\n'), actionTaken: report.actionTaken.join('\n'), recommendations: report.recommendations.join('\n'), billing: report.billing.join('\n'), customerRemarks: report.customerRemarks.join('\n'), machineStatus: report.machineStatus, warrantyText: report.warrantyText, servicedBy: report.servicedBy, acknowledgedBy: report.acknowledgedBy };
+  return { businessDate: report.businessDate, serviceOutcome: report.serviceOutcome, reportedProblem: report.reportedProblem.join('\n'), diagnosis: report.diagnosis.join('\n'), actionTaken: report.actionTaken.join('\n'), recommendations: report.recommendations.join('\n'), billing: report.billing.join('\n'), customerRemarks: report.customerRemarks.join('\n'), machineStatus: report.machineStatus, warrantyText: report.warrantyText, servicedBy: report.servicedBy, acknowledgedBy: report.acknowledgedBy };
 }
 
 function toDraftInput(form: FormState) {
   const lines = (value: string) => value.split('\n');
-  return { businessDate: form.businessDate, backdateReason: form.backdateReason, serviceOutcome: form.serviceOutcome, reportedProblem: lines(form.reportedProblem), diagnosis: lines(form.diagnosis), actionTaken: lines(form.actionTaken), recommendations: lines(form.recommendations), billing: lines(form.billing), customerRemarks: lines(form.customerRemarks), machineStatus: form.machineStatus, warrantyText: form.warrantyText, servicedBy: form.servicedBy, acknowledgedBy: form.acknowledgedBy };
+  return { businessDate: form.businessDate, serviceOutcome: form.serviceOutcome, reportedProblem: lines(form.reportedProblem), diagnosis: lines(form.diagnosis), actionTaken: lines(form.actionTaken), recommendations: lines(form.recommendations), billing: lines(form.billing), customerRemarks: lines(form.customerRemarks), machineStatus: form.machineStatus, warrantyText: form.warrantyText, servicedBy: form.servicedBy, acknowledgedBy: form.acknowledgedBy };
 }
 
 function formatLabel(value: string) { return value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase()); }

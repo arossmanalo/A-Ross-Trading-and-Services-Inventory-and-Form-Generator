@@ -198,7 +198,7 @@ The generated Billing Statement and Payment Acknowledgment are internal business
 - **FR-12.1:** CSR/BS/PA sequences are independent and allocated only at finalization.
 - **FR-12.2:** Numbers are never reused after void, share/render failure, reissue, or restore.
 - **FR-12.3:** Drafts display Draft and consume no number.
-- **FR-12.4:** Business dates may be backdated with a required reason; future dates are rejected.
+- **FR-12.4:** Business dates may be backdated without a reason; future dates and malformed dates are rejected. The legacy `backdate_reason` columns remain for historical rows but are no longer written.
 - **FR-12.5:** Backdating never inserts/reorders numbers; finalization receives the next number.
 - **FR-12.6:** Creation/finalization/void timestamps remain separate from business dates and shall store an unambiguous timestamp plus the captured local offset.
 
@@ -288,7 +288,7 @@ Service
 
 ServiceReport
   id, csr_number?, customer_id, equipment_id, follows_csr_id?,
-  document_state, service_outcome, business_date, backdate_reason?,
+  document_state, service_outcome, business_date,
   template fields, serviced_by_snapshot, signature_status,
   content_snapshot, render_template_snapshot, template_version, pdf_state, share_state,
   created_at, finalized_at?, voided_at?, void_reason?
@@ -300,7 +300,7 @@ ServiceReportItemUsage
 
 BillingStatement
   id, bs_number?, customer_id, service_report_id?, document_state,
-  business_date, backdate_reason?, subtotal, discount data,
+  business_date, subtotal, discount data,
   discounted_total, payment_choice, vat_snapshot, content_snapshot,
   render_template_snapshot, template_version, signature/pdf/share states,
   timestamps/void data
@@ -317,7 +317,7 @@ Expense
 
 Payment
   id, pa_number?, billing_statement_id, amount, business_date,
-  backdate_reason?, method, reference_number?, note?,
+  method, reference_number?, note?,
   state(active|voided), void_reason?, operational timestamps
 
 InventoryMovement
@@ -418,7 +418,7 @@ Before finalization, totals recalculate. A down payment equal to/above the disco
 
 ### 7.12 Backdating
 
-Selected date/reason are stored; numbering remains in actual finalization order. Sales use business date and audits expose both dates.
+The selected business date is stored without a reason; numbering remains in actual finalization order. Sales use business date, and the actual creation/finalization timestamps are retained separately.
 
 ### 7.13 PDF/share failure
 

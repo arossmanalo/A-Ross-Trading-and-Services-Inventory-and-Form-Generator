@@ -33,7 +33,6 @@ export default function NewServiceReportScreen() {
     (initialEquipmentIds ?? initialEquipmentId ?? '').split(',').filter(Boolean),
   );
   const [businessDate, setBusinessDate] = useState(getLocalBusinessDate());
-  const [backdateReason, setBackdateReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -92,7 +91,6 @@ export default function NewServiceReportScreen() {
         equipmentId: machineIds[0],
         additionalEquipmentIds: machineIds.slice(1),
         businessDate,
-        backdateReason,
         followsCsrId,
       });
       router.replace({ pathname: '/service-reports/[report-id]', params: { 'report-id': reportId } });
@@ -101,7 +99,7 @@ export default function NewServiceReportScreen() {
     } finally {
       setSaving(false);
     }
-  }, [backdateReason, businessDate, customerId, db, followsCsrId, machineIds]);
+  }, [businessDate, customerId, db, followsCsrId, machineIds]);
 
   const followUpCustomer = customers.find((customer) => customer.id === customerId);
 
@@ -160,9 +158,6 @@ export default function NewServiceReportScreen() {
       ) : null}
 
       <FormField label="Business date" onChangeText={setBusinessDate} placeholder="YYYY-MM-DD" value={businessDate} />
-      {businessDate < getLocalBusinessDate() ? (
-        <FormField label="Backdate reason" onChangeText={setBackdateReason} placeholder="Why this CSR uses an earlier date" value={backdateReason} />
-      ) : null}
       {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
       <ActionButton disabled={saving || !customerId || machineIds.length === 0} onPress={() => void createDraft()}>
         {saving ? 'Creating…' : machineIds.length > 1 ? `Create draft for ${machineIds.length} machines` : 'Create draft'}

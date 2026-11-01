@@ -35,6 +35,21 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     return {reportId,statementId};
   }
 
+  it('allows backdated CSRs, statements and payments without a reason, but not future dates', async () => {
+    raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now')");
+    const reportId = await createServiceReportDraft(db, { customerId: 'customer', equipmentId: 'equipment', businessDate: '2026-08-01' });
+    expect((await getServiceReport(db, reportId))?.businessDate).toBe('2026-08-01');
+    await expect(createServiceReportDraft(db, { customerId: 'customer', equipmentId: 'equipment', businessDate: '2026-09-06' })).rejects.toThrow(/future/);
+
+    const statementId = await createBillingStatementDraft(db, { customerId: 'customer', businessDate: '2026-08-02' });
+    await addServiceLine(db, statementId, { serviceId: 'service' });
+    await updateBillingStatementDraft(db, statementId, { businessDate: '2026-08-03', discountType: null, discountValue: 0 });
+    await finalizeBillingStatement(db, statementId);
+    const payment = await createLaterPayment(db, statementId, { amountCentavos: 50000, businessDate: '2026-08-04', method: 'cash' });
+    expect(raw.prepare('SELECT business_date, backdate_reason FROM payments WHERE id=?').get(payment.paymentId)).toEqual({ business_date: '2026-08-04', backdate_reason: null });
+    expect(raw.prepare('SELECT business_date, backdate_reason FROM billing_statements WHERE id=?').get(statementId)).toEqual({ business_date: '2026-08-03', backdate_reason: null });
+  });
+
   it('keeps additions from BOTH screens on the CSR, freezes all charges and posts stock only once',async()=>{
     const {reportId,statementId}=await draftPair();
     await addDirectItemLine(db,statementId,{itemId:'item',quantity:2});

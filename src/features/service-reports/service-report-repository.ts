@@ -38,7 +38,6 @@ type DetailRow = SummaryRow & {
   customer_id: string;
   equipment_id: string;
   follows_csr_id: string | null;
-  backdate_reason: string | null;
   reported_problem_json: string;
   diagnosis_json: string;
   action_taken_json: string;
@@ -195,7 +194,7 @@ export async function createServiceReportDraft(
   db: SQLiteDatabase,
   input: CreateServiceReportDraftInput,
 ): Promise<string> {
-  validateBusinessDate(input.businessDate, input.backdateReason);
+  validateBusinessDate(input.businessDate);
   const equipmentIds = [input.equipmentId, ...(input.additionalEquipmentIds ?? [])];
   if (new Set(equipmentIds).size !== equipmentIds.length) throw new Error('Each machine can be listed only once on a CSR.');
   const reportId = Crypto.randomUUID();
@@ -251,15 +250,14 @@ export async function createServiceReportDraft(
     await tx.runAsync(
       `INSERT INTO service_reports
         (id, customer_id, equipment_id, follows_csr_id, business_date,
-         backdate_reason, serviced_by_snapshot, acknowledged_by_snapshot,
+         serviced_by_snapshot, acknowledged_by_snapshot,
          document_state, service_outcome, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
       reportId,
       input.customerId,
       input.equipmentId,
       input.followsCsrId ?? null,
       input.businessDate,
-      input.backdateReason?.trim() || null,
       settings?.owner_name?.trim() ?? '',
       acknowledgedBy,
       now,
@@ -287,12 +285,12 @@ export async function updateServiceReportDraft(
   reportId: string,
   input: UpdateServiceReportDraftInput,
 ): Promise<void> {
-  validateBusinessDate(input.businessDate, input.backdateReason);
+  validateBusinessDate(input.businessDate);
   const now = new Date().toISOString();
   await db.withExclusiveTransactionAsync(async (tx) => {
     const update = await tx.runAsync(
       `UPDATE service_reports
-       SET service_outcome = ?, business_date = ?, backdate_reason = ?,
+       SET service_outcome = ?, business_date = ?,
            reported_problem_json = ?, diagnosis_json = ?, action_taken_json = ?,
            recommendations_json = ?, billing_json = ?, customer_remarks_json = ?,
            machine_status = ?, warranty_text = ?, serviced_by_snapshot = ?,
@@ -300,7 +298,6 @@ export async function updateServiceReportDraft(
        WHERE id = ? AND document_state = 'draft'`,
       input.serviceOutcome,
       input.businessDate,
-      input.backdateReason?.trim() || null,
       JSON.stringify(cleanEntries(input.reportedProblem)),
       JSON.stringify(cleanEntries(input.diagnosis)),
       JSON.stringify(cleanEntries(input.actionTaken)),
@@ -566,7 +563,7 @@ export async function finalizeServiceReport(
       return;
     }
     if (row.document_state !== 'draft') throw new Error('Only a draft CSR can be finalized.');
-    validateBusinessDate(row.business_date, row.backdate_reason ?? undefined);
+    validateBusinessDate(row.business_date);
 
     await assertLinkedCsrChargesAreSourced(tx, reportId);
     let usages = await listFinalizationUsages(tx, reportId, row.customer_id);
@@ -951,7 +948,6 @@ function mapDetailRow(row: DetailRow): Omit<ServiceReportDetail, 'usages' | 'ser
     customerId: row.customer_id,
     equipmentId: row.equipment_id,
     followsCsrId: row.follows_csr_id,
-    backdateReason: row.backdate_reason,
     reportedProblem: parseEntries(row.reported_problem_json),
     diagnosis: parseEntries(row.diagnosis_json),
     actionTaken: parseEntries(row.action_taken_json),

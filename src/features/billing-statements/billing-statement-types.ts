@@ -42,7 +42,6 @@ export type BillingStatementDetail = BillingStatementSummary & {
   customerAddress: string;
   serviceReportId: string | null;
   serviceReportNumber: string | null;
-  backdateReason: string | null;
   subtotalCentavos: number;
   discountType: BillingDiscountType;
   discountValue: number;

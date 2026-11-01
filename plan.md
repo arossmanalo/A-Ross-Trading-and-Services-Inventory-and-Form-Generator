@@ -79,7 +79,7 @@ Expo Go is not a production requirement. Phase 0 must verify release builds on t
 - Draft documents have no permanent number.
 - At atomic finalization, independent sequences allocate `CSR-000001`, `BS-000001`, and `PA-000001` numbers.
 - Numbers are never reused after voiding, failure, reissue, or restore.
-- Business dates may be backdated with a required reason; future dates are prohibited. Actual creation/finalization timestamps are retained.
+- Business dates may be backdated without a reason; future dates are prohibited. Actual creation/finalization timestamps are retained.
 
 ### Document state
 
@@ -239,7 +239,7 @@ A statement is valid with at least one item, service, or billable expense. Non-b
 - **Tax confusion:** fixed `Not a Tax Invoice/Receipt` titles; BIR issuance remains external.
 - **External signatures:** preserve original/returned files and record manual matching.
 - **PDF/storage failure:** commit business data first and provide pending/error retry states.
-- **Backdating:** preserve both selected date and actual timestamp/reason.
+- **Backdating:** preserve both the selected business date and the actual creation/finalization timestamp.
 - **Reference differences:** the samples show different business addresses and the Billing sample uses old Invoice/receipt wording. Source all business data from Settings and retain the agreed Billing Statement/non-tax-document wording.
 
 ## 12. Sample-Format Status

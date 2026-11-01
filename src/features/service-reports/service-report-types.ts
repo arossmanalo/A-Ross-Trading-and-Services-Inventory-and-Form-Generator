@@ -67,7 +67,6 @@ export type ServiceReportDetail = ServiceReportSummary & ServiceReportFields & {
   machines: ServiceReportMachine[];
   machineCount: number;
   followsCsrId: string | null;
-  backdateReason: string | null;
   signatureStatus: string;
   hasSignedVersion: boolean;
   shareState: 'not_shared' | 'shared';
@@ -86,11 +85,9 @@ export type CreateServiceReportDraftInput = {
   additionalEquipmentIds?: string[];
   followsCsrId?: string;
   businessDate: string;
-  backdateReason?: string;
 };
 
 export type UpdateServiceReportDraftInput = EditableServiceReportFields & {
   serviceOutcome: ServiceOutcome;
   businessDate: string;
-  backdateReason?: string;
 };

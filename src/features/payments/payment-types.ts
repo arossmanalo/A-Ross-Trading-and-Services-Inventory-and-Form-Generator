@@ -6,7 +6,6 @@ export type PaymentEntryInput = {
   idempotencyKey?: string;
   amountCentavos: number;
   businessDate: string;
-  backdateReason?: string;
   method: PaymentMethod;
   referenceNumber?: string;
   note?: string;
