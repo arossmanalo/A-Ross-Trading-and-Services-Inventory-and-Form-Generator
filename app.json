@@ -13,6 +13,7 @@
       "expo-sharing",
       "expo-image",
       "expo-status-bar",
+      "expo-navigation-bar",
       [
         "expo-media-library",
         {

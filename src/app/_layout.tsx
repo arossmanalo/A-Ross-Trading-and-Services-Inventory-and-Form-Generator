@@ -1,4 +1,6 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
+import { Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
@@ -17,14 +19,29 @@ function LoadingDatabase() {
   );
 }
 
+/** Keeps the Android system bars hidden so the app always runs full screen. */
+function useImmersiveMode() {
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const hide = () => { void NavigationBar.setVisibilityAsync('hidden').catch(() => undefined); };
+    hide();
+    // A swipe from the edge shows the bar briefly; hide it again afterwards.
+    const subscription = NavigationBar.addVisibilityListener(({ visibility }) => {
+      if (visibility === 'visible') setTimeout(hide, 2500);
+    });
+    return () => subscription.remove();
+  }, []);
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  useImmersiveMode();
 
   return (
     <Suspense fallback={<LoadingDatabase />}>
       <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDatabase} useSuspense>
         <View style={styles.appShell}>
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          <StatusBar hidden style={colorScheme === 'dark' ? 'light' : 'dark'} />
           <Stack
             screenOptions={{
               contentStyle: {
