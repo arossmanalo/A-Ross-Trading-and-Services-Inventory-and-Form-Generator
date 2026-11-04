@@ -193,11 +193,21 @@ export async function createBackupPackage(db: SQLiteDatabase): Promise<BackupExp
 
 export async function shareBackupPackage(db: SQLiteDatabase): Promise<BackupExportResult> {
   const result = await createBackupPackage(db);
+  if (!FileSystem.cacheDirectory) throw new Error('Temporary storage is unavailable on this device.');
   if (!(await Sharing.isAvailableAsync())) throw new Error('File sharing is unavailable on this device.');
-  await Sharing.shareAsync(result.fileUri, {
+  // Share a cache copy, as the PDF sharing does: Drive reads the file after the
+  // share sheet closes and uploads it under the file's own name. The ".arossbackup"
+  // extension is unknown to Android, so a generic binary type keeps Drive from
+  // rejecting or renaming it as a mismatched zip.
+  const directory = `${FileSystem.cacheDirectory}shared-backups/`;
+  await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+  const target = `${directory}${result.filename}`;
+  await FileSystem.deleteAsync(target, { idempotent: true });
+  await FileSystem.copyAsync({ from: result.fileUri, to: target });
+  await Sharing.shareAsync(target, {
     dialogTitle: 'Share backup to private Drive',
-    mimeType: 'application/zip',
-    UTI: 'public.zip-archive',
+    mimeType: 'application/octet-stream',
+    UTI: 'public.data',
   });
   return result;
 }
