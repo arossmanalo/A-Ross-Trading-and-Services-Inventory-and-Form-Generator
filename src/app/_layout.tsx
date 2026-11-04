@@ -1,6 +1,5 @@
 import { Suspense, useEffect } from 'react';
 import { Platform } from 'react-native';
-import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
@@ -19,14 +18,31 @@ function LoadingDatabase() {
   );
 }
 
+type NavigationBarModule = typeof import('expo-navigation-bar');
+
+/**
+ * Loaded lazily: builds installed before this module was added do not contain
+ * its native code, and an over-the-air update must not crash them.
+ */
+function loadNavigationBar(): NavigationBarModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-navigation-bar') as NavigationBarModule;
+  } catch {
+    return null;
+  }
+}
+
 /** Keeps the Android system bars hidden so the app always runs full screen. */
 function useImmersiveMode() {
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
-    const hide = () => { void NavigationBar.setVisibilityAsync('hidden').catch(() => undefined); };
+    const navigationBar = loadNavigationBar();
+    if (!navigationBar) return undefined;
+    const hide = () => { void navigationBar.setVisibilityAsync('hidden').catch(() => undefined); };
     hide();
     // A swipe from the edge shows the bar briefly; hide it again afterwards.
-    const subscription = NavigationBar.addVisibilityListener(({ visibility }) => {
+    const subscription = navigationBar.addVisibilityListener(({ visibility }) => {
       if (visibility === 'visible') setTimeout(hide, 2500);
     });
     return () => subscription.remove();
