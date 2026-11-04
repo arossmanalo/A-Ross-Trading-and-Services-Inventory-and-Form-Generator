@@ -71,6 +71,11 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
   const activeCaptureId = finalizedCaptureId ?? signedCaptureId;
   const reviewingSignature = signatureDraft && !finalizedCaptureId;
   const ownerType: SignableOwnerType = kind === 'csr' ? 'service_report' : 'billing_statement';
+  // Rotating changes the page width, so the measured document height is stale.
+  // Clearing it (and remounting the WebView below) re-measures at the new width.
+  useEffect(() => {
+    setDocumentHeight(null);
+  }, [windowWidth]);
   const previewHtml = useMemo(() => withPreviewViewport(preview?.html ?? ''), [preview?.html]);
 
   useEffect(() => {
@@ -261,6 +266,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
               style={[styles.capture, { width: Math.max(windowWidth - 24, 280), height: documentHeight ?? 700 }]}
             >
               <WebView
+                key={Math.round(windowWidth)}
                 ref={webViewRef}
                 originWhitelist={['*']}
                 javaScriptEnabled
