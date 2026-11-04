@@ -40,7 +40,6 @@ const ReportRow = memo(function ReportRow({ report, showTotal }: { report: Servi
             {report.documentState.toUpperCase()}
           </Text>
         </View>
-        <Text selectable style={styles.total}>Total {showTotal ? formatCentavos(report.totalBillCentavos) : '₱ ••••••'}</Text>
         <Text selectable style={styles.customer}>{report.customerName}</Text>
         <Text selectable style={styles.meta}>{report.equipmentName} · {report.businessDate}</Text>
         {billed.length ? (
@@ -59,6 +58,7 @@ const ReportRow = memo(function ReportRow({ report, showTotal }: { report: Servi
       </View>
       <View style={styles.stateCopy}>
         <Text selectable style={styles.outcome}>{formatOutcome(report.serviceOutcome)}</Text>
+        <Text selectable style={styles.total}>{showTotal ? formatCentavos(report.totalBillCentavos) : '₱ ••••••'}</Text>
         {report.documentState === 'finalized' ? <Text selectable style={styles.pdfState}>PDF {report.pdfState}</Text> : null}
       </View>
     </Pressable>
@@ -184,10 +184,10 @@ const styles = StyleSheet.create({
   number: { color: colors.label, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
   draftBadge: { color: colors.warning, fontSize: 8, fontWeight: '900', letterSpacing: .7 },
   finalBadge: { color: colors.success, fontSize: 8, fontWeight: '900', letterSpacing: .7 },
-  total: { color: colors.brandNavy, fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  total: { color: colors.brandNavy, fontSize: 14, fontWeight: '900', textAlign: 'right', fontVariant: ['tabular-nums'] },
   customer: { color: colors.label, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.secondaryLabel, fontSize: 12 },
-  stateCopy: { maxWidth: 105, alignItems: 'flex-end', gap: 5 },
+  stateCopy: { maxWidth: 150, alignItems: 'flex-end', gap: 5 },
   outcome: { color: colors.brandNavy, fontSize: 11, fontWeight: '700', textAlign: 'right' },
   pdfState: { color: colors.secondaryLabel, fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },

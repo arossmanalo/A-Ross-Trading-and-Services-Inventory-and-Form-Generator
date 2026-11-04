@@ -41,7 +41,6 @@ const StatementRow = memo(function StatementRow({ statement, showTotal }: { stat
             {statement.documentState.toUpperCase()}
           </Text>
         </View>
-        <Text selectable style={styles.total}>Total {showTotal ? formatCentavos(statement.discountedTotalCentavos) : '₱ ••••••'}</Text>
         <Text selectable style={styles.customer}>{statement.customerName}</Text>
         <Text selectable style={styles.meta}>{statement.businessDate}</Text>
         <View style={styles.chips}>
@@ -72,6 +71,7 @@ const StatementRow = memo(function StatementRow({ statement, showTotal }: { stat
         </View>
       </View>
       <View style={styles.stateCopy}>
+        <Text selectable style={styles.total}>{showTotal ? formatCentavos(statement.discountedTotalCentavos) : '₱ ••••••'}</Text>
         {statement.documentState === 'finalized' ? <Text selectable style={styles.pdf}>PDF {statement.pdfState}</Text> : null}
       </View>
     </Pressable>
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   rowCopy: { flex: 1, gap: 4 },
   titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   number: { color: colors.label, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  total: { color: colors.brandNavy, fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  total: { color: colors.brandNavy, fontSize: 14, fontWeight: '900', textAlign: 'right', fontVariant: ['tabular-nums'] },
   customer: { color: colors.label, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.secondaryLabel, fontSize: 12 },
   draftBadge: { color: colors.warning, fontSize: 8, fontWeight: '900' },
