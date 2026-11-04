@@ -4,8 +4,10 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { DateRangeFields } from '@/components/date-range-fields';
 import { Dropdown } from '@/components/dropdown';
 import { FormField } from '@/components/form-field';
+import { SalesTotalCard } from '@/components/sales-total-card';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
 import {
@@ -17,6 +19,7 @@ import {
   STATE_OPTIONS,
   filterServiceReports,
   hasActiveFilters,
+  sumServiceReportSales,
   type ServiceReportCriteria,
 } from '@/features/service-reports/service-report-filter';
 import { listServiceReports } from '@/features/service-reports/service-report-repository';
@@ -88,7 +91,14 @@ export default function ServiceReportsScreen() {
 
   const visible = useMemo(() => filterServiceReports(reports, criteria, getLocalBusinessDate()), [criteria, reports]);
   const filtered = hasActiveFilters(criteria);
+  const sales = useMemo(() => sumServiceReportSales(visible), [visible]);
   const update = <K extends keyof ServiceReportCriteria>(key: K, value: ServiceReportCriteria[K]) => setCriteria((current) => ({ ...current, [key]: value }));
+
+  const changePeriod = (period: ServiceReportCriteria['period']) => setCriteria((current) => {
+    // Start a custom range on today so both calendars show a real date.
+    const today = getLocalBusinessDate();
+    return { ...current, period, from: period === 'custom' && !current.from ? today : current.from, to: period === 'custom' && !current.to ? today : current.to };
+  });
 
   return (
     <FlatList
@@ -124,14 +134,16 @@ export default function ServiceReportsScreen() {
             <Dropdown label="STATUS" value={criteria.state} options={STATE_OPTIONS} onChange={(value) => update('state', value)} />
             <Dropdown label="OUTCOME" value={criteria.outcome} options={OUTCOME_OPTIONS} onChange={(value) => update('outcome', value)} />
             <Dropdown label="BILLING" value={criteria.billing} options={BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
-            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={(value) => update('period', value)} />
+            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
             <Dropdown label="SORT BY" value={criteria.sort} options={SORT_OPTIONS} onChange={(value) => update('sort', value)} />
           </View>
+          {criteria.period === 'custom' ? <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} /> : null}
           <View style={styles.resultLine}>
             <Text selectable style={styles.headerText}>{visible.length} of {reports.length} service report{reports.length === 1 ? '' : 's'}</Text>
             <ActionButton compact variant="secondary" onPress={() => setShowTotals((current) => !current)}>{showTotals ? 'Hide totals' : 'Show totals'}</ActionButton>
             {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
           </View>
+          {filtered ? <SalesTotalCard totalCentavos={sales.totalCentavos} count={sales.count} noun="service report" hidden={!showTotals} /> : null}
           {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
         </View>
       }

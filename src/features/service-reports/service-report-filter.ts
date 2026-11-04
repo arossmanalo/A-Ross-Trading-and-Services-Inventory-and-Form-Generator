@@ -1,7 +1,9 @@
+import { PERIOD_OPTIONS, isInDateRange, periodStart, resolveDateRange, type PeriodFilter } from '@/domain/date-range';
 import type { DocumentState, ServiceOutcome, ServiceReportListItem } from '@/features/service-reports/service-report-types';
 
 export type BillingFilter = 'any' | 'with' | 'without';
-export type PeriodFilter = 'all' | 'today' | 'last7' | 'last30' | 'month';
+export { PERIOD_OPTIONS, periodStart };
+export type { PeriodFilter };
 export type ReportSort = 'newest' | 'oldest' | 'number' | 'customer';
 
 export type ServiceReportCriteria = {
@@ -10,6 +12,9 @@ export type ServiceReportCriteria = {
   outcome: 'all' | ServiceOutcome;
   billing: BillingFilter;
   period: PeriodFilter;
+  /** Custom range bounds (YYYY-MM-DD), used only when period is 'custom'. */
+  from: string;
+  to: string;
   sort: ReportSort;
 };
 
@@ -19,6 +24,8 @@ export const DEFAULT_CRITERIA: ServiceReportCriteria = {
   outcome: 'all',
   billing: 'any',
   period: 'all',
+  from: '',
+  to: '',
   sort: 'newest',
 };
 
@@ -43,14 +50,6 @@ export const BILLING_OPTIONS: Array<{ value: BillingFilter; label: string }> = [
   { value: 'without', label: 'No billing statement yet' },
 ];
 
-export const PERIOD_OPTIONS: Array<{ value: PeriodFilter; label: string }> = [
-  { value: 'all', label: 'Any date' },
-  { value: 'today', label: 'Today' },
-  { value: 'last7', label: 'Last 7 days' },
-  { value: 'last30', label: 'Last 30 days' },
-  { value: 'month', label: 'This month' },
-];
-
 export const SORT_OPTIONS: Array<{ value: ReportSort; label: string }> = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
@@ -62,24 +61,13 @@ export function hasActiveFilters(criteria: ServiceReportCriteria): boolean {
   return criteria.query.trim() !== '' || criteria.state !== 'all' || criteria.outcome !== 'all' || criteria.billing !== 'any' || criteria.period !== 'all';
 }
 
-/** Earliest business date (YYYY-MM-DD, inclusive) a period allows, or null for no limit. */
-export function periodStart(period: PeriodFilter, today: string): string | null {
-  if (period === 'all') return null;
-  if (period === 'today') return today;
-  if (period === 'month') return `${today.slice(0, 7)}-01`;
-  const days = period === 'last7' ? 6 : 29;
-  const date = new Date(`${today}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - days);
-  return date.toISOString().slice(0, 10);
-}
-
 /**
  * Filters and sorts the CSR list. Every word typed must appear somewhere in the
  * CSR's searchable text (number, customer, machines, linked statements, notes…).
  */
 export function filterServiceReports(items: readonly ServiceReportListItem[], criteria: ServiceReportCriteria, today: string): ServiceReportListItem[] {
   const words = criteria.query.toLowerCase().split(/\s+/).filter(Boolean);
-  const start = periodStart(criteria.period, today);
+  const range = resolveDateRange(criteria.period, criteria.from, criteria.to, today);
   const matches = items
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
@@ -88,7 +76,7 @@ export function filterServiceReports(items: readonly ServiceReportListItem[], cr
       const billed = item.linkedStatements.some((statement) => statement.documentState !== 'voided');
       if (criteria.billing === 'with' && !billed) return false;
       if (criteria.billing === 'without' && billed) return false;
-      if (start && (item.businessDate < start || item.businessDate > today)) return false;
+      if (!isInDateRange(item.businessDate, range)) return false;
       return words.every((word) => item.searchText.includes(word));
     });
 
@@ -102,4 +90,16 @@ export function filterServiceReports(items: readonly ServiceReportListItem[], cr
     }
   });
   return matches.map(({ item }) => item);
+}
+
+/** Sum of the listed CSR totals. Voided CSRs are not sales and are left out. */
+export function sumServiceReportSales(items: readonly ServiceReportListItem[]): { totalCentavos: number; count: number } {
+  let totalCentavos = 0;
+  let count = 0;
+  for (const item of items) {
+    if (item.documentState === 'voided') continue;
+    totalCentavos += item.totalBillCentavos;
+    count += 1;
+  }
+  return { totalCentavos, count };
 }
