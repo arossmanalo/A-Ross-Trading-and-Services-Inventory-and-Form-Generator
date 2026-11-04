@@ -1,8 +1,9 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
+import { requireOptionalNativeModule } from 'expo';
 import { Stack } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View, useColorScheme } from 'react-native';
 
 import { migrateDatabase } from '@/db/migrations';
 import { DATABASE_NAME } from '@/db/schema';
@@ -17,8 +18,40 @@ function LoadingDatabase() {
   );
 }
 
+type NavigationBarModule = typeof import('expo-navigation-bar');
+
+/**
+ * Metro reports an error thrown while a module initialises as fatal even when
+ * the caller catches it, so a missing native module cannot be guarded with
+ * try/catch around require(). Builds made before expo-navigation-bar was added
+ * do not contain its native code; probing for it first (which never throws)
+ * keeps those builds, and over-the-air updates delivered to them, from crashing.
+ */
+function loadNavigationBar(): NavigationBarModule | null {
+  if (!requireOptionalNativeModule('ExpoNavigationBar')) return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('expo-navigation-bar') as NavigationBarModule;
+}
+
+/** Keeps the Android system bars hidden so the app always runs full screen. */
+function useImmersiveMode() {
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const navigationBar = loadNavigationBar();
+    if (!navigationBar) return undefined;
+    const hide = () => { void navigationBar.setVisibilityAsync('hidden').catch(() => undefined); };
+    hide();
+    // A swipe from the edge shows the bar briefly; hide it again afterwards.
+    const subscription = navigationBar.addVisibilityListener(({ visibility }) => {
+      if (visibility === 'visible') setTimeout(hide, 2500);
+    });
+    return () => subscription.remove();
+  }, []);
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  useImmersiveMode();
 
   return (
     <Suspense fallback={<LoadingDatabase />}>
