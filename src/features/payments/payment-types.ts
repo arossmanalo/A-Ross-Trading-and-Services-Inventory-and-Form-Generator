@@ -21,6 +21,9 @@ export type PaymentSummary = {
   paNumber: string;
   billingStatementId: string;
   billingStatementNumber: string;
+  /** The CSR the statement was billed from; null when the statement is not linked to one. */
+  serviceReportId: string | null;
+  serviceReportNumber: string | null;
   customerName: string;
   amountCentavos: number;
   businessDate: string;

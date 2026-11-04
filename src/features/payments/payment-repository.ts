@@ -10,7 +10,7 @@ import { getPreparerSignatureHtml } from '@/features/signatures/capture-reposito
 import type { InitialPaymentSelection, PaymentEntryInput, PaymentKind, PaymentMethod, PaymentState, PaymentSummary, StatementPaymentStatus } from '@/features/payments/payment-types';
 
 type PaymentRow = {
-  id: string; pa_number: string; billing_statement_id: string; bs_number: string;
+  id: string; pa_number: string; billing_statement_id: string; bs_number: string; service_report_id: string | null; csr_number: string | null;
   customer_name: string; amount_centavos: number; business_date: string;
   method: PaymentMethod; reference_number: string | null; note: string | null;
   payment_kind: PaymentKind; state: PaymentState; void_reason: string | null;
@@ -154,6 +154,6 @@ function validatePaymentInput(input: PaymentEntryInput): void {
   if (input.method !== 'cash' && !input.referenceNumber?.trim()) throw new Error('A reference number is required for non-cash payments.');
 }
 
-function paymentSelect(suffix: string): string { return `SELECT p.id,p.pa_number,p.billing_statement_id,b.bs_number,c.name AS customer_name,p.amount_centavos,p.business_date,p.method,p.reference_number,p.note,p.payment_kind,p.state,p.void_reason,p.pdf_state,p.share_state FROM payments p JOIN billing_statements b ON b.id=p.billing_statement_id JOIN customers c ON c.id=b.customer_id ${suffix}`; }
-function mapPayment(row: PaymentRow): PaymentSummary { return { id: row.id, paNumber: row.pa_number, billingStatementId: row.billing_statement_id, billingStatementNumber: row.bs_number, customerName: row.customer_name, amountCentavos: row.amount_centavos, businessDate: row.business_date, method: row.method, referenceNumber: row.reference_number, note: row.note, paymentKind: row.payment_kind, state: row.state, voidReason: row.void_reason, pdfState: row.pdf_state, shareState: row.share_state }; }
+function paymentSelect(suffix: string): string { return `SELECT p.id,p.pa_number,p.billing_statement_id,b.bs_number,b.service_report_id,r.csr_number,c.name AS customer_name,p.amount_centavos,p.business_date,p.method,p.reference_number,p.note,p.payment_kind,p.state,p.void_reason,p.pdf_state,p.share_state FROM payments p JOIN billing_statements b ON b.id=p.billing_statement_id JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id ${suffix}`; }
+function mapPayment(row: PaymentRow): PaymentSummary { return { id: row.id, paNumber: row.pa_number, billingStatementId: row.billing_statement_id, billingStatementNumber: row.bs_number, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, customerName: row.customer_name, amountCentavos: row.amount_centavos, businessDate: row.business_date, method: row.method, referenceNumber: row.reference_number, note: row.note, paymentKind: row.payment_kind, state: row.state, voidReason: row.void_reason, pdfState: row.pdf_state, shareState: row.share_state }; }
 function formatAmount(value: number): string { return new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP'}).format(value/100); }
