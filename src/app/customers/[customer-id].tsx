@@ -1,4 +1,4 @@
-import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
@@ -15,9 +15,11 @@ import { colors } from '@/theme/colors';
 const EquipmentCard = memo(function EquipmentCard({
   equipment,
   onToggle,
+  onEdit,
 }: {
   equipment: CustomerEquipment;
   onToggle: (equipment: CustomerEquipment) => void;
+  onEdit: (equipment: CustomerEquipment) => void;
 }) {
   return (
     <View style={[styles.equipmentCard, !equipment.active ? styles.inactiveCard : null]}>
@@ -36,6 +38,7 @@ const EquipmentCard = memo(function EquipmentCard({
         <Text selectable style={styles.detailLine}>Serial: {equipment.serialNumber}</Text>
       ) : null}
       {equipment.notes ? <Text selectable style={styles.detailLine}>{equipment.notes}</Text> : null}
+      <ActionButton onPress={() => onEdit(equipment)}>Edit equipment</ActionButton>
       <ActionButton onPress={() => onToggle(equipment)} variant="secondary">
         {equipment.active ? 'Deactivate equipment' : 'Reactivate equipment'}
       </ActionButton>
@@ -84,6 +87,16 @@ export default function CustomerDetailScreen() {
   const addMember = useCallback(() => {
     if (!customerId) return;
     router.push({ pathname: '/customers/member/new', params: { customerId } });
+  }, [customerId]);
+
+  const editCustomer = useCallback(() => {
+    if (!customerId) return;
+    router.push(`/customers/edit?customerId=${encodeURIComponent(customerId)}` as Href);
+  }, [customerId]);
+
+  const editEquipment = useCallback((equipment: CustomerEquipment) => {
+    if (!customerId) return;
+    router.push(`/customers/equipment/edit?customerId=${encodeURIComponent(customerId)}&equipmentId=${encodeURIComponent(equipment.id)}` as Href);
   }, [customerId]);
 
   const openPricing = useCallback(() => {
@@ -158,7 +171,7 @@ export default function CustomerDetailScreen() {
         data={customer?.equipment ?? []}
         keyExtractor={getEquipmentKey}
         renderItem={({ item }) => (
-          <EquipmentCard equipment={item} onToggle={confirmEquipmentToggle} />
+          <EquipmentCard equipment={item} onToggle={confirmEquipmentToggle} onEdit={editEquipment} />
         )}
         ItemSeparatorComponent={EquipmentSeparator}
         refreshing={loading}
@@ -180,7 +193,8 @@ export default function CustomerDetailScreen() {
                   <Detail label="Address" value={customer.address} />
                   <Detail label="Phone" value={customer.contactNumber} />
                   <Detail label="Email" value={customer.email} />
-                  <ActionButton onPress={openPricing}>Customer-specific prices</ActionButton>
+                  <ActionButton onPress={editCustomer}>Edit customer details</ActionButton>
+                  <ActionButton onPress={openPricing} variant="secondary">Customer-specific prices</ActionButton>
                   <ActionButton onPress={confirmCustomerToggle} variant="secondary">
                     {customer.active ? 'Deactivate customer' : 'Reactivate customer'}
                   </ActionButton>

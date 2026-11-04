@@ -79,6 +79,14 @@ export default function RootLayout() {
             name="customers/new"
             options={{ title: 'New customer', presentation: 'modal' }}
           />
+          <Stack.Screen
+            name="customers/edit"
+            options={{ title: 'Edit customer', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="customers/equipment/edit"
+            options={{ title: 'Edit equipment', presentation: 'modal' }}
+          />
           <Stack.Screen name="customers/[customer-id]" options={{ title: 'Customer' }} />
           <Stack.Screen
             name="customers/[customer-id]/pricing"

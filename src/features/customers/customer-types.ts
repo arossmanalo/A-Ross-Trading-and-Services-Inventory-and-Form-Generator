@@ -47,6 +47,24 @@ export type CreateCustomerInput = {
   allowDuplicateName?: boolean;
 };
 
+export type UpdateCustomerInput = {
+  customerId: string;
+  name: string;
+  address?: string;
+  contactNumber?: string;
+  email?: string;
+  allowDuplicateName?: boolean;
+};
+
+export type UpdateEquipmentInput = {
+  equipmentId: string;
+  machineType: string;
+  model?: string;
+  serialNumber?: string;
+  nicknameOrLocation?: string;
+  notes?: string;
+};
+
 export type CreateCustomerMemberInput = {
   customerId: string;
   name: string;

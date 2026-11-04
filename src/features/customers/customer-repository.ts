@@ -11,6 +11,8 @@ import type {
   CustomerEquipment,
   CustomerMember,
   CustomerSummary,
+  UpdateCustomerInput,
+  UpdateEquipmentInput,
 } from '@/features/customers/customer-types';
 
 type CustomerRow = {
@@ -277,6 +279,83 @@ export async function createEquipment(
   });
 
   return equipmentId;
+}
+
+/** Edits a customer profile. Finalized documents keep their own frozen snapshot. */
+export async function updateCustomer(db: SQLiteDatabase, input: UpdateCustomerInput): Promise<void> {
+  const name = normalizeCustomerName(input.name);
+  const address = input.address?.trim() ?? '';
+  const contactNumber = input.contactNumber?.trim() ?? '';
+  const email = input.email?.trim() ?? '';
+  if (!name) throw new Error('Customer name is required.');
+  assertOptionalEmail(email);
+  const now = new Date().toISOString();
+
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const duplicate = await tx.getFirstAsync<{ id: string }>(
+      `SELECT id FROM customers
+       WHERE merged_into_customer_id IS NULL AND id <> ?
+         AND lower(trim(name)) = lower(trim(?))
+       LIMIT 1`,
+      input.customerId,
+      name,
+    );
+    if (duplicate && !input.allowDuplicateName) throw new DuplicateCustomerNameError(name);
+
+    const result = await tx.runAsync(
+      `UPDATE customers
+       SET name = ?, address = ?, contact_number = ?, email = ?, updated_at = ?
+       WHERE id = ? AND merged_into_customer_id IS NULL`,
+      name,
+      address,
+      contactNumber,
+      email,
+      now,
+      input.customerId,
+    );
+    if (result.changes !== 1) throw new Error('Customer was not found.');
+
+    await appendAuditEvent(tx, {
+      eventType: 'customer.updated',
+      entityType: 'customer',
+      entityId: input.customerId,
+      details: { name },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
+/** Edits a machine's details. Finalized documents keep their own frozen snapshot. */
+export async function updateEquipment(db: SQLiteDatabase, input: UpdateEquipmentInput): Promise<void> {
+  const machineType = input.machineType.trim();
+  if (!machineType) throw new Error('Machine or equipment type is required.');
+  const now = new Date().toISOString();
+
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const result = await tx.runAsync(
+      `UPDATE customer_equipment
+       SET machine_type = ?, model = ?, serial_number = ?, nickname_or_location = ?, notes = ?, updated_at = ?
+       WHERE id = ?`,
+      machineType,
+      input.model?.trim() ?? '',
+      input.serialNumber?.trim() ?? '',
+      input.nicknameOrLocation?.trim() ?? '',
+      input.notes?.trim() ?? '',
+      now,
+      input.equipmentId,
+    );
+    if (result.changes !== 1) throw new Error('Equipment was not found.');
+
+    await appendAuditEvent(tx, {
+      eventType: 'equipment.updated',
+      entityType: 'customer_equipment',
+      entityId: input.equipmentId,
+      details: { serialNumber: input.serialNumber?.trim() ?? '' },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
 }
 
 export async function setCustomerActive(
