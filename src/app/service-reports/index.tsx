@@ -23,7 +23,7 @@ import { listServiceReports } from '@/features/service-reports/service-report-re
 import type { ServiceReportListItem, ServiceReportSummary } from '@/features/service-reports/service-report-types';
 import { colors } from '@/theme/colors';
 
-const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSummary }) {
+const ReportRow = memo(function ReportRow({ report, showTotal }: { report: ServiceReportSummary; showTotal: boolean }) {
   const openReport = useCallback(() => {
     router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': report.id } });
   }, [report.id]);
@@ -37,7 +37,7 @@ const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSum
             {report.documentState.toUpperCase()}
           </Text>
         </View>
-        <Text selectable style={styles.total}>Total {formatCentavos(report.totalBillCentavos)}</Text>
+        <Text selectable style={styles.total}>Total {showTotal ? formatCentavos(report.totalBillCentavos) : '₱ ••••••'}</Text>
         <Text selectable style={styles.customer}>{report.customerName}</Text>
         <Text selectable style={styles.meta}>{report.equipmentName} · {report.businessDate}</Text>
         {billed.length ? (
@@ -66,6 +66,7 @@ export default function ServiceReportsScreen() {
   const db = useSQLiteContext();
   const [reports, setReports] = useState<ServiceReportListItem[]>([]);
   const [criteria, setCriteria] = useState<ServiceReportCriteria>(DEFAULT_CRITERIA);
+  const [showTotals, setShowTotals] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +97,8 @@ export default function ServiceReportsScreen() {
       contentContainerStyle={visible.length ? styles.content : styles.emptyContent}
       data={visible}
       keyExtractor={(report) => report.id}
-      renderItem={({ item }) => <ReportRow report={item} />}
+      extraData={showTotals}
+      renderItem={({ item }) => <ReportRow report={item} showTotal={showTotals} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       refreshing={loading && reports.length > 0}
       onRefresh={loadReports}
@@ -127,6 +129,7 @@ export default function ServiceReportsScreen() {
           </View>
           <View style={styles.resultLine}>
             <Text selectable style={styles.headerText}>{visible.length} of {reports.length} service report{reports.length === 1 ? '' : 's'}</Text>
+            <ActionButton compact variant="secondary" onPress={() => setShowTotals((current) => !current)}>{showTotals ? 'Hide totals' : 'Show totals'}</ActionButton>
             {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
           </View>
           {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
