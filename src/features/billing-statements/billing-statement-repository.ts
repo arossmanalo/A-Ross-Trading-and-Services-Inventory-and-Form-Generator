@@ -11,7 +11,7 @@ import { BILLING_STATEMENT_TEMPLATE_VERSION, buildBillingStatementHtml, type Bil
 import { getPreparerSignatureHtml } from '@/features/signatures/capture-repository';
 import { insertCsrItemUsage, insertServiceOnAllMachines } from '@/features/service-reports/csr-charge-repository';
 import { machineServiceBilled } from '@/features/service-reports/machine-service-sql';
-import type { BillingDiscountType, BillingDocumentState, BillingExpense, BillingPriceSource, BillingStatementDetail, BillingStatementLine, BillingStatementSummary, EligibleCsrUsage } from '@/features/billing-statements/billing-statement-types';
+import type { BillingStatementLinkedPayment, BillingStatementListItem, BillingDiscountType, BillingDocumentState, BillingExpense, BillingPriceSource, BillingStatementDetail, BillingStatementLine, BillingStatementSummary, EligibleCsrUsage } from '@/features/billing-statements/billing-statement-types';
 import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features/payments/payment-repository';
 import { kindLabel, methodLabel } from '@/features/payments/payment-template';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
@@ -93,9 +93,31 @@ export async function assertLinkedCsrChargesAreSourced(db: SQLiteDatabase, repor
   if (unsourced) throw new Error(`Review the linked Billing Statement charge "${unsourced.description_snapshot}". Remove its separate charge, then add it through the CSR or linked statement again so it appears on both documents. Existing CSR charges must not be added twice.`);
 }
 
-export async function listBillingStatements(db: SQLiteDatabase): Promise<BillingStatementSummary[]> {
+export async function listBillingStatements(db: SQLiteDatabase): Promise<BillingStatementListItem[]> {
   const rows = await db.getAllAsync<SummaryRow>(`SELECT b.id,b.bs_number,c.name AS customer_name,b.service_report_id,r.csr_number,b.document_state,b.business_date,b.discounted_total_centavos,b.pdf_state FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id ORDER BY b.created_at DESC`);
-  return rows.map(mapSummary);
+  const paymentRows = await db.getAllAsync<{ id: string; pa_number: string; billing_statement_id: string; state: 'active' | 'voided' }>(
+    'SELECT id,pa_number,billing_statement_id,state FROM payments ORDER BY created_at ASC,rowid ASC',
+  );
+  const paymentsByStatement = new Map<string, BillingStatementLinkedPayment[]>();
+  for (const payment of paymentRows) {
+    const list = paymentsByStatement.get(payment.billing_statement_id) ?? [];
+    list.push({ id: payment.id, paNumber: payment.pa_number, state: payment.state });
+    paymentsByStatement.set(payment.billing_statement_id, list);
+  }
+  return rows.map((row) => {
+    const summary = mapSummary(row);
+    const payments = paymentsByStatement.get(row.id) ?? [];
+    const searchText = [
+      row.bs_number ?? 'draft',
+      row.customer_name,
+      row.business_date,
+      row.document_state,
+      row.csr_number ?? (row.service_report_id ? 'draft csr' : ''),
+      (row.discounted_total_centavos / 100).toFixed(2),
+      ...payments.map((payment) => payment.paNumber),
+    ].join(' ').toLowerCase();
+    return { ...summary, payments, searchText };
+  });
 }
 
 export async function getBillingStatement(db: SQLiteDatabase, statementId: string): Promise<BillingStatementDetail | null> {

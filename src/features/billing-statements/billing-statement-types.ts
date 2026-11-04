@@ -17,6 +17,19 @@ export type BillingStatementSummary = {
   pdfState: 'not_generated' | 'pending' | 'ready' | 'error';
 };
 
+/** A Payment Acknowledgment recorded against a statement. */
+export type BillingStatementLinkedPayment = {
+  id: string;
+  paNumber: string;
+  state: 'active' | 'voided';
+};
+
+/** A statement as listed, with its payments and the lower-cased text the list search matches. */
+export type BillingStatementListItem = BillingStatementSummary & {
+  payments: BillingStatementLinkedPayment[];
+  searchText: string;
+};
+
 export type BillingStatementLine = {
   id: string;
   lineType: BillingLineType;
