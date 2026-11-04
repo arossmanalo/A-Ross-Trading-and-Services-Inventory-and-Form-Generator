@@ -15,6 +15,7 @@ function report(id: string, extra: Partial<ServiceReportListItem> = {}): Service
     serviceOutcome: 'completed',
     businessDate: '2026-09-10',
     pdfState: 'ready',
+    totalBillCentavos: 0,
     linkedStatements: [],
     searchText: '',
     ...extra,

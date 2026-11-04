@@ -7,6 +7,7 @@ import { ActionButton } from '@/components/action-button';
 import { Dropdown } from '@/components/dropdown';
 import { FormField } from '@/components/form-field';
 import { getLocalBusinessDate } from '@/domain/business-date';
+import { formatCentavos } from '@/domain/money';
 import {
   BILLING_OPTIONS,
   DEFAULT_CRITERIA,
@@ -36,6 +37,7 @@ const ReportRow = memo(function ReportRow({ report }: { report: ServiceReportSum
             {report.documentState.toUpperCase()}
           </Text>
         </View>
+        <Text selectable style={styles.total}>Total {formatCentavos(report.totalBillCentavos)}</Text>
         <Text selectable style={styles.customer}>{report.customerName}</Text>
         <Text selectable style={styles.meta}>{report.equipmentName} · {report.businessDate}</Text>
         {billed.length ? (
@@ -167,6 +169,7 @@ const styles = StyleSheet.create({
   number: { color: colors.label, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
   draftBadge: { color: colors.warning, fontSize: 8, fontWeight: '900', letterSpacing: .7 },
   finalBadge: { color: colors.success, fontSize: 8, fontWeight: '900', letterSpacing: .7 },
+  total: { color: colors.brandNavy, fontSize: 13, fontWeight: '800', fontVariant: ['tabular-nums'] },
   customer: { color: colors.label, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.secondaryLabel, fontSize: 12 },
   stateCopy: { maxWidth: 105, alignItems: 'flex-end', gap: 5 },

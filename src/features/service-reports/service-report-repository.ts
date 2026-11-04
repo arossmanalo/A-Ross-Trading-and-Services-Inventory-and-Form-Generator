@@ -34,6 +34,7 @@ type SummaryRow = {
   service_outcome: ServiceOutcome;
   business_date: string;
   pdf_state: ServiceReportSummary['pdfState'];
+  total_bill_centavos: number;
 };
 
 type DetailRow = SummaryRow & {
@@ -172,7 +173,7 @@ export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceRep
               THEN ' +' || ((SELECT COUNT(*) FROM service_report_equipment x WHERE x.service_report_id = r.id) - 1) || ' more'
               ELSE '' END AS equipment_name,
             e.model AS primary_model, e.serial_number AS primary_serial, e.nickname_or_location AS primary_nickname,
-            r.document_state, r.service_outcome, r.business_date, r.pdf_state,
+            r.document_state, r.service_outcome, r.business_date, r.pdf_state, r.total_bill_centavos,
             r.reported_problem_json, r.serviced_by_snapshot, r.acknowledged_by_snapshot
      FROM service_reports r
      JOIN customers c ON c.id = r.customer_id
@@ -1052,6 +1053,7 @@ function mapSummaryRow(row: SummaryRow): ServiceReportSummary {
     serviceOutcome: row.service_outcome,
     businessDate: row.business_date,
     pdfState: row.pdf_state,
+    totalBillCentavos: row.total_bill_centavos,
     linkedStatements: [],
   };
 }

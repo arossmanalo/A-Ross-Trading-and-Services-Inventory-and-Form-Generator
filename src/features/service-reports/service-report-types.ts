@@ -35,6 +35,8 @@ export type ServiceReportSummary = {
   serviceOutcome: ServiceOutcome;
   businessDate: string;
   pdfState: 'error' | 'not_generated' | 'pending' | 'ready';
+  /** Total bill of the CSR in centavos. */
+  totalBillCentavos: number;
   /** Billing Statements linked to this CSR, oldest first (voided ones included). */
   linkedStatements: ServiceReportLinkedStatement[];
 };
