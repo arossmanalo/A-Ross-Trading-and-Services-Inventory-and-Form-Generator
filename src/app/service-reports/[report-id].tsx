@@ -303,6 +303,8 @@ export default function ServiceReportDetailScreen() {
 
   if (loading && !report) return <View style={styles.centered}><ActivityIndicator color={colors.brandBlue} size="large" /></View>;
   const editable = report?.documentState === 'draft';
+  // A CSR that already has a live (draft or finalized) Billing Statement gets no second one; the linked list opens it.
+  const hasLiveStatement = Boolean(report?.linkedStatements.some((statement) => statement.documentState !== 'voided'));
 
   return (
     <>
@@ -354,7 +356,7 @@ export default function ServiceReportDetailScreen() {
               return <View key={machine.equipmentId} style={styles.usage}><View style={styles.usageCopy}><Text selectable style={styles.usageName}>{[machine.machineType, machine.nicknameOrLocation || (machine.serialNumber ? `SN ${machine.serialNumber}` : '')].filter(Boolean).join(' · ')}</Text>{rows.length ? rows.map((row) => <Text key={row.id} selectable style={styles.meta}>{row.serviceName} · {formatCentavos(row.rateCentavos)}{row.note ? ` · ${row.note}` : ''}</Text>) : <Text selectable style={styles.emptyHint}>No services yet.</Text>}</View><Text selectable style={styles.usageName}>{formatCentavos(rows.reduce((sum, row) => sum + row.rateCentavos, 0))}</Text></View>;
             })}
             <LinkedStatements statements={report.linkedStatements} />
-            <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Open or create linked Billing Statement draft</ActionButton>
+            {hasLiveStatement ? null : <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Create linked Billing Statement draft</ActionButton>}
             {error ? <Text accessibilityLiveRegion="polite" selectable style={styles.errorText}>{error}</Text> : null}
             <ActionButton disabled={busy} onPress={finalize}>{busy ? 'Working…' : 'Finalize CSR'}</ActionButton>
             <ActionButton disabled={busy} onPress={deleteDraft} variant="danger">Delete draft</ActionButton>
@@ -374,7 +376,7 @@ export default function ServiceReportDetailScreen() {
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>BILLING STATEMENTS</Text>
               <LinkedStatements statements={report.linkedStatements} bare />
-              <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>{report.linkedStatements.some((statement) => statement.documentState === 'draft') ? 'Open the linked Billing Statement draft' : 'Create a linked Billing Statement'}</ActionButton>
+              {hasLiveStatement ? null : <ActionButton disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Create a linked Billing Statement</ActionButton>}
             </View> : null}
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>SIGNATURE STATUS</Text>
