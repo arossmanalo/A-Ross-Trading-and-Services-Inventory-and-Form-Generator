@@ -5,16 +5,18 @@ import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { listShareableStatementsForReport, retryBillingStatementPdf } from '@/features/billing-statements/billing-statement-pdf';
 import { resolveShareFileName } from '@/features/documents/share-file-name';
 import { sharePdfFiles } from '@/features/documents/share-pdf';
+import { retryDeliveryPdf } from '@/features/deliveries/delivery-pdf';
 import { retryQuotationPdf } from '@/features/quotations/quotation-pdf';
 import { retryServiceReportPdf } from '@/features/service-reports/service-report-pdf';
 
-type BundleDocument = { kind: 'service_report' | 'billing_statement' | 'quotation'; id: string };
+type BundleDocument = { kind: 'service_report' | 'billing_statement' | 'quotation' | 'delivery'; id: string };
 
 /** Table and audit event for each document kind that can go into a shared PDF. */
 const BUNDLE_KINDS = {
   service_report: { table: 'service_reports', event: 'csr.share_sheet_opened' },
   billing_statement: { table: 'billing_statements', event: 'billing_statement.share_sheet_opened' },
   quotation: { table: 'quotations', event: 'quotation.share_sheet_opened' },
+  delivery: { table: 'deliveries', event: 'delivery.share_sheet_opened' },
 } as const;
 
 /** One PDF to send: the pages of every included document, in order. */
@@ -34,7 +36,8 @@ async function readyPdf(db: SQLiteDatabase, document: BundleDocument): Promise<s
   );
   if (stored?.private_path && (await FileSystem.getInfoAsync(stored.private_path)).exists) return stored.private_path;
   if (document.kind === 'service_report') return retryServiceReportPdf(db, document.id);
-  return document.kind === 'billing_statement' ? retryBillingStatementPdf(db, document.id) : retryQuotationPdf(db, document.id);
+  if (document.kind === 'billing_statement') return retryBillingStatementPdf(db, document.id);
+  return document.kind === 'quotation' ? retryQuotationPdf(db, document.id) : retryDeliveryPdf(db, document.id);
 }
 
 async function buildBundle(db: SQLiteDatabase, primary: BundleDocument, documents: BundleDocument[]): Promise<ShareBundle> {
@@ -53,6 +56,14 @@ export async function getServiceReportShareBundle(db: SQLiteDatabase, reportId: 
   const statements = await listShareableStatementsForReport(db, reportId);
   const primary: BundleDocument = { kind: 'service_report', id: reportId };
   return buildBundle(db, primary, [primary, ...statements.map((statement): BundleDocument => ({ kind: 'billing_statement', id: statement.id }))]);
+}
+
+/** A finalized delivery is sent as its own form. */
+export async function getDeliveryShareBundle(db: SQLiteDatabase, deliveryId: string): Promise<ShareBundle> {
+  const delivery = await db.getFirstAsync<{ document_state: string }>('SELECT document_state FROM deliveries WHERE id = ?', deliveryId);
+  if (!delivery || delivery.document_state !== 'finalized') throw new Error('Only a finalized delivery can be shared.');
+  const own: BundleDocument = { kind: 'delivery', id: deliveryId };
+  return buildBundle(db, own, [own]);
 }
 
 /** A finalized quotation is sent on its own. */

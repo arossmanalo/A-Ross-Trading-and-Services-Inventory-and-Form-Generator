@@ -13,4 +13,5 @@ export const DOCUMENT_KINDS: Record<PreviewKind, DocumentKindInfo> = {
   csr: { ownerType: 'service_report', shareKind: 'service_report', label: 'CSR', pageSize: 'legal' },
   billing_statement: { ownerType: 'billing_statement', shareKind: 'billing_statement', label: 'Billing Statement', pageSize: 'a4' },
   quotation: { ownerType: 'quotation', shareKind: 'quotation', label: 'Quotation', pageSize: 'a4' },
+  delivery: { ownerType: 'delivery', shareKind: 'delivery', label: 'Delivery Form', pageSize: 'a4' },
 };

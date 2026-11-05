@@ -25,6 +25,13 @@ export const SIGNABLE_OWNERS = {
     pdfPageSize: 'a4',
     label: 'Quotation',
   },
+  delivery: {
+    table: 'deliveries',
+    numberColumn: 'df_number',
+    previewKind: 'delivery',
+    pdfPageSize: 'a4',
+    label: 'Delivery Form',
+  },
 } as const;
 
 export type SignableOwnerType = keyof typeof SIGNABLE_OWNERS;

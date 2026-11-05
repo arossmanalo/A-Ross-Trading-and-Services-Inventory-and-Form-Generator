@@ -31,6 +31,7 @@ import { getSignatureCapturePreview } from '@/features/signatures/capture-reposi
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
 import { finalizeSignatureDrafts, getSignatureDraftPreview } from '@/features/signatures/signature-draft-repository';
 import { DOCUMENT_KINDS } from '@/features/documents/document-kinds';
+import { getDeliveryPreview } from '@/features/deliveries/delivery-pdf';
 import { getQuotationPreview } from '@/features/quotations/quotation-pdf';
 import type { PreviewKind } from '@/features/signatures/signable-owners';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
@@ -152,6 +153,8 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
         }))
       : kind === 'quotation'
       ? getQuotationPreview(db, documentId).then((value) => ({ number: value.qtNumber, html: value.html, isDraft: value.isDraft }))
+      : kind === 'delivery'
+      ? getDeliveryPreview(db, documentId).then((value) => ({ number: value.dfNumber, html: value.html, isDraft: value.isDraft }))
       : getBillingStatementPreview(db, documentId).then((value) => ({
           number: value.bsNumber,
           html: value.html,

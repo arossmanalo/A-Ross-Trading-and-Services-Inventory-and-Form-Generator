@@ -39,6 +39,7 @@ vi.mock('react-native-webview', () => ({WebView:'WebView'}));
 vi.mock('@/theme/colors', () => ({colors:{brandBlue:'#0755ad',background:'#fff',secondaryLabel:'#555',label:'#111',separator:'#ddd',surface:'#eee',error:'#b91c1c',success:'#15803d'}}));
 vi.mock('@/features/billing-statements/billing-statement-pdf', () => ({getBillingStatementPreview:vi.fn(),listShareableStatementsForReport:vi.fn()}));
 vi.mock('@/features/documents/share-pdf', () => ({sharePdfFiles:vi.fn()}));
+vi.mock('@/features/deliveries/delivery-pdf', () => ({getDeliveryPreview:vi.fn()}));
 vi.mock('@/features/quotations/quotation-pdf', () => ({getQuotationPreview:vi.fn()}));
 vi.mock('@/features/service-reports/service-report-pdf', () => ({getServiceReportPreview:vi.fn()}));
 vi.mock('@/features/signatures/capture-repository', () => ({getSignatureCapturePreview:signing.capture}));

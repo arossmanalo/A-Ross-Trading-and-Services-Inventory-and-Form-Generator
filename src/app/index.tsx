@@ -208,6 +208,19 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
         </Pressable>
+
+        <Pressable accessibilityRole="button" accessibilityHint="Open Delivery forms" onPress={() => router.push('/deliveries')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+            <View style={styles.featureIcon}>
+              <Text selectable style={styles.featureIconText}>09</Text>
+            </View>
+            <View style={styles.featureCopy}>
+              <Text selectable style={styles.featureTitle}>Delivery forms</Text>
+              <Text selectable style={styles.featureBody}>
+                Deliver inventory items to a customer, deduct stock, and bill the delivery.
+              </Text>
+            </View>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
       </View>
     </ScrollView>
   );

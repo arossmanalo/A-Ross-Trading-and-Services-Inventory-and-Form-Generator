@@ -5,6 +5,7 @@ export type SearchResultKind =
   | 'customer'
   | 'equipment'
   | 'item'
+  | 'delivery'
   | 'payment'
   | 'quotation'
   | 'service'
@@ -94,6 +95,14 @@ export async function searchAppRecords(db: SQLiteDatabase, query: string, limit 
          COALESCE(q.finalized_at,q.created_at)
        FROM quotations q JOIN customers c ON c.id=q.customer_id
        WHERE COALESCE(q.qt_number,'') LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR q.business_date LIKE ? ESCAPE '\\'
+
+       UNION ALL
+       SELECT 'delivery',d.id,d.id,COALESCE(d.df_number,'Draft Delivery'),
+         c.name,
+         d.document_state || ' - ' || d.business_date,
+         COALESCE(d.finalized_at,d.created_at)
+       FROM deliveries d JOIN customers c ON c.id=d.customer_id
+       WHERE COALESCE(d.df_number,'') LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR d.business_date LIKE ? ESCAPE '\\'
 
        UNION ALL
        SELECT 'payment',p.id,p.id,COALESCE(p.pa_number,'Payment'),

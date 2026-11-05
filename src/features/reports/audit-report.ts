@@ -6,6 +6,7 @@ export type AuditEntityFilter =
   | 'customer'
   | 'customer_equipment'
   | 'customer_item_price'
+  | 'delivery'
   | 'item'
   | 'payment'
   | 'quotation'
@@ -39,6 +40,7 @@ const ENTITY_TYPES: AuditEntityFilter[] = [
   'customer',
   'customer_equipment',
   'customer_item_price',
+  'delivery',
   'item',
   'payment',
   'quotation',

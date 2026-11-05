@@ -75,6 +75,8 @@ function openResult(result: GlobalSearchResult) {
     router.push({ pathname: '/services/[service-id]', params: { 'service-id': result.routeId } });
   } else if (result.kind === 'service_report') {
     router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': result.routeId } });
+  } else if (result.kind === 'delivery') {
+    router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': result.routeId } });
   } else if (result.kind === 'quotation') {
     router.push({ pathname: '/quotations/[quotation-id]', params: { 'quotation-id': result.routeId } });
   } else if (result.kind === 'billing_statement') {

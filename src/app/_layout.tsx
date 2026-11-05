@@ -136,6 +136,12 @@ export default function RootLayout() {
           <Stack.Screen name="quotations/preview" options={{ title: 'Quotation Preview' }} />
           <Stack.Screen name="quotations/charge/new" options={{ title: 'Add to Quotation', presentation: 'modal' }} />
           <Stack.Screen name="quotations/void" options={{ title: 'Void Quotation', presentation: 'modal' }} />
+          <Stack.Screen name="deliveries/index" options={{ title: 'Delivery Forms' }} />
+          <Stack.Screen name="deliveries/new" options={{ title: 'New Delivery Draft', presentation: 'modal' }} />
+          <Stack.Screen name="deliveries/[delivery-id]" options={{ title: 'Delivery Form' }} />
+          <Stack.Screen name="deliveries/preview" options={{ title: 'Delivery Form Preview' }} />
+          <Stack.Screen name="deliveries/item/new" options={{ title: 'Add Item to Delivery', presentation: 'modal' }} />
+          <Stack.Screen name="deliveries/void" options={{ title: 'Void Delivery', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/index" options={{ title: 'Billing Statements' }} />
           <Stack.Screen name="billing-statements/new" options={{ title: 'New Statement Draft', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/[statement-id]" options={{ title: 'Billing Statement' }} />

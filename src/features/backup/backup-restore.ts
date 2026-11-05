@@ -15,6 +15,7 @@ import {
 } from '@/features/backup/backup-repository';
 import { base64ToBytes, bytesToBase64, readStoredZip, type StoredZipArchive } from '@/features/backup/zip';
 import { formatMachineLabel } from '@/features/service-reports/machine-label';
+import { isSignableOwnerType } from '@/features/signatures/signable-owners';
 
 const MAX_PACKAGE_BYTES = 100 * 1024 * 1024;
 const REQUIRED_ENTRIES = new Set(['manifest.json', 'data/tables.json']);
@@ -392,7 +393,7 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
 }
 
 function parseAsset(value: unknown, index: number): BackupAssetManifest {
-  if (!isRecord(value) || typeof value.attachmentId !== 'string' || typeof value.ownerType !== 'string' || !['service_report', 'billing_statement'].includes(value.ownerType) || typeof value.ownerId !== 'string' || value.attachmentType !== 'external_signed_pdf' || typeof value.filename !== 'string' || !value.filename || typeof value.zipPath !== 'string' || !value.zipPath.startsWith('assets/') || typeof value.checksum !== 'string' || !value.checksum || !Number.isSafeInteger(value.size) || value.size <= 0) throw new Error(`Backup asset ${index} is invalid.`);
+  if (!isRecord(value) || typeof value.attachmentId !== 'string' || typeof value.ownerType !== 'string' || !isSignableOwnerType(value.ownerType) || typeof value.ownerId !== 'string' || value.attachmentType !== 'external_signed_pdf' || typeof value.filename !== 'string' || !value.filename || typeof value.zipPath !== 'string' || !value.zipPath.startsWith('assets/') || typeof value.checksum !== 'string' || !value.checksum || !Number.isSafeInteger(value.size) || value.size <= 0) throw new Error(`Backup asset ${index} is invalid.`);
   return { attachmentId: value.attachmentId, ownerType: value.ownerType, ownerId: value.ownerId, attachmentType: 'external_signed_pdf', filename: value.filename, zipPath: value.zipPath, checksum: value.checksum, size: value.size };
 }
 

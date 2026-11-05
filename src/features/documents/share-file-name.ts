@@ -73,6 +73,16 @@ async function lookup(db: SQLiteDatabase, kind: ShareDocumentKind, documentId: s
     return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.qt_number, date: row.business_date };
   }
 
+  if (kind === 'delivery') {
+    const row = await db.getFirstAsync<{ df_number: string | null; business_date: string; snapshot: string | null; customer_name: string }>(
+      `SELECT d.df_number, d.business_date, d.content_snapshot_json AS snapshot, c.name AS customer_name
+       FROM deliveries d JOIN customers c ON c.id = d.customer_id WHERE d.id = ?`,
+      documentId,
+    );
+    if (!row) throw new Error('Delivery was not found.');
+    return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.df_number, date: row.business_date };
+  }
+
   const row = await db.getFirstAsync<{ pa_number: string | null; business_date: string; snapshot: string | null; customer_name: string }>(
     `SELECT p.pa_number, p.business_date, p.content_snapshot_json AS snapshot, c.name AS customer_name
      FROM payments p
