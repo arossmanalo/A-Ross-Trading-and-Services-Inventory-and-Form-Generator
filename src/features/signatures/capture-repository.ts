@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { withDocumentHeaderLayout } from '@/features/documents/document-header';
+import { isSignableOwnerType, signableOwner } from '@/features/signatures/signable-owners';
 import { applySignatureCapturesToDocument, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
 
@@ -40,8 +41,7 @@ export async function getSignatureCapturePreview(
   if (!capture || capture.owner_type === 'settings' || !capture.render_template_snapshot) {
     throw new Error('No signed document preview is available for this capture.');
   }
-  const table = capture.owner_type === 'service_report' ? 'service_reports' : 'billing_statements';
-  const numberColumn = capture.owner_type === 'service_report' ? 'csr_number' : 'bs_number';
+  const { table, numberColumn } = signableOwner(capture.owner_type);
   const row = await db.getFirstAsync<{ number: string | null }>(`SELECT ${numberColumn} AS number FROM ${table} WHERE id = ?`, capture.owner_id);
   if (!row?.number) throw new Error('The signed document number is missing.');
   return {
@@ -57,7 +57,7 @@ export async function saveSignatureCapture(db: SQLiteDatabase, input: {
   role: 'customer' | 'preparer'; signerName: string; pngDataUrl: string;
 }): Promise<string> {
   validateSignaturePng(input.pngDataUrl);
-  if (!['settings','service_report','billing_statement'].includes(input.ownerType) || !['customer','preparer'].includes(input.role)) throw new Error('Invalid signing target.');
+  if ((input.ownerType !== 'settings' && !isSignableOwnerType(input.ownerType)) || !['customer','preparer'].includes(input.role)) throw new Error('Invalid signing target.');
   if (!/^[a-zA-Z0-9-]{1,80}$/.test(input.id)) throw new Error('Invalid signature request identifier.');
   const signerName = input.signerName.trim();
   if (!signerName || signerName.length > 200) throw new Error('Enter the signer’s name (up to 200 characters).');
@@ -73,8 +73,7 @@ export async function saveSignatureCapture(db: SQLiteDatabase, input: {
     let html: string | null = null;
     let filename: string | null = null;
     if (input.ownerType !== 'settings') {
-      const table = input.ownerType === 'service_report' ? 'service_reports' : 'billing_statements';
-      const numberColumn = input.ownerType === 'service_report' ? 'csr_number' : 'bs_number';
+      const { table, numberColumn } = signableOwner(input.ownerType);
       const owner = await tx.getFirstAsync<{number:string;render_template_snapshot:string}>(`SELECT ${numberColumn} AS number,render_template_snapshot FROM ${table} WHERE id=? AND document_state='finalized'`,input.ownerId);
       if (!owner?.render_template_snapshot) throw new Error('Only a finalized document can be signed.');
       const prior = await listSignatureCaptures(tx,input.ownerType,input.ownerId);

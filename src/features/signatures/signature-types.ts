@@ -1,4 +1,6 @@
-export type SignableOwnerType = 'service_report' | 'billing_statement';
+import type { SignableOwnerType } from '@/features/signatures/signable-owners';
+
+export type { SignableOwnerType };
 export type SignatureStatus = 'not_required' | 'pending' | 'signed_in_person' | 'signed_document_attached' | 'declined' | 'no_response';
 
 export type SignedAttachment = {

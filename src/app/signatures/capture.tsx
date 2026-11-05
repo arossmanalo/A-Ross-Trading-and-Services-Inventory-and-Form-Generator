@@ -7,6 +7,7 @@ import { FormField } from '@/components/form-field';
 import { saveSignatureCapture } from '@/features/signatures/capture-repository';
 import { DocumentSignatureCanvas } from '@/features/signatures/document-signature-canvas';
 import { getSignatureCanvasDocument, listSignatureDrafts, saveSignatureDraft } from '@/features/signatures/signature-draft-repository';
+import { isSignableOwnerType } from '@/features/signatures/signable-owners';
 import { getSignableDocument } from '@/features/signatures/signature-repository';
 import { SignaturePad } from '@/features/signatures/signature-pad';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
@@ -24,7 +25,7 @@ export default function CaptureScreen() {
   useEffect(() => {
     let active = true;
     if (ownerType === 'settings') {setTarget('Default preparer signature');return;}
-    if (!['service_report','billing_statement'].includes(ownerType)) return;
+    if (!isSignableOwnerType(ownerType)) return;
     void getSignableDocument(db,ownerType as SignableOwnerType,ownerId).then(async document => {
       if (!document || document.documentState !== 'finalized') throw new Error('Only finalized documents can be signed.');
       const [canvasDocument,drafts] = await Promise.all([
@@ -42,7 +43,7 @@ export default function CaptureScreen() {
     }).catch((e:unknown) => {if (active) setError(e instanceof Error ? e.message : 'Could not load signing target.');});
     return () => {active = false;};
   },[db,ownerType,ownerId,role]);
-  if (!['settings','service_report','billing_statement'].includes(ownerType) || !['customer','preparer'].includes(role) || !ownerId) return <Text>Invalid signing target.</Text>;
+  if ((ownerType !== 'settings' && !isSignableOwnerType(ownerType)) || !['customer','preparer'].includes(role) || !ownerId) return <Text>Invalid signing target.</Text>;
   // The document owns scrolling. Nesting it in a native ScrollView and toggling
   // that parent's responder during a stroke can leave Android presses cancelled.
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex:1,padding:18,gap:12,paddingBottom:18}}>

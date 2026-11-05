@@ -4,6 +4,7 @@ import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { listSignatureCaptures, type SignatureCapture } from '@/features/signatures/capture-repository';
 import { applySignatureCapturesToDocument, signatureBlock, validateSignaturePng } from '@/features/signatures/signature-html';
+import { signableOwner } from '@/features/signatures/signable-owners';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
 
 export type SignatureDraft = {
@@ -18,9 +19,8 @@ export type SignatureDraft = {
 type OwnerSnapshot = { number: string | null; render_template_snapshot: string | null };
 
 function ownerSql(ownerType: SignableOwnerType): string {
-  if (ownerType === 'service_report') return "SELECT csr_number AS number, render_template_snapshot FROM service_reports WHERE id=? AND document_state='finalized'";
-  if (ownerType === 'billing_statement') return "SELECT bs_number AS number, render_template_snapshot FROM billing_statements WHERE id=? AND document_state='finalized'";
-  throw new Error('Invalid signing target.');
+  const { table, numberColumn } = signableOwner(ownerType);
+  return `SELECT ${numberColumn} AS number, render_template_snapshot FROM ${table} WHERE id=? AND document_state='finalized'`;
 }
 
 export async function listSignatureDrafts(db: SQLiteDatabase, ownerType: SignableOwnerType, ownerId: string): Promise<SignatureDraft[]> {
@@ -143,7 +143,7 @@ export async function finalizeSignatureDrafts(db: SQLiteDatabase, ownerType: Sig
       );
     }
     await tx.runAsync('DELETE FROM signature_drafts WHERE owner_type=? AND owner_id=?', ownerType, ownerId);
-    const table = ownerType === 'service_report' ? 'service_reports' : 'billing_statements';
+    const { table } = signableOwner(ownerType);
     await tx.runAsync(`UPDATE ${table} SET signature_status=CASE WHEN signature_status='signed_document_attached' THEN signature_status ELSE 'signed_in_person' END WHERE id=?`, ownerId);
     await appendAuditEvent(tx, { eventType: 'signature.finalized', entityType: ownerType, entityId: ownerId, details: { roles: drafts.map(draft => draft.role).join(','), captureId: latestId }, createdAt: now });
     await incrementDatabaseRevision(tx);
