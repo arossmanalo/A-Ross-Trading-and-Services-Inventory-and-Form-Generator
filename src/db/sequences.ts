@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export type DocumentSequence = 'BS' | 'CSR' | 'PA';
+export type DocumentSequence = 'BS' | 'CSR' | 'PA' | 'QT' | 'DF';
 
 export async function allocateDocumentNumber(
   db: SQLiteDatabase,

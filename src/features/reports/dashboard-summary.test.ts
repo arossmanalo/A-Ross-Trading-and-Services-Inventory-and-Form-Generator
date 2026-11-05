@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1 } from '@/db/schema';
+import { schemaSql } from '@/test-utils/schema';
 
 vi.mock('expo-crypto', () => ({
   randomUUID: () => 'dashboard-id',
@@ -30,7 +30,7 @@ describe('dashboard summary', () => {
 
   beforeEach(() => {
     raw = new DatabaseSync(':memory:');
-    raw.exec(SCHEMA_V1);
+    raw.exec(schemaSql());
     db = {
       getFirstAsync: async <T>(sql: string) => raw.prepare(sql).get() as T | undefined,
       getAllAsync: async <T>(sql: string) => raw.prepare(sql).all() as T[],

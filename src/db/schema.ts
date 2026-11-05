@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 11;
+export const DATABASE_VERSION = 12;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -494,3 +494,205 @@ JOIN customer_equipment q ON q.id = m.equipment_id
 ORDER BY u.created_at, u.id, m.position;
 `;
 
+
+/**
+ * Quotations and Delivery forms.
+ *
+ * SQLite cannot alter a CHECK constraint, so the four small leaf tables whose
+ * CHECKs name document kinds are rebuilt (explicit column lists, indexes and
+ * triggers recreated): sequences, document_attachments, signature_drafts and
+ * signature_captures. Stock tables are not rebuilt: a delivery posts ordinary
+ * 'sale' / 'reversal' rows that carry a nullable delivery_id.
+ *
+ * Quotations point at what they were converted to; deliveries do not point back,
+ * which keeps the foreign keys acyclic for backup restore.
+ */
+export const SCHEMA_V12 = `
+CREATE TABLE sequences_v12 (
+  name TEXT PRIMARY KEY NOT NULL CHECK (name IN ('CSR', 'BS', 'PA', 'QT', 'DF')),
+  high_water_mark INTEGER NOT NULL DEFAULT 0 CHECK (high_water_mark >= 0)
+);
+INSERT INTO sequences_v12 (name, high_water_mark) SELECT name, high_water_mark FROM sequences;
+DROP TABLE sequences;
+ALTER TABLE sequences_v12 RENAME TO sequences;
+INSERT OR IGNORE INTO sequences (name, high_water_mark) VALUES ('QT', 0), ('DF', 0);
+
+CREATE TABLE document_attachments_v12 (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('service_report', 'billing_statement', 'payment', 'quotation', 'delivery')),
+  owner_id TEXT NOT NULL,
+  attachment_type TEXT NOT NULL CHECK (attachment_type IN ('signature_image', 'generated_pdf', 'external_signed_pdf')),
+  deterministic_filename TEXT NOT NULL,
+  private_path TEXT NOT NULL,
+  checksum TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+INSERT INTO document_attachments_v12 (id, owner_type, owner_id, attachment_type, deterministic_filename, private_path, checksum, created_at)
+SELECT id, owner_type, owner_id, attachment_type, deterministic_filename, private_path, checksum, created_at FROM document_attachments;
+DROP TABLE document_attachments;
+ALTER TABLE document_attachments_v12 RENAME TO document_attachments;
+CREATE UNIQUE INDEX document_attachments_one_generated_pdf
+  ON document_attachments(owner_type, owner_id)
+  WHERE attachment_type = 'generated_pdf';
+
+CREATE TABLE signature_drafts_v12 (
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('service_report','billing_statement','quotation','delivery')),
+  owner_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('customer','preparer')),
+  signer_name TEXT NOT NULL CHECK (length(trim(signer_name)) > 0),
+  png_data_url TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (owner_type, owner_id, role)
+);
+INSERT INTO signature_drafts_v12 (owner_type, owner_id, role, signer_name, png_data_url, updated_at)
+SELECT owner_type, owner_id, role, signer_name, png_data_url, updated_at FROM signature_drafts;
+DROP TABLE signature_drafts;
+ALTER TABLE signature_drafts_v12 RENAME TO signature_drafts;
+
+CREATE TABLE signature_captures_v12 (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('settings','service_report','billing_statement','quotation','delivery')),
+  owner_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('customer','preparer')),
+  signer_name TEXT NOT NULL,
+  png_data_url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  render_template_snapshot TEXT,
+  pdf_state TEXT NOT NULL DEFAULT 'pending' CHECK (pdf_state IN ('pending','ready','error')),
+  deterministic_filename TEXT,
+  private_path TEXT,
+  checksum TEXT
+);
+INSERT INTO signature_captures_v12 (id, owner_type, owner_id, role, signer_name, png_data_url, created_at, render_template_snapshot, pdf_state, deterministic_filename, private_path, checksum)
+SELECT id, owner_type, owner_id, role, signer_name, png_data_url, created_at, render_template_snapshot, pdf_state, deterministic_filename, private_path, checksum FROM signature_captures;
+DROP TABLE signature_captures;
+ALTER TABLE signature_captures_v12 RENAME TO signature_captures;
+CREATE INDEX signature_captures_owner ON signature_captures(owner_type,owner_id,created_at);
+CREATE TRIGGER signature_captures_immutable
+BEFORE UPDATE OF id,owner_type,owner_id,role,signer_name,png_data_url,created_at,render_template_snapshot,deterministic_filename ON signature_captures
+BEGIN SELECT RAISE(ABORT, 'SIGNATURE_IS_IMMUTABLE'); END;
+CREATE TRIGGER signature_captures_no_delete BEFORE DELETE ON signature_captures
+BEGIN SELECT RAISE(ABORT, 'SIGNATURE_IS_IMMUTABLE'); END;
+
+CREATE TABLE deliveries (
+  id TEXT PRIMARY KEY NOT NULL,
+  df_number TEXT UNIQUE,
+  customer_id TEXT NOT NULL REFERENCES customers(id),
+  document_state TEXT NOT NULL DEFAULT 'draft'
+    CHECK (document_state IN ('draft', 'finalized', 'voided')),
+  business_date TEXT NOT NULL,
+  delivered_by TEXT NOT NULL DEFAULT '',
+  received_by TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  subtotal_centavos INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_centavos >= 0),
+  content_snapshot_json TEXT,
+  render_template_snapshot TEXT,
+  template_version TEXT,
+  signature_status TEXT NOT NULL DEFAULT 'not_required'
+    CHECK (signature_status IN ('not_required', 'pending', 'signed_in_person', 'signed_document_attached', 'declined', 'no_response')),
+  pdf_state TEXT NOT NULL DEFAULT 'not_generated'
+    CHECK (pdf_state IN ('not_generated', 'pending', 'ready', 'error')),
+  share_state TEXT NOT NULL DEFAULT 'not_shared'
+    CHECK (share_state IN ('not_shared', 'shared')),
+  created_at TEXT NOT NULL,
+  finalized_at TEXT,
+  voided_at TEXT,
+  void_reason TEXT
+);
+CREATE INDEX deliveries_customer_idx ON deliveries(customer_id, created_at);
+
+CREATE TABLE delivery_lines (
+  id TEXT PRIMARY KEY NOT NULL,
+  delivery_id TEXT NOT NULL REFERENCES deliveries(id),
+  item_id TEXT NOT NULL REFERENCES items(id),
+  description_snapshot TEXT NOT NULL,
+  quantity_integer INTEGER NOT NULL CHECK (quantity_integer > 0),
+  unit_price_centavos INTEGER NOT NULL CHECK (unit_price_centavos >= 0),
+  amount_centavos INTEGER NOT NULL CHECK (amount_centavos >= 0),
+  price_source TEXT NOT NULL CHECK (price_source IN ('base', 'customer', 'override')),
+  override_reason TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX delivery_lines_one_item ON delivery_lines(delivery_id, item_id);
+
+CREATE TABLE quotations (
+  id TEXT PRIMARY KEY NOT NULL,
+  qt_number TEXT UNIQUE,
+  customer_id TEXT NOT NULL REFERENCES customers(id),
+  document_state TEXT NOT NULL DEFAULT 'draft'
+    CHECK (document_state IN ('draft', 'finalized', 'voided')),
+  business_date TEXT NOT NULL,
+  valid_until TEXT NOT NULL,
+  subtotal_centavos INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_centavos >= 0),
+  discount_type TEXT CHECK (discount_type IN ('fixed', 'percentage')),
+  discount_value INTEGER NOT NULL DEFAULT 0 CHECK (discount_value >= 0),
+  discounted_total_centavos INTEGER NOT NULL DEFAULT 0 CHECK (discounted_total_centavos >= 0),
+  vat_snapshot_json TEXT,
+  content_snapshot_json TEXT,
+  render_template_snapshot TEXT,
+  template_version TEXT,
+  signature_status TEXT NOT NULL DEFAULT 'not_required'
+    CHECK (signature_status IN ('not_required', 'pending', 'signed_in_person', 'signed_document_attached', 'declined', 'no_response')),
+  pdf_state TEXT NOT NULL DEFAULT 'not_generated'
+    CHECK (pdf_state IN ('not_generated', 'pending', 'ready', 'error')),
+  share_state TEXT NOT NULL DEFAULT 'not_shared'
+    CHECK (share_state IN ('not_shared', 'shared')),
+  converted_kind TEXT CHECK (converted_kind IN ('repair', 'delivery')),
+  converted_service_report_id TEXT REFERENCES service_reports(id),
+  converted_delivery_id TEXT REFERENCES deliveries(id),
+  converted_billing_statement_id TEXT REFERENCES billing_statements(id),
+  converted_at TEXT,
+  created_at TEXT NOT NULL,
+  finalized_at TEXT,
+  voided_at TEXT,
+  void_reason TEXT
+);
+CREATE INDEX quotations_customer_idx ON quotations(customer_id, created_at);
+
+CREATE TABLE quotation_lines (
+  id TEXT PRIMARY KEY NOT NULL,
+  quotation_id TEXT NOT NULL REFERENCES quotations(id),
+  line_type TEXT NOT NULL CHECK (line_type IN ('item', 'service')),
+  item_id TEXT REFERENCES items(id),
+  service_id TEXT REFERENCES services(id),
+  description_snapshot TEXT NOT NULL,
+  quantity_integer INTEGER NOT NULL DEFAULT 1 CHECK (quantity_integer > 0),
+  unit_price_centavos INTEGER NOT NULL CHECK (unit_price_centavos >= 0),
+  amount_centavos INTEGER NOT NULL CHECK (amount_centavos >= 0),
+  price_source TEXT NOT NULL CHECK (price_source IN ('base', 'customer', 'override', 'catalog')),
+  override_reason TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX quotation_lines_quotation_idx ON quotation_lines(quotation_id, created_at);
+
+ALTER TABLE stock_transactions ADD COLUMN delivery_id TEXT REFERENCES deliveries(id);
+ALTER TABLE inventory_movements ADD COLUMN delivery_id TEXT REFERENCES deliveries(id);
+ALTER TABLE inventory_movements ADD COLUMN delivery_line_id TEXT REFERENCES delivery_lines(id);
+CREATE UNIQUE INDEX stock_transactions_one_active_delivery_sale
+  ON stock_transactions(delivery_id)
+  WHERE delivery_id IS NOT NULL AND transaction_type = 'sale' AND state = 'active';
+CREATE UNIQUE INDEX inventory_movements_one_delivery_line_sale
+  ON inventory_movements(delivery_line_id)
+  WHERE delivery_line_id IS NOT NULL AND movement_type = 'sale';
+CREATE UNIQUE INDEX inventory_movements_one_delivery_line_reversal
+  ON inventory_movements(delivery_line_id)
+  WHERE delivery_line_id IS NOT NULL AND movement_type = 'reversal';
+
+ALTER TABLE billing_statements ADD COLUMN source_delivery_id TEXT REFERENCES deliveries(id);
+CREATE UNIQUE INDEX billing_statements_one_live_per_delivery
+  ON billing_statements(source_delivery_id)
+  WHERE source_delivery_id IS NOT NULL AND document_state <> 'voided';
+CREATE TRIGGER billing_statements_single_source_insert
+BEFORE INSERT ON billing_statements
+WHEN NEW.service_report_id IS NOT NULL AND NEW.source_delivery_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'BILLING_STATEMENT_SINGLE_SOURCE'); END;
+CREATE TRIGGER billing_statements_single_source_update
+BEFORE UPDATE OF service_report_id, source_delivery_id ON billing_statements
+WHEN NEW.service_report_id IS NOT NULL AND NEW.source_delivery_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'BILLING_STATEMENT_SINGLE_SOURCE'); END;
+
+ALTER TABLE billing_statement_lines ADD COLUMN source_delivery_line_id TEXT REFERENCES delivery_lines(id);
+CREATE UNIQUE INDEX billing_statement_lines_source_delivery_unique
+  ON billing_statement_lines(source_delivery_line_id)
+  WHERE source_delivery_line_id IS NOT NULL;
+`;

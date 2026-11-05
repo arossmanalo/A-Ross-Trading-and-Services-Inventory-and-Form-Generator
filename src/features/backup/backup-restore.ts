@@ -59,6 +59,7 @@ export function parseBackupPackage(bytes: Uint8Array): ParsedBackupPackage {
     ...(manifest.schemaVersion < 9 ? ['signature_drafts'] : []),
     ...(manifest.schemaVersion < 10 ? ['service_report_equipment'] : []),
     ...(manifest.schemaVersion < 11 ? ['service_report_machine_service'] : []),
+    ...(manifest.schemaVersion < 12 ? ['quotations', 'quotation_lines', 'deliveries', 'delivery_lines'] : []),
   ];
   if (tableKeys.some(table => !DATA_TABLES.includes(table as BackupTableName)) || DATA_TABLES.some(table => !tableKeys.includes(table) && !legacyMissing.includes(table))) {
     throw new Error('Backup table set does not match the supported schema.');
@@ -142,6 +143,8 @@ export async function restoreBackupPackage(db: SQLiteDatabase, bytes: Uint8Array
       // carried in the package. Make their retry state explicit after import.
       await tx.runAsync("UPDATE service_reports SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized'");
       await tx.runAsync("UPDATE billing_statements SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized'");
+      await tx.runAsync("UPDATE quotations SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized'");
+      await tx.runAsync("UPDATE deliveries SET pdf_state='not_generated',share_state='not_shared' WHERE document_state='finalized'");
       await tx.runAsync("UPDATE payments SET pdf_state='not_generated',share_state='not_shared' WHERE state='active'");
       await tx.runAsync(
         'INSERT INTO backup_manifests(id,filename,schema_version,highest_revision,record_counts_json,checksum,created_at) VALUES(?,?,?,?,?,?,?)',
@@ -275,6 +278,7 @@ function parseManifest(value: unknown): BackupFileManifest {
     if (table === 'signature_drafts') return value.schemaVersion >= 9;
     if (table === 'service_report_equipment') return value.schemaVersion >= 10;
     if (table === 'service_report_machine_service') return value.schemaVersion >= 11;
+    if (['quotations', 'quotation_lines', 'deliveries', 'delivery_lines'].includes(table)) return value.schemaVersion >= 12;
     return true;
   });
   if (countKeys.some(table => !expectedCountTables.includes(table as BackupTableName)) || expectedCountTables.some(table => !countKeys.includes(table))) throw new Error('Backup record counts are invalid.');
@@ -369,6 +373,19 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
       }
     }
     tables.service_report_machine_service = machineServices;
+  }
+  if (parsed.manifest.schemaVersion < 12) {
+    // Schema 12 added quotations and deliveries, their links, and two sequences.
+    tables.quotations = [];
+    tables.quotation_lines = [];
+    tables.deliveries = [];
+    tables.delivery_lines = [];
+    tables.billing_statements = tables.billing_statements.map(row => ({ source_delivery_id: null, ...row }));
+    tables.billing_statement_lines = tables.billing_statement_lines.map(row => ({ source_delivery_line_id: null, ...row }));
+    tables.stock_transactions = tables.stock_transactions.map(row => ({ delivery_id: null, ...row }));
+    tables.inventory_movements = tables.inventory_movements.map(row => ({ delivery_id: null, delivery_line_id: null, ...row }));
+    const known = new Set(tables.sequences.map(row => String(row.name)));
+    tables.sequences = [...tables.sequences, ...['QT', 'DF'].filter(name => !known.has(name)).map(name => ({ name, high_water_mark: 0 }))];
   }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };

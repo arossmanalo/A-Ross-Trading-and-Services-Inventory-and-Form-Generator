@@ -70,10 +70,14 @@ export const DATA_TABLES = [
   'service_report_service_usage',
   'service_report_equipment',
   'service_report_machine_service',
+  'deliveries',
+  'delivery_lines',
   'billing_statements',
   'expenses',
   'billing_statement_lines',
   'payments',
+  'quotations',
+  'quotation_lines',
   'stock_transactions',
   'inventory_movements',
   'document_attachments',
@@ -113,6 +117,8 @@ export async function getBackupStatus(db: SQLiteDatabase, now = new Date()): Pro
         SELECT finalized_at FROM service_reports WHERE finalized_at IS NOT NULL
         UNION ALL SELECT finalized_at FROM billing_statements WHERE finalized_at IS NOT NULL
         UNION ALL SELECT finalized_at FROM payments WHERE finalized_at IS NOT NULL
+        UNION ALL SELECT finalized_at FROM quotations WHERE finalized_at IS NOT NULL
+        UNION ALL SELECT finalized_at FROM deliveries WHERE finalized_at IS NOT NULL
       )`,
     ),
   ]);

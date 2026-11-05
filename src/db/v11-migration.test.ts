@@ -86,7 +86,7 @@ describe('upgrading a v10 database to per-machine service rows', () => {
   afterEach(() => raw.close());
 
   it('moves to version 11 and gives each machine its own row at the old rate', () => {
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 11 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 12 });
     const rows = raw.prepare("SELECT equipment_id, rate_centavos, machine_label, legacy_service_usage_id FROM service_report_machine_service WHERE service_report_id='csr' ORDER BY equipment_id").all();
     expect(rows).toEqual([
       { equipment_id: 'dryer', rate_centavos: 50000, machine_label: 'Dryer · Back room', legacy_service_usage_id: 'usage' },
