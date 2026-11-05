@@ -55,6 +55,17 @@ const StatementRow = memo(function StatementRow({ statement, showTotal }: { stat
               <Text style={styles.csrChipText}>{statement.serviceReportNumber ?? 'Draft CSR'} ›</Text>
             </Pressable>
           ) : null}
+          {statement.deliveryId ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Open linked ${statement.deliveryNumber ?? 'draft delivery'}`}
+              hitSlop={6}
+              onPress={() => router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': statement.deliveryId! } })}
+              style={styles.csrChip}
+            >
+              <Text style={styles.csrChipText}>{statement.deliveryNumber ?? 'Draft delivery'} ›</Text>
+            </Pressable>
+          ) : null}
           {payments.length ? (
             <Pressable
               accessibilityRole="link"

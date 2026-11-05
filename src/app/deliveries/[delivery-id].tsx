@@ -7,7 +7,9 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { ActionButton } from '@/components/action-button';
 import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
+import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
+import { createBillingStatementDraft } from '@/features/billing-statements/billing-statement-repository';
 import { finalizeAndRenderDelivery, retryDeliveryPdf } from '@/features/deliveries/delivery-pdf';
 import { deleteDeliveryDraft, getDelivery, removeDeliveryLine, updateDeliveryDraft, updateDeliveryLineQuantity } from '@/features/deliveries/delivery-repository';
 import type { DeliveryDetail } from '@/features/deliveries/delivery-types';
@@ -103,6 +105,14 @@ export default function DeliveryDetailScreen() {
     });
   }, [db, delivery?.hasSignedVersion, deliveryId, run]);
 
+  const createStatement = useCallback(() => {
+    if (!delivery) return;
+    void run(async () => {
+      const statementId = await createBillingStatementDraft(db, { customerId: delivery.customerId, deliveryId: delivery.id, businessDate: getLocalBusinessDate(), reuseExistingLinkedDraft: true });
+      router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statementId } });
+    });
+  }, [db, delivery, run]);
+
   if (loading && !delivery) return <View style={styles.centered}><ActivityIndicator color={colors.brandBlue} size="large" /></View>;
   if (!delivery) return <View style={styles.centered}><Text selectable style={styles.error}>{error ?? 'Delivery was not found.'}</Text></View>;
 
@@ -175,6 +185,19 @@ export default function DeliveryDetailScreen() {
           <Text selectable style={styles.help}>Prices are kept for billing and are not printed on the delivery form.</Text>
         </View>
 
+        {delivery.linkedStatements.length ? (
+          <View style={styles.card}>
+            <Text selectable style={styles.sectionTitle}>Billing Statement</Text>
+            {delivery.linkedStatements.map((statement) => (
+              <Pressable key={statement.id} accessibilityRole="link" accessibilityLabel={`Open ${statement.bsNumber ?? 'draft Billing Statement'}`} onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statement.id } })} style={styles.linkedRow}>
+                <Text selectable style={styles.lineTitle}>{statement.bsNumber ?? 'Draft statement'} ›</Text>
+                <Text selectable style={styles.help}>{statement.documentState} · {formatCentavos(statement.totalCentavos)}</Text>
+              </Pressable>
+            ))}
+            {finalized && delivery.pdfState === 'ready' ? <Text selectable style={styles.help}>A finalized statement is sent in the same PDF, after this delivery form.</Text> : null}
+          </View>
+        ) : null}
+
         {draft ? (
           <View style={styles.actions}>
             {shortages.length ? <Text selectable style={styles.warning}>Stock is short for {shortages.map((line) => line.description).join(', ')}. Reduce the quantity or restock before finalizing.</Text> : null}
@@ -196,6 +219,7 @@ export default function DeliveryDetailScreen() {
               {delivery.pdfState === 'ready'
                 ? <ActionButton disabled={busy} onPress={() => void run(async () => { await shareBundle(db, await getDeliveryShareBundle(db, delivery.id)); })}>Share delivery PDF</ActionButton>
                 : <ActionButton disabled={busy} onPress={() => void run(() => retryDeliveryPdf(db, delivery.id))}>Retry delivery PDF</ActionButton>}
+              {delivery.linkedStatements.length ? null : <ActionButton disabled={busy} onPress={createStatement}>Create Billing Statement</ActionButton>}
               <ActionButton disabled={busy} variant="danger" onPress={() => router.push({ pathname: '/deliveries/void', params: { deliveryId: delivery.id } })}>Void delivery</ActionButton>
             </View>
           </>
@@ -231,6 +255,7 @@ const styles = StyleSheet.create({
   notes: { minHeight: 72 },
   section: { gap: 10 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  linkedRow: { gap: 3, paddingVertical: 6 },
   line: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
   lineCopy: { flex: 1, minWidth: 160, gap: 3 },
   lineTitle: { color: colors.label, fontSize: 14, fontWeight: '800' },

@@ -12,6 +12,7 @@ import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
 import {
   DEFAULT_DELIVERY_CRITERIA,
+  DELIVERY_BILLING_OPTIONS,
   DELIVERY_SORT_OPTIONS,
   DELIVERY_STATE_OPTIONS,
   PERIOD_OPTIONS,
@@ -39,6 +40,17 @@ const DeliveryRow = memo(function DeliveryRow({ delivery, showTotal }: { deliver
         </View>
         <Text selectable style={styles.customer}>{delivery.customerName}</Text>
         <Text selectable style={styles.meta}>{delivery.businessDate}</Text>
+        {delivery.linkedStatements.length ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open ${delivery.linkedStatements[0].bsNumber ?? 'draft Billing Statement'}`}
+            hitSlop={6}
+            onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': delivery.linkedStatements[0].id } })}
+            style={styles.billingChip}
+          >
+            <Text style={styles.billingChipText}>{delivery.linkedStatements[0].bsNumber ?? 'Draft statement'} ›</Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.stateCopy}>
         <Text selectable style={styles.total}>{showTotal ? formatCentavos(delivery.totalCentavos) : '₱ ••••••'}</Text>
@@ -117,6 +129,7 @@ export default function DeliveriesScreen() {
           />
           <View style={styles.filters}>
             <Dropdown label="STATUS" value={criteria.state} options={DELIVERY_STATE_OPTIONS} onChange={(value) => update('state', value)} />
+            <Dropdown label="BILLING" value={criteria.billing} options={DELIVERY_BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
             <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
             <Dropdown label="SORT BY" value={criteria.sort} options={DELIVERY_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
           </View>
@@ -148,6 +161,8 @@ export default function DeliveriesScreen() {
 const styles = StyleSheet.create({
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   resultLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  billingChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.brandBlue, backgroundColor: '#eaf2ff' },
+  billingChipText: { color: colors.brandNavy, fontSize: 11, fontWeight: '800' },
   content: { paddingHorizontal: 18, paddingBottom: 44 },
   emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
   header: { gap: 10, paddingVertical: 18 },
