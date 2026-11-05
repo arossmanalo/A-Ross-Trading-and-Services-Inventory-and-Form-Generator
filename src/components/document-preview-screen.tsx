@@ -18,7 +18,7 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { ActionButton } from '@/components/action-button';
-import { getBillingStatementPreview, listShareableStatementsForReport } from '@/features/billing-statements/billing-statement-pdf';
+import { getBillingStatementPreview, listShareableStatementsForDelivery, listShareableStatementsForReport } from '@/features/billing-statements/billing-statement-pdf';
 import { base64ToBytes, bytesToBase64 } from '@/features/backup/zip';
 import { mergePdfs } from '@/features/documents/pdf-merge';
 import { printHtmlToPdf } from '@/features/documents/pdf-output';
@@ -65,9 +65,9 @@ async function renderPagesPdf(pages: readonly PagePreview[]): Promise<string> {
 }
 
 /**
- * The pages sent with a document: a finalized CSR is followed by its finalized
- * Billing Statements, and a finalized Billing Statement is preceded by its
- * finalized CSR. Each linked document uses its signed version when it has one.
+ * The pages sent with a document: a finalized CSR or delivery is followed by its
+ * finalized Billing Statements, and a finalized Billing Statement is preceded by
+ * its finalized CSR or delivery. Each linked document uses its signed version when it has one.
  * Drafts and documents with no link go alone.
  */
 async function collectLinkedPages(
@@ -78,13 +78,25 @@ async function collectLinkedPages(
   const before: PagePreview[] = [];
   const after: PagePreview[] = [];
   if (kind === 'billing_statement') {
-    const linked = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null }>(
-      'SELECT b.service_report_id, r.document_state AS csr_state FROM billing_statements b LEFT JOIN service_reports r ON r.id = b.service_report_id WHERE b.id = ?',
+    const linked = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null; source_delivery_id: string | null; delivery_state: string | null }>(
+      `SELECT b.service_report_id, r.document_state AS csr_state, b.source_delivery_id, d.document_state AS delivery_state
+       FROM billing_statements b
+       LEFT JOIN service_reports r ON r.id = b.service_report_id
+       LEFT JOIN deliveries d ON d.id = b.source_delivery_id
+       WHERE b.id = ?`,
       documentId,
     );
     if (linked?.service_report_id && linked.csr_state === 'finalized') {
       const report = await getServiceReportPreview(db, linked.service_report_id);
       before.push({ html: withDocumentHeaderLayout(report.html), kind: 'csr' });
+    } else if (linked?.source_delivery_id && linked.delivery_state === 'finalized') {
+      const delivery = await getDeliveryPreview(db, linked.source_delivery_id);
+      before.push({ html: withDocumentHeaderLayout(delivery.html), kind: 'delivery' });
+    }
+  } else if (kind === 'delivery') {
+    for (const statement of await listShareableStatementsForDelivery(db, documentId)) {
+      const preview = await getBillingStatementPreview(db, statement.id);
+      after.push({ html: withDocumentHeaderLayout(preview.html), kind: 'billing_statement' });
     }
   } else if (kind === 'csr') {
     for (const statement of await listShareableStatementsForReport(db, documentId)) {

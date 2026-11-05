@@ -5,7 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12 } from '@/db/schema';
 
 let idCounter = 0;
 const files = vi.hoisted(() => new Map<string, string>());
@@ -105,7 +105,7 @@ describe('sending a CSR and its billing statement as one PDF', () => {
     printer.mockClear();
     vi.useFakeTimers({ now: new Date('2026-09-05T12:00:00.000Z') });
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}`);
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}${SCHEMA_V12}`);
     raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','0')");
     raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',0),('BS',0),('PA',0)");
     raw.prepare("INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner',?,?)").run(NOW, NOW);

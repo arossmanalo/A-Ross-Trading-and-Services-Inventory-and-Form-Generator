@@ -4,12 +4,14 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
 import { allocateDocumentNumber } from '@/db/sequences';
 import { validateBusinessDate } from '@/domain/business-date';
+import { deleteLinkedDeliveryStatementDrafts, syncLinkedDeliveryLines } from '@/features/billing-statements/billing-statement-repository';
 import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import { DELIVERY_TEMPLATE_VERSION, buildDeliveryHtml, type DeliveryRenderSnapshot } from '@/features/deliveries/delivery-template';
 import type {
   DeliveryDetail,
   DeliveryDraftInput,
   DeliveryLine,
+  DeliveryLinkedStatement,
   DeliveryListItem,
   DeliveryPriceSource,
   DeliveryState,
@@ -66,14 +68,16 @@ export async function listDeliveries(db: SQLiteDatabase): Promise<DeliveryListIt
   );
   const descriptions = new Map<string, string[]>();
   for (const line of lineRows) descriptions.set(line.delivery_id, [...(descriptions.get(line.delivery_id) ?? []), line.description_snapshot]);
+  const linked = await loadLinkedStatements(db);
   return rows.map((row) => ({
-    ...mapSummary(row),
+    ...mapSummary(row, linked.get(row.id) ?? []),
     searchText: [
       row.df_number ?? 'draft',
       row.customer_name,
       row.business_date,
       row.document_state,
       (row.subtotal_centavos / 100).toFixed(2),
+      ...(linked.get(row.id) ?? []).map((statement) => statement.bsNumber ?? 'draft statement'),
       ...(descriptions.get(row.id) ?? []),
     ].join(' ').toLowerCase(),
   }));
@@ -90,7 +94,7 @@ export async function getDelivery(db: SQLiteDatabase, deliveryId: string): Promi
   );
   if (!row) return null;
   return {
-    ...mapSummary(row),
+    ...mapSummary(row, (await loadLinkedStatements(db, deliveryId)).get(deliveryId) ?? []),
     customerId: row.customer_id,
     customerAddress: row.customer_address,
     deliveredBy: row.delivered_by,
@@ -177,6 +181,7 @@ export async function addDeliveryItemLine(
       overridden ? 'override' : row.customer_price_centavos === null ? 'base' : 'customer', reason, now,
     );
     await refreshTotal(tx, deliveryId);
+    await syncLinkedDeliveryLines(tx, deliveryId);
     await auditAndRevise(tx, 'delivery.item_added', deliveryId, { itemId: input.itemId, quantity: input.quantity, overridden }, now);
   });
 }
@@ -191,6 +196,7 @@ export async function updateDeliveryLineQuantity(db: SQLiteDatabase, deliveryId:
     if (!line) throw new Error('Only a draft delivery can be edited.');
     await tx.runAsync('UPDATE delivery_lines SET quantity_integer = ?, amount_centavos = ? WHERE id = ?', quantity, safeMultiply(line.unit_price_centavos, quantity), lineId);
     await refreshTotal(tx, deliveryId);
+    await syncLinkedDeliveryLines(tx, deliveryId);
     await auditAndRevise(tx, 'delivery.quantity_changed', deliveryId, { lineId, quantity }, new Date().toISOString());
   });
 }
@@ -199,6 +205,8 @@ export async function removeDeliveryLine(db: SQLiteDatabase, deliveryId: string,
   await db.withExclusiveTransactionAsync(async (tx) => {
     const draft = await tx.getFirstAsync<{ id: string }>("SELECT id FROM deliveries WHERE id = ? AND document_state = 'draft'", deliveryId);
     if (!draft) throw new Error('Only a draft delivery can be edited.');
+    // The linked statement's line must go before the delivery line it points at.
+    await syncLinkedDeliveryLines(tx, deliveryId, undefined, [lineId]);
     const result = await tx.runAsync('DELETE FROM delivery_lines WHERE id = ? AND delivery_id = ?', lineId, deliveryId);
     if (result.changes !== 1) throw new Error('Delivery line was not found.');
     await refreshTotal(tx, deliveryId);
@@ -210,8 +218,7 @@ export async function deleteDeliveryDraft(db: SQLiteDatabase, deliveryId: string
   await db.withExclusiveTransactionAsync(async (tx) => {
     const draft = await tx.getFirstAsync<{ id: string }>("SELECT id FROM deliveries WHERE id = ? AND document_state = 'draft'", deliveryId);
     if (!draft) throw new Error('Only a draft delivery can be deleted.');
-    const linked = await tx.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM billing_statements WHERE source_delivery_id = ?', deliveryId);
-    if ((linked?.count ?? 0) > 0) throw new Error('Delete the linked Billing Statement draft first.');
+    await deleteLinkedDeliveryStatementDrafts(tx, deliveryId, new Date().toISOString());
     await tx.runAsync('DELETE FROM delivery_lines WHERE delivery_id = ?', deliveryId);
     await tx.runAsync('DELETE FROM deliveries WHERE id = ?', deliveryId);
     await auditAndRevise(tx, 'delivery.draft_deleted', deliveryId, {}, new Date().toISOString());
@@ -380,7 +387,7 @@ async function refreshTotal(db: SQLiteDatabase, deliveryId: string): Promise<voi
   await db.runAsync("UPDATE deliveries SET subtotal_centavos = ? WHERE id = ? AND document_state = 'draft'", row?.subtotal ?? 0, deliveryId);
 }
 
-function mapSummary(row: SummaryRow): DeliverySummary {
+function mapSummary(row: SummaryRow, linkedStatements: DeliveryLinkedStatement[]): DeliverySummary {
   return {
     id: row.id,
     dfNumber: row.df_number,
@@ -389,6 +396,7 @@ function mapSummary(row: SummaryRow): DeliverySummary {
     businessDate: row.business_date,
     totalCentavos: row.subtotal_centavos,
     pdfState: row.pdf_state,
+    linkedStatements,
   };
 }
 
@@ -405,4 +413,22 @@ function safeMultiply(price: number, quantity: number): number {
 async function auditAndRevise(db: SQLiteDatabase, eventType: string, entityId: string, details: Record<string, string | number | boolean | null>, createdAt: string): Promise<void> {
   await appendAuditEvent(db, { eventType, entityType: 'delivery', entityId, details, createdAt });
   await incrementDatabaseRevision(db);
+}
+
+async function loadLinkedStatements(db: SQLiteDatabase, deliveryId?: string): Promise<Map<string, DeliveryLinkedStatement[]>> {
+  const rows = await db.getAllAsync<{ id: string; source_delivery_id: string; bs_number: string | null; document_state: DeliveryState; discounted_total_centavos: number }>(
+    `SELECT id, source_delivery_id, bs_number, document_state, discounted_total_centavos
+     FROM billing_statements
+     WHERE source_delivery_id IS NOT NULL AND document_state <> 'voided' AND (? IS NULL OR source_delivery_id = ?)
+     ORDER BY created_at ASC, rowid ASC`,
+    deliveryId ?? null,
+    deliveryId ?? null,
+  );
+  const grouped = new Map<string, DeliveryLinkedStatement[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.source_delivery_id) ?? [];
+    list.push({ id: row.id, bsNumber: row.bs_number, documentState: row.document_state, totalCentavos: row.discounted_total_centavos });
+    grouped.set(row.source_delivery_id, list);
+  }
+  return grouped;
 }

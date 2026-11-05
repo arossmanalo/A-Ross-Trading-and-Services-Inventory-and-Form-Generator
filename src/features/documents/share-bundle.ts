@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { appendAuditEvent, incrementDatabaseRevision } from '@/db/revision';
-import { listShareableStatementsForReport, retryBillingStatementPdf } from '@/features/billing-statements/billing-statement-pdf';
+import { listShareableStatementsForDelivery, listShareableStatementsForReport, retryBillingStatementPdf } from '@/features/billing-statements/billing-statement-pdf';
 import { resolveShareFileName } from '@/features/documents/share-file-name';
 import { sharePdfFiles } from '@/features/documents/share-pdf';
 import { retryDeliveryPdf } from '@/features/deliveries/delivery-pdf';
@@ -58,12 +58,16 @@ export async function getServiceReportShareBundle(db: SQLiteDatabase, reportId: 
   return buildBundle(db, primary, [primary, ...statements.map((statement): BundleDocument => ({ kind: 'billing_statement', id: statement.id }))]);
 }
 
-/** A finalized delivery is sent as its own form. */
+/**
+ * A finalized delivery is sent as one PDF: the delivery form first, then each
+ * finalized Billing Statement that bills it. A delivery with no statement is sent alone.
+ */
 export async function getDeliveryShareBundle(db: SQLiteDatabase, deliveryId: string): Promise<ShareBundle> {
   const delivery = await db.getFirstAsync<{ document_state: string }>('SELECT document_state FROM deliveries WHERE id = ?', deliveryId);
   if (!delivery || delivery.document_state !== 'finalized') throw new Error('Only a finalized delivery can be shared.');
   const own: BundleDocument = { kind: 'delivery', id: deliveryId };
-  return buildBundle(db, own, [own]);
+  const statements = await listShareableStatementsForDelivery(db, deliveryId);
+  return buildBundle(db, own, [own, ...statements.map((statement): BundleDocument => ({ kind: 'billing_statement', id: statement.id }))]);
 }
 
 /** A finalized quotation is sent on its own. */
@@ -75,14 +79,16 @@ export async function getQuotationShareBundle(db: SQLiteDatabase, quotationId: s
 }
 
 /**
- * A finalized Billing Statement billed against a finalized CSR is sent as one
- * PDF with the CSR first and the statement second. Without a CSR (or with a
- * draft or voided one) the statement is sent alone.
+ * A finalized Billing Statement billed against a finalized CSR (or delivery) is
+ * sent as one PDF with that document first and the statement second. Without
+ * one (or with a draft or voided one) the statement is sent alone.
  */
 export async function getBillingStatementShareBundle(db: SQLiteDatabase, statementId: string): Promise<ShareBundle> {
-  const statement = await db.getFirstAsync<{ document_state: string; service_report_id: string | null; csr_state: string | null }>(
-    `SELECT b.document_state, b.service_report_id, r.document_state AS csr_state
-     FROM billing_statements b LEFT JOIN service_reports r ON r.id = b.service_report_id
+  const statement = await db.getFirstAsync<{ document_state: string; service_report_id: string | null; csr_state: string | null; source_delivery_id: string | null; delivery_state: string | null }>(
+    `SELECT b.document_state, b.service_report_id, r.document_state AS csr_state, b.source_delivery_id, d.document_state AS delivery_state
+     FROM billing_statements b
+     LEFT JOIN service_reports r ON r.id = b.service_report_id
+     LEFT JOIN deliveries d ON d.id = b.source_delivery_id
      WHERE b.id = ?`,
     statementId,
   );
@@ -90,7 +96,9 @@ export async function getBillingStatementShareBundle(db: SQLiteDatabase, stateme
   const own: BundleDocument = { kind: 'billing_statement', id: statementId };
   const documents: BundleDocument[] = statement.service_report_id && statement.csr_state === 'finalized'
     ? [{ kind: 'service_report', id: statement.service_report_id }, own]
-    : [own];
+    : statement.source_delivery_id && statement.delivery_state === 'finalized'
+      ? [{ kind: 'delivery', id: statement.source_delivery_id }, own]
+      : [own];
   return buildBundle(db, own, documents);
 }
 

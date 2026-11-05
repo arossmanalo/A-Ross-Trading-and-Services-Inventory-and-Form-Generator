@@ -16,9 +16,9 @@ import { createInitialPaymentRecord, type PaymentRenderResult } from '@/features
 import { kindLabel, methodLabel } from '@/features/payments/payment-template';
 import type { InitialPaymentSelection } from '@/features/payments/payment-types';
 
-type SummaryRow = { id: string; bs_number: string | null; customer_name: string; service_report_id: string | null; csr_number: string | null; document_state: BillingDocumentState; business_date: string; discounted_total_centavos: number; pdf_state: BillingStatementSummary['pdfState'] };
+type SummaryRow = { id: string; bs_number: string | null; customer_name: string; service_report_id: string | null; csr_number: string | null; source_delivery_id: string | null; delivery_number: string | null; document_state: BillingDocumentState; business_date: string; discounted_total_centavos: number; pdf_state: BillingStatementSummary['pdfState'] };
 type DetailRow = SummaryRow & { customer_id: string; customer_address: string; service_report_id: string | null; csr_number: string | null; subtotal_centavos: number; discount_type: BillingDiscountType; discount_value: number; payment_choice: BillingStatementDetail['paymentChoice']; signature_status: string; has_signed_version?: number; share_state: 'not_shared' | 'shared'; finalized_at: string | null };
-type LineRow = { id: string; line_type: BillingStatementLine['lineType']; source_csr_usage_id: string | null; source_csr_service_usage_id: string | null; source_csr_machine_service_id: string | null; item_id: string | null; service_id: string | null; expense_id: string | null; description_snapshot: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; price_source: BillingPriceSource | null; override_reason: string | null; created_at: string };
+type LineRow = { id: string; line_type: BillingStatementLine['lineType']; source_delivery_line_id: string | null; source_csr_usage_id: string | null; source_csr_service_usage_id: string | null; source_csr_machine_service_id: string | null; item_id: string | null; service_id: string | null; expense_id: string | null; description_snapshot: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; price_source: BillingPriceSource | null; override_reason: string | null; created_at: string };
 type ExpenseRow = { id: string; description: string; actual_cost_centavos: number; billable: number; billed_amount_centavos: number | null };
 type FinalLineRow = LineRow & { unit_label: string | null; item_active: number | null; current_stock: number | null; base_selling_price_centavos: number | null; customer_price_centavos: number | null; service_active: number | null; base_rate_centavos: number | null };
 
@@ -94,7 +94,7 @@ export async function assertLinkedCsrChargesAreSourced(db: SQLiteDatabase, repor
 }
 
 export async function listBillingStatements(db: SQLiteDatabase): Promise<BillingStatementListItem[]> {
-  const rows = await db.getAllAsync<SummaryRow>(`SELECT b.id,b.bs_number,c.name AS customer_name,b.service_report_id,r.csr_number,b.document_state,b.business_date,b.discounted_total_centavos,b.pdf_state FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id ORDER BY b.created_at DESC`);
+  const rows = await db.getAllAsync<SummaryRow>(`SELECT b.id,b.bs_number,c.name AS customer_name,b.service_report_id,r.csr_number,b.source_delivery_id,d.df_number AS delivery_number,b.document_state,b.business_date,b.discounted_total_centavos,b.pdf_state FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id LEFT JOIN deliveries d ON d.id=b.source_delivery_id ORDER BY b.created_at DESC`);
   const paymentRows = await db.getAllAsync<{ id: string; pa_number: string; billing_statement_id: string; state: 'active' | 'voided' }>(
     'SELECT id,pa_number,billing_statement_id,state FROM payments ORDER BY created_at ASC,rowid ASC',
   );
@@ -113,6 +113,7 @@ export async function listBillingStatements(db: SQLiteDatabase): Promise<Billing
       row.business_date,
       row.document_state,
       row.csr_number ?? (row.service_report_id ? 'draft csr' : ''),
+      row.delivery_number ?? (row.source_delivery_id ? 'draft delivery' : ''),
       (row.discounted_total_centavos / 100).toFixed(2),
       ...payments.map((payment) => payment.paNumber),
     ].join(' ').toLowerCase();
@@ -122,11 +123,11 @@ export async function listBillingStatements(db: SQLiteDatabase): Promise<Billing
 
 export async function getBillingStatement(db: SQLiteDatabase, statementId: string): Promise<BillingStatementDetail | null> {
   await syncLinkedDraftStatement(db, statementId);
-  const row = await db.getFirstAsync<DetailRow>(`SELECT b.*,c.name AS customer_name,c.address AS customer_address,r.csr_number,
+  const row = await db.getFirstAsync<DetailRow>(`SELECT b.*,c.name AS customer_name,c.address AS customer_address,r.csr_number,d.df_number AS delivery_number,
     CASE WHEN EXISTS (SELECT 1 FROM signature_captures sc WHERE sc.owner_type='billing_statement' AND sc.owner_id=b.id)
       OR EXISTS (SELECT 1 FROM document_attachments da WHERE da.owner_type='billing_statement' AND da.owner_id=b.id AND da.attachment_type='external_signed_pdf')
       THEN 1 ELSE 0 END AS has_signed_version
-    FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id WHERE b.id=?`, statementId);
+    FROM billing_statements b JOIN customers c ON c.id=b.customer_id LEFT JOIN service_reports r ON r.id=b.service_report_id LEFT JOIN deliveries d ON d.id=b.source_delivery_id WHERE b.id=?`, statementId);
   if (!row) return null;
   const [lines, expenses] = await Promise.all([listLines(db, statementId), listExpenses(db, statementId)]);
   return { ...mapSummary(row), customerId: row.customer_id, customerAddress: row.customer_address, serviceReportId: row.service_report_id, serviceReportNumber: row.csr_number, subtotalCentavos: row.subtotal_centavos, discountType: row.discount_type, discountValue: row.discount_value, paymentChoice: row.payment_choice, signatureStatus: row.signature_status === 'signed_document_attached' ? row.signature_status : row.has_signed_version === 1 ? 'signed_in_person' : row.signature_status, hasSignedVersion: row.has_signed_version === 1, shareState: row.share_state, finalizedAt: row.finalized_at, lines, expenses };
@@ -173,7 +174,8 @@ export async function listCsrsForBilling(db: SQLiteDatabase, customerId: string)
   }));
 }
 
-export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; businessDate: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
+export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; deliveryId?: string; businessDate: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
+  if (input.serviceReportId && input.deliveryId) throw new Error('A Billing Statement links to a CSR or to a delivery, not both.');
   validateBusinessDate(input.businessDate);
   const id = Crypto.randomUUID(); const now = new Date().toISOString();
   let statementId = id;
@@ -183,6 +185,17 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
     if (input.serviceReportId) {
       const report = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM service_reports WHERE id=?', input.serviceReportId);
       if (!report || !['draft', 'finalized'].includes(report.document_state) || report.customer_id !== input.customerId) throw new Error('Select a draft or finalized CSR for the same customer.');
+    }
+    if (input.deliveryId) {
+      const delivery = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM deliveries WHERE id=?', input.deliveryId);
+      if (!delivery || !['draft', 'finalized'].includes(delivery.document_state) || delivery.customer_id !== input.customerId) throw new Error('Select a draft or finalized delivery for the same customer.');
+      const live = await tx.getFirstAsync<{ id: string; document_state: string }>("SELECT id,document_state FROM billing_statements WHERE source_delivery_id=? AND document_state<>'voided'", input.deliveryId);
+      if (live) {
+        if (!(input.reuseExistingLinkedDraft && live.document_state === 'draft')) throw new Error('This delivery already has a Billing Statement.');
+        statementId = live.id;
+        await syncLinkedDeliveryLines(tx, input.deliveryId, live.id);
+        return;
+      }
     }
     if (input.reuseExistingLinkedDraft && input.serviceReportId) {
       const existing = await tx.getFirstAsync<{ id: string }>(
@@ -206,11 +219,12 @@ export async function createBillingStatementDraft(db: SQLiteDatabase, input: { c
         return;
       }
     }
-    await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,business_date,document_state,created_at) VALUES(?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.businessDate, now);
+    await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,source_delivery_id,business_date,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.deliveryId ?? null, input.businessDate, now);
     if (input.serviceReportId) {
       await syncLinkedCsrDraftLines(tx, input.serviceReportId);
     }
-    await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null }, now);
+    if (input.deliveryId) await syncLinkedDeliveryLines(tx, input.deliveryId, id);
+    await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null, deliveryId: input.deliveryId ?? null }, now);
   });
   return statementId;
 }
@@ -375,6 +389,11 @@ export async function syncLinkedCsrDraftLines(db: SQLiteDatabase, serviceReportI
 
 async function syncLinkedDraftStatement(db: SQLiteDatabase, statementId: string): Promise<void> {
   await db.withExclusiveTransactionAsync(async (tx) => {
+    const delivery = await tx.getFirstAsync<{ source_delivery_id: string | null; document_state: BillingDocumentState }>('SELECT source_delivery_id,document_state FROM billing_statements WHERE id=?', statementId);
+    if (delivery?.source_delivery_id && delivery.document_state === 'draft') {
+      if (await syncLinkedDeliveryLines(tx, delivery.source_delivery_id, statementId)) await auditAndRevise(tx, 'billing_statement.delivery_charges_synchronized', statementId, { deliveryId: delivery.source_delivery_id }, new Date().toISOString());
+      return;
+    }
     const linked = await tx.getFirstAsync<{
       service_report_id: string | null;
       statement_state: BillingDocumentState;
@@ -492,9 +511,10 @@ export async function removeBillingLine(db: SQLiteDatabase, statementId: string,
       source_csr_usage_id: string | null;
       source_csr_service_usage_id: string | null;
       source_csr_machine_service_id: string | null;
+      source_delivery_line_id: string | null;
       csr_state: string | null;
     }>(
-      `SELECT l.expense_id,l.source_csr_usage_id,l.source_csr_service_usage_id,l.source_csr_machine_service_id,r.document_state AS csr_state
+      `SELECT l.expense_id,l.source_delivery_line_id,l.source_csr_usage_id,l.source_csr_service_usage_id,l.source_csr_machine_service_id,r.document_state AS csr_state
        FROM billing_statement_lines l
        JOIN billing_statements b ON b.id=l.billing_statement_id
        LEFT JOIN service_reports r ON r.id=b.service_report_id
@@ -503,6 +523,7 @@ export async function removeBillingLine(db: SQLiteDatabase, statementId: string,
       statementId,
     );
     if (!line) throw new Error('Only draft charges can be removed.');
+    if (line.source_delivery_line_id) throw new Error('Delivered items are billed as delivered. Change them on the delivery, not on the statement.');
     if (line.csr_state === 'draft' && (line.source_csr_usage_id || line.source_csr_service_usage_id || line.source_csr_machine_service_id)) {
       throw new Error('Edit the linked CSR draft to change its imported item and service charges.');
     }
@@ -555,6 +576,10 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
       const linkedCsr = await tx.getFirstAsync<{ document_state: string }>('SELECT document_state FROM service_reports WHERE id=?', row.service_report_id);
       if (!linkedCsr || linkedCsr.document_state !== 'finalized') throw new Error('Finalize the linked CSR before finalizing its Billing Statement.');
     }
+    if (row.source_delivery_id) {
+      const linkedDelivery = await tx.getFirstAsync<{ document_state: string }>('SELECT document_state FROM deliveries WHERE id=?', row.source_delivery_id);
+      if (!linkedDelivery || linkedDelivery.document_state !== 'finalized') throw new Error('Finalize the linked delivery before finalizing its Billing Statement.');
+    }
     const lines = await listFinalLines(tx,statementId,row.customer_id); if (!lines.length) throw new Error('Add at least one billable item, service, or expense before finalizing.');
     for (const line of lines) {
       await validateCsrSourceLine(tx, row.service_report_id, line);
@@ -563,7 +588,8 @@ export async function finalizeBillingStatement(db: SQLiteDatabase, statementId: 
     }
     const changed: string[] = []; const changedIds = new Set<string>(); const required = new Map<string,{name:string,quantity:number,stock:number}>();
     for (const line of lines) {
-      if (line.line_type === 'item' && !line.source_csr_usage_id && line.item_id) {
+      // Delivered items already left stock when the delivery was finalized, and their prices are the delivery's.
+      if (line.line_type === 'item' && !line.source_csr_usage_id && !line.source_delivery_line_id && line.item_id) {
         if (line.item_active !== 1) throw new Error(`${line.description_snapshot} is inactive.`);
         const current = line.customer_price_centavos ?? line.base_selling_price_centavos ?? 0;
         if (line.price_source !== 'override' && line.unit_price_centavos !== current) { changed.push(line.description_snapshot); changedIds.add(line.id); }
@@ -597,6 +623,7 @@ export async function voidBillingStatement(db: SQLiteDatabase, statementId: stri
     const uniqueItems=new Set(movements.map((movement)=>movement.item_id)); for(const itemId of uniqueItems) if(!dispositionMap.has(itemId)) throw new Error('Choose a stock disposition for every directly billed item.');
     const original=await tx.getFirstAsync<{ id:string }>("SELECT id FROM stock_transactions WHERE billing_statement_id=? AND transaction_type='sale' AND state='active'",statementId); if(original) await tx.runAsync("UPDATE stock_transactions SET state='voided',voided_at=? WHERE id=?",now,original.id);
     const returned=movements.filter((movement)=>dispositionMap.get(movement.item_id)); if(returned.length){ const reversalId=Crypto.randomUUID(); await tx.runAsync(`INSERT INTO stock_transactions(id,customer_id,billing_statement_id,transaction_type,state,note,created_at) VALUES(?,?,?,'reversal','active',?,?)`,reversalId,row.customer_id,statementId,`Stock returned after voiding ${row.bs_number}`,now); for(const movement of returned) await tx.runAsync(`INSERT INTO inventory_movements(id,item_id,stock_transaction_id,movement_type,quantity_delta_integer,billing_statement_id,description,created_at) VALUES(?,?,?,'reversal',?,?,?,?)`,Crypto.randomUUID(),movement.item_id,reversalId,-movement.quantity_delta_integer,statementId,`Return after voiding ${row.bs_number}: ${movement.description}`,now); }
+    await tx.runAsync('UPDATE billing_statement_lines SET source_delivery_line_id=NULL WHERE billing_statement_id=?',statementId);
     await tx.runAsync("UPDATE billing_statements SET document_state='voided',voided_at=?,void_reason=? WHERE id=?",now,cleanReason,statementId); await auditAndRevise(tx,'billing_statement.voided',statementId,{reason:cleanReason,returnedItemCount:returned.length},now);
   });
 }
@@ -608,8 +635,95 @@ async function getSubtotal(db: SQLiteDatabase, statementId: string): Promise<num
 async function refreshTotals(db: SQLiteDatabase, statementId: string): Promise<void> { const row=await db.getFirstAsync<{ discount_type:BillingDiscountType; discount_value:number }>("SELECT discount_type,discount_value FROM billing_statements WHERE id=? AND document_state='draft'",statementId); if(!row) throw new Error('Only a draft statement can be changed.'); const subtotal=await getSubtotal(db,statementId); const discount=calculateDiscountCentavos(subtotal,toDiscount(row.discount_type,row.discount_value)); await db.runAsync('UPDATE billing_statements SET subtotal_centavos=?,discounted_total_centavos=? WHERE id=?',subtotal,subtotal-discount,statementId); }
 function toDiscount(type: BillingDiscountType,value:number): Discount { return type === 'fixed' ? {type:'fixed',valueCentavos:value} : type === 'percentage' ? {type:'percentage',basisPoints:value} : null; }
 function discountLabel(type: BillingDiscountType,value:number): string|null { return type === 'fixed' ? 'Discount' : type === 'percentage' ? `Discount (${(value/100).toFixed(2).replace(/\.00$/,'')}%)` : null; }
-function mapSummary(row:SummaryRow):BillingStatementSummary{return{id:row.id,bsNumber:row.bs_number,customerName:row.customer_name,serviceReportId:row.service_report_id,serviceReportNumber:row.csr_number,documentState:row.document_state,businessDate:row.business_date,discountedTotalCentavos:row.discounted_total_centavos,pdfState:row.pdf_state};}
-function mapLine(row:LineRow):BillingStatementLine{return{id:row.id,lineType:row.line_type,sourceCsrUsageId:row.source_csr_usage_id,sourceCsrServiceUsageId:row.source_csr_service_usage_id,sourceCsrMachineServiceId:row.source_csr_machine_service_id,itemId:row.item_id,serviceId:row.service_id,expenseId:row.expense_id,description:row.description_snapshot,quantity:row.quantity_integer,unitPriceCentavos:row.unit_price_centavos,amountCentavos:row.amount_centavos,priceSource:row.price_source,overrideReason:row.override_reason};}
+function mapSummary(row:SummaryRow):BillingStatementSummary{return{id:row.id,bsNumber:row.bs_number,customerName:row.customer_name,serviceReportId:row.service_report_id,serviceReportNumber:row.csr_number,deliveryId:row.source_delivery_id,deliveryNumber:row.delivery_number,documentState:row.document_state,businessDate:row.business_date,discountedTotalCentavos:row.discounted_total_centavos,pdfState:row.pdf_state};}
+function mapLine(row:LineRow):BillingStatementLine{return{id:row.id,sourceDeliveryLineId:row.source_delivery_line_id,lineType:row.line_type,sourceCsrUsageId:row.source_csr_usage_id,sourceCsrServiceUsageId:row.source_csr_service_usage_id,sourceCsrMachineServiceId:row.source_csr_machine_service_id,itemId:row.item_id,serviceId:row.service_id,expenseId:row.expense_id,description:row.description_snapshot,quantity:row.quantity_integer,unitPriceCentavos:row.unit_price_centavos,amountCentavos:row.amount_centavos,priceSource:row.price_source,overrideReason:row.override_reason};}
 function assertMoney(value:number,label:string):void{if(!Number.isSafeInteger(value)||value<0)throw new Error(`${label} must be a non-negative amount.`);}
 function safeMultiply(price:number,quantity:number):number{const value=price*quantity;if(!Number.isSafeInteger(value)||value<0)throw new Error('Line amount is too large.');return value;}
 async function auditAndRevise(db:SQLiteDatabase,eventType:string,entityId:string,details:Record<string,string|number|boolean|null>,createdAt:string){await appendAuditEvent(db,{eventType,entityType:'billing_statement',entityId,details,createdAt});await incrementDatabaseRevision(db);}
+
+type DeliverySourceRow = { id: string; item_id: string; description_snapshot: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; price_source: 'base' | 'customer' | 'override'; override_reason: string | null };
+type ExistingDeliveryLine = { id: string; source_delivery_line_id: string; quantity_integer: number; unit_price_centavos: number; amount_centavos: number; description_snapshot: string; price_source: string | null; override_reason: string | null };
+
+/**
+ * Keeps a draft Billing Statement's delivery lines equal to the delivery's lines.
+ * Only rows with a delivery source are touched; direct lines on the statement
+ * are left alone. Returns true when something changed.
+ */
+export async function syncLinkedDeliveryLines(db: SQLiteDatabase, deliveryId: string, onlyStatementId?: string, excludedLineIds: readonly string[] = []): Promise<boolean> {
+  const statements = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM billing_statements WHERE source_delivery_id=? AND document_state='draft'${onlyStatementId ? ' AND id=?' : ''}`,
+    ...(onlyStatementId ? [deliveryId, onlyStatementId] : [deliveryId]),
+  );
+  if (!statements.length) return false;
+  const sources = await db.getAllAsync<DeliverySourceRow>(
+    'SELECT id,item_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason FROM delivery_lines WHERE delivery_id=? ORDER BY created_at,rowid',
+    deliveryId,
+  );
+  // A delivery line about to be deleted is excluded so its statement line goes first.
+  const billable = sources.filter((source) => !excludedLineIds.includes(source.id));
+  const wanted = new Set(billable.map((source) => source.id));
+  const now = new Date().toISOString();
+  let changed = false;
+  for (const statement of statements) {
+    const existing = await db.getAllAsync<ExistingDeliveryLine>(
+      'SELECT id,source_delivery_line_id,quantity_integer,unit_price_centavos,amount_centavos,description_snapshot,price_source,override_reason FROM billing_statement_lines WHERE billing_statement_id=? AND source_delivery_line_id IS NOT NULL',
+      statement.id,
+    );
+    const bySource = new Map(existing.map((line) => [line.source_delivery_line_id, line]));
+    let statementChanged = false;
+    for (const line of existing) {
+      if (wanted.has(line.source_delivery_line_id)) continue;
+      await db.runAsync('DELETE FROM billing_statement_lines WHERE id=?', line.id);
+      statementChanged = true;
+    }
+    for (const source of billable) {
+      const line = bySource.get(source.id);
+      if (!line) {
+        await db.runAsync(
+          `INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,item_id,source_delivery_line_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at) VALUES(?,?,'item',?,?,?,?,?,?,?,?,?)`,
+          Crypto.randomUUID(), statement.id, source.item_id, source.id, source.description_snapshot, source.quantity_integer, source.unit_price_centavos, source.amount_centavos, source.price_source, source.override_reason, now,
+        );
+        statementChanged = true;
+      } else if (line.quantity_integer !== source.quantity_integer || line.unit_price_centavos !== source.unit_price_centavos || line.amount_centavos !== source.amount_centavos || line.description_snapshot !== source.description_snapshot || line.price_source !== source.price_source || line.override_reason !== source.override_reason) {
+        await db.runAsync(
+          'UPDATE billing_statement_lines SET quantity_integer=?,unit_price_centavos=?,amount_centavos=?,description_snapshot=?,price_source=?,override_reason=? WHERE id=?',
+          source.quantity_integer, source.unit_price_centavos, source.amount_centavos, source.description_snapshot, source.price_source, source.override_reason, line.id,
+        );
+        statementChanged = true;
+      }
+    }
+    if (statementChanged) {
+      await refreshTotals(db, statement.id);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Deletes the draft statements billing a delivery that is itself being deleted. */
+export async function deleteLinkedDeliveryStatementDrafts(db: SQLiteDatabase, deliveryId: string, createdAt: string): Promise<void> {
+  const linked = await db.getAllAsync<{ id: string; document_state: BillingDocumentState }>(
+    "SELECT id,document_state FROM billing_statements WHERE source_delivery_id=? AND document_state<>'voided' ORDER BY created_at,id",
+    deliveryId,
+  );
+  if (linked.some((statement) => statement.document_state !== 'draft')) throw new Error('A delivery with a finalized Billing Statement cannot be deleted.');
+  for (const statement of linked) {
+    await db.runAsync('DELETE FROM billing_statement_lines WHERE billing_statement_id=?', statement.id);
+    await db.runAsync('DELETE FROM expenses WHERE billing_statement_id=?', statement.id);
+    await db.runAsync("DELETE FROM billing_statements WHERE id=? AND document_state='draft'", statement.id);
+    await auditAndRevise(db, 'billing_statement.draft_deleted', statement.id, { deliveryId, deletedWithLinkedDelivery: true }, createdAt);
+  }
+}
+
+/** Deliveries a customer could still be billed for: draft or finalized, with no live statement yet. */
+export async function listDeliveriesForBilling(db: SQLiteDatabase, customerId: string): Promise<Array<{ id: string; dfNumber: string | null; businessDate: string; documentState: 'draft' | 'finalized'; lineCount: number }>> {
+  const rows = await db.getAllAsync<{ id: string; df_number: string | null; business_date: string; document_state: 'draft' | 'finalized'; line_count: number }>(
+    `SELECT d.id,d.df_number,d.business_date,d.document_state,(SELECT COUNT(*) FROM delivery_lines l WHERE l.delivery_id=d.id) AS line_count
+     FROM deliveries d
+     WHERE d.customer_id=? AND d.document_state IN ('draft','finalized')
+       AND NOT EXISTS (SELECT 1 FROM billing_statements b WHERE b.source_delivery_id=d.id AND b.document_state<>'voided')
+     ORDER BY d.business_date DESC,d.created_at DESC`,
+    customerId,
+  );
+  return rows.map((row) => ({ id: row.id, dfNumber: row.df_number, businessDate: row.business_date, documentState: row.document_state, lineCount: row.line_count }));
+}

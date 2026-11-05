@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V4 } from '@/db/schema';
+import { schemaSql } from '@/test-utils/schema';
 import { resolveShareFileName } from './share-file-name';
 
 describe('shared PDF file names from records', () => {
@@ -13,7 +13,7 @@ describe('shared PDF file names from records', () => {
 
   beforeEach(() => {
     raw = new DatabaseSync(':memory:');
-    raw.exec(`${SCHEMA_V1}${SCHEMA_V4}`);
+    raw.exec(schemaSql());
     db = {
       getFirstAsync: async <T>(sql: string, ...params: Array<string | number | null>) => raw.prepare(sql).get(...params) as T | undefined,
     } as unknown as SQLiteDatabase;

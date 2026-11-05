@@ -1,11 +1,13 @@
 import { PERIOD_OPTIONS, isInDateRange, resolveDateRange, type PeriodFilter } from '@/domain/date-range';
 import type { DeliveryListItem, DeliveryState } from '@/features/deliveries/delivery-types';
 
+export type DeliveryBillingFilter = 'any' | 'with' | 'without';
 export type DeliverySort = 'newest' | 'oldest' | 'number' | 'customer';
 
 export type DeliveryCriteria = {
   query: string;
   state: 'all' | DeliveryState;
+  billing: DeliveryBillingFilter;
   period: PeriodFilter;
   /** Custom range bounds (YYYY-MM-DD), used only when period is 'custom'. */
   from: string;
@@ -16,6 +18,7 @@ export type DeliveryCriteria = {
 export const DEFAULT_DELIVERY_CRITERIA: DeliveryCriteria = {
   query: '',
   state: 'all',
+  billing: 'any',
   period: 'all',
   from: '',
   to: '',
@@ -31,6 +34,12 @@ export const DELIVERY_STATE_OPTIONS: Array<{ value: DeliveryCriteria['state']; l
   { value: 'voided', label: 'Voided' },
 ];
 
+export const DELIVERY_BILLING_OPTIONS: Array<{ value: DeliveryBillingFilter; label: string }> = [
+  { value: 'any', label: 'Any billing' },
+  { value: 'with', label: 'Has a billing statement' },
+  { value: 'without', label: 'No billing statement yet' },
+];
+
 export const DELIVERY_SORT_OPTIONS: Array<{ value: DeliverySort; label: string }> = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
@@ -39,7 +48,7 @@ export const DELIVERY_SORT_OPTIONS: Array<{ value: DeliverySort; label: string }
 ];
 
 export function hasActiveDeliveryFilters(criteria: DeliveryCriteria): boolean {
-  return criteria.query.trim() !== '' || criteria.state !== 'all' || criteria.period !== 'all';
+  return criteria.query.trim() !== '' || criteria.state !== 'all' || criteria.billing !== 'any' || criteria.period !== 'all';
 }
 
 /** Every word typed must appear in the delivery's searchable text (number, customer, date, items, amount). */
@@ -50,6 +59,8 @@ export function filterDeliveries(items: readonly DeliveryListItem[], criteria: D
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
       if (criteria.state !== 'all' && item.documentState !== criteria.state) return false;
+      if (criteria.billing === 'with' && !item.linkedStatements.length) return false;
+      if (criteria.billing === 'without' && item.linkedStatements.length) return false;
       if (!isInDateRange(item.businessDate, range)) return false;
       return words.every((word) => item.searchText.includes(word));
     });

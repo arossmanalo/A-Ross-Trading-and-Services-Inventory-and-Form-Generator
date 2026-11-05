@@ -6,7 +6,7 @@ import type { DeliveryListItem } from './delivery-types';
 const TODAY = '2026-11-05';
 
 function delivery(id: string, extra: Partial<DeliveryListItem> = {}): DeliveryListItem {
-  return { id, dfNumber: null, customerName: 'Quicklean', documentState: 'finalized', businessDate: '2026-11-01', totalCentavos: 100000, pdfState: 'ready', searchText: '', ...extra };
+  return { id, dfNumber: null, customerName: 'Quicklean', documentState: 'finalized', businessDate: '2026-11-01', totalCentavos: 100000, pdfState: 'ready', linkedStatements: [], searchText: '', ...extra };
 }
 
 const ITEMS: DeliveryListItem[] = [

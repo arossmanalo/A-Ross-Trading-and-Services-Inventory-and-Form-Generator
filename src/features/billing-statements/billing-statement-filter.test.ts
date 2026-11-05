@@ -21,6 +21,8 @@ function statement(id: string, extra: Partial<BillingStatementListItem> = {}): B
     customerName: 'Quicklean',
     serviceReportId: null,
     serviceReportNumber: null,
+    deliveryId: null,
+    deliveryNumber: null,
     documentState: 'finalized',
     businessDate: '2026-11-01',
     discountedTotalCentavos: 100000,

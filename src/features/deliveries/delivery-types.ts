@@ -1,6 +1,15 @@
 export type DeliveryState = 'draft' | 'finalized' | 'voided';
 export type DeliveryPriceSource = 'base' | 'customer' | 'override';
 
+/** A Billing Statement billing a delivery (voided ones are not listed). */
+export type DeliveryLinkedStatement = {
+  id: string;
+  /** Null while the statement is still an unnumbered draft. */
+  bsNumber: string | null;
+  documentState: DeliveryState;
+  totalCentavos: number;
+};
+
 export type DeliverySummary = {
   id: string;
   /** Null while the delivery is still an unnumbered draft. */
@@ -11,6 +20,8 @@ export type DeliverySummary = {
   /** Value of the delivered items, which is what a linked Billing Statement bills. */
   totalCentavos: number;
   pdfState: 'not_generated' | 'pending' | 'ready' | 'error';
+  /** The live Billing Statement billing this delivery; at most one. */
+  linkedStatements: DeliveryLinkedStatement[];
 };
 
 /** A delivery as listed, with the lower-cased text the list search matches against. */

@@ -11,6 +11,10 @@ export type BillingStatementSummary = {
   serviceReportId: string | null;
   /** Null while the linked CSR is still an unnumbered draft. */
   serviceReportNumber: string | null;
+  /** Delivery this statement bills, if any (never together with a CSR). */
+  deliveryId: string | null;
+  /** Null while the linked delivery is still an unnumbered draft. */
+  deliveryNumber: string | null;
   documentState: BillingDocumentState;
   businessDate: string;
   discountedTotalCentavos: number;
@@ -32,6 +36,8 @@ export type BillingStatementListItem = BillingStatementSummary & {
 
 export type BillingStatementLine = {
   id: string;
+  /** Set when the line bills a delivery line; such lines are managed on the delivery. */
+  sourceDeliveryLineId: string | null;
   lineType: BillingLineType;
   sourceCsrUsageId: string | null;
   sourceCsrServiceUsageId: string | null;

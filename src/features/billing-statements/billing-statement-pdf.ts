@@ -118,6 +118,17 @@ export async function listShareableStatementsForReport(db: SQLiteDatabase, repor
   return rows.map((row) => ({ id: row.id, bsNumber: row.bs_number, pdfState: row.pdf_state }));
 }
 
+/** Finalized (not draft, not voided) statements billing a delivery. */
+export async function listShareableStatementsForDelivery(db: SQLiteDatabase, deliveryId: string): Promise<Array<{ id: string; bsNumber: string }>> {
+  const rows = await db.getAllAsync<{ id: string; bs_number: string }>(
+    `SELECT id, bs_number FROM billing_statements
+     WHERE source_delivery_id = ? AND document_state = 'finalized' AND bs_number IS NOT NULL
+     ORDER BY finalized_at, rowid`,
+    deliveryId,
+  );
+  return rows.map((row) => ({ id: row.id, bsNumber: row.bs_number }));
+}
+
 async function renderFinalizedBillingStatementPdf(db: SQLiteDatabase, statementId: string, bsNumber: string, html: string): Promise<string> {
   let cacheUri: string | undefined;
   try {
