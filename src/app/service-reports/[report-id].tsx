@@ -1,4 +1,5 @@
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import * as Print from 'expo-print';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -26,6 +27,7 @@ import {
   retryServiceReportPdf,
 } from '@/features/service-reports/service-report-pdf';
 import { getServiceReportShareBundle, shareBundle } from '@/features/documents/share-bundle';
+import { getSignedPreviewTarget } from '@/features/signatures/signed-preview';
 import type { ServiceOutcome, ServiceReportDetail } from '@/features/service-reports/service-report-types';
 import { colors } from '@/theme/colors';
 
@@ -274,6 +276,27 @@ export default function ServiceReportDetailScreen() {
     }
   }, [db, dirty, report, reportId, saveDraft]);
 
+  // Once signed, the preview shows the signed version instead of the plain PDF.
+  const openPreview = useCallback(async () => {
+    if (!reportId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const target = report?.hasSignedVersion ? await getSignedPreviewTarget(db, 'service_report', reportId) : null;
+      if (target?.kind === 'capture') {
+        router.push({ pathname: '/signatures/preview', params: { captureId: target.captureId, kind: 'csr', ownerId: reportId } });
+      } else if (target?.kind === 'attachment') {
+        await Print.printAsync({ uri: target.uri });
+      } else {
+        router.push({ pathname: '/service-reports/preview', params: { reportId } });
+      }
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : 'Could not open the preview.');
+    } finally {
+      setBusy(false);
+    }
+  }, [db, report?.hasSignedVersion, reportId]);
+
   const openVoid = useCallback(() => {
     if (reportId) router.push({ pathname: '/service-reports/void', params: { reportId } });
   }, [reportId]);
@@ -356,14 +379,13 @@ export default function ServiceReportDetailScreen() {
             {report.documentState === 'finalized' ? <View style={styles.readSection}>
               <Text selectable style={styles.eyebrow}>SIGNATURE STATUS</Text>
               <Text selectable style={styles.readText}>{report.signatureStatus.replaceAll('_',' ')}</Text>
-              {report.hasSignedVersion ? <ActionButton disabled={busy} variant="secondary" onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId, mode: 'preview' } })}>Preview signed version</ActionButton> : null}
             </View> : null}
-            <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/service-reports/preview', params: { reportId } })} variant="secondary">Preview PDF</ActionButton>
+            <ActionButton disabled={busy} onPress={() => void openPreview()} variant="secondary">{report.hasSignedVersion ? 'Preview signed PDF' : 'Preview PDF'}</ActionButton>
             {report.pdfState !== 'ready' ? <ActionButton disabled={busy} onPress={() => void retryPdf()}>Retry PDF</ActionButton> : <ActionButton disabled={busy} onPress={() => void sharePdf()}>Share PDF</ActionButton>}
             {report.documentState === 'finalized' && report.pdfState === 'ready' ? <Text selectable style={styles.totalHelp}>If this CSR has a finalized Billing Statement, it is sent as the following pages of the same PDF (CSR first).</Text> : null}
             {report.documentState === 'finalized' ? (
               <>
-                <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId, mode: 'sign' } })} variant="secondary">Sign document</ActionButton>
+                {report.hasSignedVersion ? null : <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId, mode: 'sign' } })} variant="secondary">Sign document</ActionButton>}
                 <ActionButton onPress={() => router.push({ pathname: '/signatures/manage', params: { ownerType: 'service_report', ownerId: reportId, mode: 'import' } })} variant="secondary">Import signed PDF</ActionButton>
               </>
             ) : null}
