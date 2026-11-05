@@ -63,6 +63,16 @@ async function lookup(db: SQLiteDatabase, kind: ShareDocumentKind, documentId: s
     return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.bs_number, date: row.business_date };
   }
 
+  if (kind === 'quotation') {
+    const row = await db.getFirstAsync<{ qt_number: string | null; business_date: string; snapshot: string | null; customer_name: string }>(
+      `SELECT q.qt_number, q.business_date, q.content_snapshot_json AS snapshot, c.name AS customer_name
+       FROM quotations q JOIN customers c ON c.id = q.customer_id WHERE q.id = ?`,
+      documentId,
+    );
+    if (!row) throw new Error('Quotation was not found.');
+    return { customerName: frozenCustomerName(row.snapshot, row.customer_name), code: row.qt_number, date: row.business_date };
+  }
+
   const row = await db.getFirstAsync<{ pa_number: string | null; business_date: string; snapshot: string | null; customer_name: string }>(
     `SELECT p.pa_number, p.business_date, p.content_snapshot_json AS snapshot, c.name AS customer_name
      FROM payments p

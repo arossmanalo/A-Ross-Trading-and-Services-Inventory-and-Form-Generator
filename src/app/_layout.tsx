@@ -130,6 +130,12 @@ export default function RootLayout() {
           <Stack.Screen name="service-reports/item-usage/new" options={{ title: 'Add Item Usage', presentation: 'modal' }} />
           <Stack.Screen name="service-reports/machine-services" options={{ title: 'Services by machine' }} />
           <Stack.Screen name="service-reports/void" options={{ title: 'Void CSR', presentation: 'modal' }} />
+          <Stack.Screen name="quotations/index" options={{ title: 'Quotations' }} />
+          <Stack.Screen name="quotations/new" options={{ title: 'New Quotation Draft', presentation: 'modal' }} />
+          <Stack.Screen name="quotations/[quotation-id]" options={{ title: 'Quotation' }} />
+          <Stack.Screen name="quotations/preview" options={{ title: 'Quotation Preview' }} />
+          <Stack.Screen name="quotations/charge/new" options={{ title: 'Add to Quotation', presentation: 'modal' }} />
+          <Stack.Screen name="quotations/void" options={{ title: 'Void Quotation', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/index" options={{ title: 'Billing Statements' }} />
           <Stack.Screen name="billing-statements/new" options={{ title: 'New Statement Draft', presentation: 'modal' }} />
           <Stack.Screen name="billing-statements/[statement-id]" options={{ title: 'Billing Statement' }} />

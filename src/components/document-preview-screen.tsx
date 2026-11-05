@@ -30,10 +30,13 @@ import { withDocumentHeaderLayout } from '@/features/documents/document-header';
 import { getSignatureCapturePreview } from '@/features/signatures/capture-repository';
 import { renderSignaturePdf } from '@/features/signatures/capture-pdf';
 import { finalizeSignatureDrafts, getSignatureDraftPreview } from '@/features/signatures/signature-draft-repository';
+import { DOCUMENT_KINDS } from '@/features/documents/document-kinds';
+import { getQuotationPreview } from '@/features/quotations/quotation-pdf';
+import type { PreviewKind } from '@/features/signatures/signable-owners';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
 import { colors } from '@/theme/colors';
 
-type DocumentKind = 'csr' | 'billing_statement';
+type DocumentKind = PreviewKind;
 type PagePreview = { html: string; kind: DocumentKind };
 /** `pages` is every page of the PDF that is sent, in order; it includes this document. */
 type PreviewData = { number: string; html: string; isDraft: boolean; pages: PagePreview[] };
@@ -43,7 +46,7 @@ const MAX_IMAGE_HEIGHT = 6_000;
 
 /** Renders a portrait PDF at the document's page size, whatever the tablet's current rotation. */
 async function renderPdf(html: string, documentKind: DocumentKind): Promise<string> {
-  const file = await printHtmlToPdf(html, documentKind === 'csr' ? 'legal' : 'a4');
+  const file = await printHtmlToPdf(html, DOCUMENT_KINDS[documentKind].pageSize);
   return file.uri;
 }
 
@@ -82,7 +85,7 @@ async function collectLinkedPages(
       const report = await getServiceReportPreview(db, linked.service_report_id);
       before.push({ html: withDocumentHeaderLayout(report.html), kind: 'csr' });
     }
-  } else {
+  } else if (kind === 'csr') {
     for (const statement of await listShareableStatementsForReport(db, documentId)) {
       const preview = await getBillingStatementPreview(db, statement.id);
       after.push({ html: withDocumentHeaderLayout(preview.html), kind: 'billing_statement' });
@@ -120,7 +123,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
   const finalizing = useRef(false);
   const activeCaptureId = finalizedCaptureId ?? signedCaptureId;
   const reviewingSignature = signatureDraft && !finalizedCaptureId;
-  const ownerType: SignableOwnerType = kind === 'csr' ? 'service_report' : 'billing_statement';
+  const ownerType: SignableOwnerType = DOCUMENT_KINDS[kind].ownerType;
   // Rotating changes the page width, so the measured document height is stale.
   // Clearing it (and remounting the WebView below) re-measures at the new width.
   useEffect(() => {
@@ -147,6 +150,8 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
           html: value.html,
           isDraft: value.isDraft,
         }))
+      : kind === 'quotation'
+      ? getQuotationPreview(db, documentId).then((value) => ({ number: value.qtNumber, html: value.html, isDraft: value.isDraft }))
       : getBillingStatementPreview(db, documentId).then((value) => ({
           number: value.bsNumber,
           html: value.html,
@@ -177,7 +182,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     try {
       const captureId = await finalizeSignatureDrafts(db, ownerType, documentId);
       setFinalizedCaptureId(captureId);
-      setNotice(`Signature finalized. The signed version now appears in the ${kind === 'csr' ? 'CSR' : 'Billing Statement'} PDF preview.`);
+      setNotice(`Signature finalized. The signed version now appears in the ${DOCUMENT_KINDS[kind].label} PDF preview.`);
       // File generation is a retryable derived operation, not signature finalization.
       // Do not leave the finalization button busy while Android Print is working.
       void renderSignaturePdf(db, captureId).catch((renderError: unknown) => {
@@ -229,7 +234,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     setNotice('');
     try {
       if (!preview) throw new Error('The document preview is not ready.');
-      const fileName = await resolveShareFileName(db, kind === 'csr' ? 'service_report' : 'billing_statement', documentId);
+      const fileName = await resolveShareFileName(db, DOCUMENT_KINDS[kind].shareKind, documentId);
       // The pages shown in the preview are the pages sent.
       const pages = preview.pages;
       const sourceUris: string[] = [];
@@ -273,7 +278,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     }
   }, [documentHeight, imageTooLong, kind, preview?.number]);
 
-  const heading = activeCaptureId || reviewingSignature ? 'Signed PDF Preview' : kind === 'csr' ? 'CSR PDF Preview' : 'Billing Statement PDF Preview';
+  const heading = activeCaptureId || reviewingSignature ? 'Signed PDF Preview' : `${DOCUMENT_KINDS[kind].label} PDF Preview`;
   const pageTitle = preview?.number ? `${preview.number} Preview` : heading;
 
   return (

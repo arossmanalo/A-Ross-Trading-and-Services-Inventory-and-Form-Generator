@@ -195,6 +195,19 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
         </Pressable>
+
+        <Pressable accessibilityRole="button" accessibilityHint="Open Quotations" onPress={() => router.push('/quotations')} style={({ pressed }) => [styles.featureCard, pressed ? styles.pressed : null]}>
+            <View style={styles.featureIcon}>
+              <Text selectable style={styles.featureIconText}>08</Text>
+            </View>
+            <View style={styles.featureCopy}>
+              <Text selectable style={styles.featureTitle}>Quotations</Text>
+              <Text selectable style={styles.featureBody}>
+                Price items and services for a customer, then turn an accepted quotation into a repair or delivery.
+              </Text>
+            </View>
+            <View style={styles.cardAction}><Text selectable style={styles.openLabel}>OPEN</Text><Text selectable style={styles.chevron}>›</Text></View>
+        </Pressable>
       </View>
     </ScrollView>
   );

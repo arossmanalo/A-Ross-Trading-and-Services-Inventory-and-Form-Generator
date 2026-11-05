@@ -1,4 +1,4 @@
-export type ShareDocumentKind = 'service_report' | 'billing_statement' | 'payment';
+export type ShareDocumentKind = 'service_report' | 'billing_statement' | 'payment' | 'quotation';
 
 /** Label used while a document has no number yet. */
 export const DRAFT_ID_LABEL = 'DRAFT';

@@ -6,6 +6,7 @@ export type SearchResultKind =
   | 'equipment'
   | 'item'
   | 'payment'
+  | 'quotation'
   | 'service'
   | 'service_report';
 
@@ -34,8 +35,7 @@ export async function searchAppRecords(db: SQLiteDatabase, query: string, limit 
   if (!text) return [];
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new Error('Search limit must be between 1 and 200.');
   const like = `%${escapeLike(text)}%`;
-  const rows = await db.getAllAsync<GlobalSearchRow>(
-    `SELECT * FROM (
+  const sql = `SELECT * FROM (
        SELECT 'customer' AS kind,c.id,c.id AS route_id,c.name AS title,
          trim(c.address || ' ' || c.contact_number || ' ' || c.email) AS subtitle,
          CASE WHEN c.active=1 THEN 'Active customer' ELSE 'Inactive customer' END AS detail,
@@ -88,6 +88,14 @@ export async function searchAppRecords(db: SQLiteDatabase, query: string, limit 
        WHERE COALESCE(b.bs_number,'') LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR b.business_date LIKE ? ESCAPE '\\'
 
        UNION ALL
+       SELECT 'quotation',q.id,q.id,COALESCE(q.qt_number,'Draft Quotation'),
+         c.name,
+         q.document_state || ' - ' || q.business_date,
+         COALESCE(q.finalized_at,q.created_at)
+       FROM quotations q JOIN customers c ON c.id=q.customer_id
+       WHERE COALESCE(q.qt_number,'') LIKE ? ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR q.business_date LIKE ? ESCAPE '\\'
+
+       UNION ALL
        SELECT 'payment',p.id,p.id,COALESCE(p.pa_number,'Payment'),
          c.name || ' - ' || COALESCE(b.bs_number,'Billing Statement'),
          p.state || ' - ' || p.business_date,
@@ -99,10 +107,10 @@ export async function searchAppRecords(db: SQLiteDatabase, query: string, limit 
          OR c.name LIKE ? ESCAPE '\\' OR p.business_date LIKE ? ESCAPE '\\' OR COALESCE(p.reference_number,'') LIKE ? ESCAPE '\\'
      ) matches
      ORDER BY sort_date DESC, kind ASC, title COLLATE NOCASE ASC
-     LIMIT ?`,
-    ...Array(30).fill(like),
-    limit,
-  );
+     LIMIT ?`;
+  // Every `?` except the final LIMIT takes the same LIKE pattern.
+  const placeholders = (sql.match(/\?/g)?.length ?? 1) - 1;
+  const rows = await db.getAllAsync<GlobalSearchRow>(sql, ...Array(placeholders).fill(like), limit);
   return rows.map(row => ({
     kind: row.kind,
     id: row.id,
