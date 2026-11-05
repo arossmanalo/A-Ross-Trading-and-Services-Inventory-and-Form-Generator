@@ -32,6 +32,7 @@ vi.mock('expo-router', () => ({Stack:{Screen:'Screen'}}));
 vi.mock('expo-sqlite', () => ({useSQLiteContext:()=> 'database'}));
 vi.mock('expo-media-library/legacy', () => ({requestPermissionsAsync:vi.fn(),saveToLibraryAsync:vi.fn()}));
 vi.mock('expo-print', () => ({printToFileAsync:vi.fn(),printAsync:vi.fn()}));
+vi.mock('expo-file-system/legacy', () => ({cacheDirectory:'file:///cache/',EncodingType:{Base64:'base64'},readAsStringAsync:vi.fn(),writeAsStringAsync:vi.fn()}));
 vi.mock('expo-sharing', () => ({isAvailableAsync:vi.fn(),shareAsync:vi.fn()}));
 vi.mock('react-native-view-shot', () => ({captureRef:vi.fn(),releaseCapture:vi.fn()}));
 vi.mock('react-native-webview', () => ({WebView:'WebView'}));

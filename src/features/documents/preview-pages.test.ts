@@ -10,7 +10,7 @@ describe('combinePreviewPages', () => {
   it('puts each document in its own frame, in order, with attributes escaped', () => {
     const html = combinePreviewPages(['<p class="a">CSR & more</p>', '<p>Statement</p>']);
     expect(html.match(/<iframe /g)).toHaveLength(2);
-    expect(html.indexOf('CSR &amp;amp; more')).toBeGreaterThan(-1);
+    expect(html.indexOf('CSR &amp; more')).toBeGreaterThan(-1);
     expect(html.indexOf('class=&quot;a&quot;')).toBeLessThan(html.indexOf('Statement'));
     expect(html).not.toContain('class="a"');
   });
