@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { requestPermissionsAsync, saveToLibraryAsync } from 'expo-media-library/legacy';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -18,7 +19,10 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { ActionButton } from '@/components/action-button';
 import { getBillingStatementPreview, listShareableStatementsForReport } from '@/features/billing-statements/billing-statement-pdf';
+import { base64ToBytes, bytesToBase64 } from '@/features/backup/zip';
+import { mergePdfs } from '@/features/documents/pdf-merge';
 import { printHtmlToPdf } from '@/features/documents/pdf-output';
+import { combinePreviewPages } from '@/features/documents/preview-pages';
 import { resolveShareFileName } from '@/features/documents/share-file-name';
 import { sharePdfFiles } from '@/features/documents/share-pdf';
 import { getServiceReportPreview } from '@/features/service-reports/service-report-pdf';
@@ -30,7 +34,9 @@ import type { SignableOwnerType } from '@/features/signatures/signature-types';
 import { colors } from '@/theme/colors';
 
 type DocumentKind = 'csr' | 'billing_statement';
-type PreviewData = { number: string; html: string; isDraft: boolean };
+type PagePreview = { html: string; kind: DocumentKind };
+/** `pages` is every page of the PDF that is sent, in order; it includes this document. */
+type PreviewData = { number: string; html: string; isDraft: boolean; pages: PagePreview[] };
 type CaptureView = View & { measure?: unknown };
 
 const MAX_IMAGE_HEIGHT = 6_000;
@@ -39,6 +45,50 @@ const MAX_IMAGE_HEIGHT = 6_000;
 async function renderPdf(html: string, documentKind: DocumentKind): Promise<string> {
   const file = await printHtmlToPdf(html, documentKind === 'csr' ? 'legal' : 'a4');
   return file.uri;
+}
+
+/** Renders every page and, when there are several, merges them into the one PDF that is sent. */
+async function renderPagesPdf(pages: readonly PagePreview[]): Promise<string> {
+  const uris: string[] = [];
+  for (const page of pages) uris.push(await renderPdf(page.html, page.kind));
+  if (uris.length === 1) return uris[0];
+  if (!FileSystem.cacheDirectory) throw new Error('Temporary storage is unavailable on this device.');
+  const parts: Uint8Array[] = [];
+  for (const uri of uris) parts.push(base64ToBytes(await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })));
+  const target = `${FileSystem.cacheDirectory}preview-merged-${Date.now()}.pdf`;
+  await FileSystem.writeAsStringAsync(target, bytesToBase64(await mergePdfs(parts)), { encoding: FileSystem.EncodingType.Base64 });
+  return target;
+}
+
+/**
+ * The pages sent with a document: a finalized CSR is followed by its finalized
+ * Billing Statements, and a finalized Billing Statement is preceded by its
+ * finalized CSR. Each linked document uses its signed version when it has one.
+ * Drafts and documents with no link go alone.
+ */
+async function collectLinkedPages(
+  db: ReturnType<typeof useSQLiteContext>,
+  kind: DocumentKind,
+  documentId: string,
+): Promise<{ before: PagePreview[]; after: PagePreview[] }> {
+  const before: PagePreview[] = [];
+  const after: PagePreview[] = [];
+  if (kind === 'billing_statement') {
+    const linked = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null }>(
+      'SELECT b.service_report_id, r.document_state AS csr_state FROM billing_statements b LEFT JOIN service_reports r ON r.id = b.service_report_id WHERE b.id = ?',
+      documentId,
+    );
+    if (linked?.service_report_id && linked.csr_state === 'finalized') {
+      const report = await getServiceReportPreview(db, linked.service_report_id);
+      before.push({ html: withDocumentHeaderLayout(report.html), kind: 'csr' });
+    }
+  } else {
+    for (const statement of await listShareableStatementsForReport(db, documentId)) {
+      const preview = await getBillingStatementPreview(db, statement.id);
+      after.push({ html: withDocumentHeaderLayout(preview.html), kind: 'billing_statement' });
+    }
+  }
+  return { before, after };
 }
 
 /**
@@ -76,7 +126,10 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
   useEffect(() => {
     setDocumentHeight(null);
   }, [windowWidth]);
-  const previewHtml = useMemo(() => withPreviewViewport(preview?.html ?? ''), [preview?.html]);
+  const previewHtml = useMemo(
+    () => withPreviewViewport(preview ? combinePreviewPages(preview.pages.map((page) => page.html)) : ''),
+    [preview],
+  );
 
   useEffect(() => {
     let active = true;
@@ -84,7 +137,7 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     setError(null);
     setDocumentHeight(null);
     setImageTooLong(false);
-    const load = activeCaptureId
+    const load: Promise<{ number: string; html: string; isDraft: boolean }> = activeCaptureId
       ? getSignatureCapturePreview(db, activeCaptureId).then((value) => ({ number: value.number, html: value.html, isDraft: false }))
       : reviewingSignature
       ? getSignatureDraftPreview(db, ownerType, documentId).then((value) => ({ number: value.number, html: value.html, isDraft: false }))
@@ -100,7 +153,14 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
           isDraft: value.isDraft,
         }));
     void load
-      .then((value) => { if (active) setPreview({ ...value, html: withDocumentHeaderLayout(value.html) }); })
+      .then(async (value) => {
+        const own: PagePreview = { html: withDocumentHeaderLayout(value.html), kind };
+        // The preview is exactly what is sent, so it includes the linked document's pages.
+        const linked = value.isDraft || reviewingSignature
+          ? { before: [], after: [] }
+          : await collectLinkedPages(db, kind, documentId);
+        if (active) setPreview({ ...value, html: own.html, pages: [...linked.before, own, ...linked.after] });
+      })
       .catch((loadError: unknown) => {
         if (active) setError(loadError instanceof Error ? loadError.message : 'Could not load this document preview.');
       });
@@ -145,8 +205,8 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
 
   const generatePdf = useCallback(async () => {
     if (!preview) throw new Error('The document preview is not ready.');
-    return renderPdf(preview.html, kind);
-  }, [kind, preview]);
+    return renderPagesPdf(preview.pages);
+  }, [preview]);
 
   const openPdfPreview = useCallback(async () => {
     setBusy(true);
@@ -170,26 +230,8 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
     try {
       if (!preview) throw new Error('The document preview is not ready.');
       const fileName = await resolveShareFileName(db, kind === 'csr' ? 'service_report' : 'billing_statement', documentId);
-      // One PDF: a CSR is followed by its finalized Billing Statements, and a Billing Statement is preceded by its
-      // finalized CSR. Signed copies are used where they exist. A draft, or a document with no link, goes alone.
-      const pages: Array<{ html: string; kind: DocumentKind }> = [];
-      if (kind === 'billing_statement' && !preview.isDraft) {
-        const linked = await db.getFirstAsync<{ service_report_id: string | null; csr_state: string | null }>(
-          'SELECT b.service_report_id, r.document_state AS csr_state FROM billing_statements b LEFT JOIN service_reports r ON r.id = b.service_report_id WHERE b.id = ?',
-          documentId,
-        );
-        if (linked?.service_report_id && linked.csr_state === 'finalized') {
-          const reportPreview = await getServiceReportPreview(db, linked.service_report_id);
-          pages.push({ html: withDocumentHeaderLayout(reportPreview.html), kind: 'csr' });
-        }
-      }
-      pages.push({ html: preview.html, kind });
-      if (kind === 'csr' && !preview.isDraft) {
-        for (const statement of await listShareableStatementsForReport(db, documentId)) {
-          const statementPreview = await getBillingStatementPreview(db, statement.id);
-          pages.push({ html: withDocumentHeaderLayout(statementPreview.html), kind: 'billing_statement' });
-        }
-      }
+      // The pages shown in the preview are the pages sent.
+      const pages = preview.pages;
       const sourceUris: string[] = [];
       for (const page of pages) sourceUris.push(await renderPdf(page.html, page.kind));
       await sharePdfFiles({ sourceUris, fileName });
