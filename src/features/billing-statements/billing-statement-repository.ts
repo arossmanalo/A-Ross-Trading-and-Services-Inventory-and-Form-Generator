@@ -175,57 +175,64 @@ export async function listCsrsForBilling(db: SQLiteDatabase, customerId: string)
 }
 
 export async function createBillingStatementDraft(db: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; deliveryId?: string; businessDate: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
+  let statementId = '';
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    statementId = await createBillingStatementDraftInTx(tx, input);
+  });
+  return statementId;
+}
+
+/** Transaction-only form of createBillingStatementDraft, for callers that already hold the transaction. */
+export async function createBillingStatementDraftInTx(tx: SQLiteDatabase, input: { customerId: string; serviceReportId?: string; deliveryId?: string; businessDate: string; reuseExistingLinkedDraft?: boolean }): Promise<string> {
   if (input.serviceReportId && input.deliveryId) throw new Error('A Billing Statement links to a CSR or to a delivery, not both.');
   validateBusinessDate(input.businessDate);
   const id = Crypto.randomUUID(); const now = new Date().toISOString();
   let statementId = id;
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    const customer = await tx.getFirstAsync<{ active: number; merged_into_customer_id: string | null }>('SELECT active,merged_into_customer_id FROM customers WHERE id=?', input.customerId);
-    if (!customer || customer.active !== 1 || customer.merged_into_customer_id) throw new Error('Select an active registered customer.');
-    if (input.serviceReportId) {
-      const report = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM service_reports WHERE id=?', input.serviceReportId);
-      if (!report || !['draft', 'finalized'].includes(report.document_state) || report.customer_id !== input.customerId) throw new Error('Select a draft or finalized CSR for the same customer.');
+  const customer = await tx.getFirstAsync<{ active: number; merged_into_customer_id: string | null }>('SELECT active,merged_into_customer_id FROM customers WHERE id=?', input.customerId);
+  if (!customer || customer.active !== 1 || customer.merged_into_customer_id) throw new Error('Select an active registered customer.');
+  if (input.serviceReportId) {
+    const report = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM service_reports WHERE id=?', input.serviceReportId);
+    if (!report || !['draft', 'finalized'].includes(report.document_state) || report.customer_id !== input.customerId) throw new Error('Select a draft or finalized CSR for the same customer.');
+  }
+  if (input.deliveryId) {
+    const delivery = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM deliveries WHERE id=?', input.deliveryId);
+    if (!delivery || !['draft', 'finalized'].includes(delivery.document_state) || delivery.customer_id !== input.customerId) throw new Error('Select a draft or finalized delivery for the same customer.');
+    const live = await tx.getFirstAsync<{ id: string; document_state: string }>("SELECT id,document_state FROM billing_statements WHERE source_delivery_id=? AND document_state<>'voided'", input.deliveryId);
+    if (live) {
+      if (!(input.reuseExistingLinkedDraft && live.document_state === 'draft')) throw new Error('This delivery already has a Billing Statement.');
+      statementId = live.id;
+      await syncLinkedDeliveryLines(tx, input.deliveryId, live.id);
+      return statementId;
     }
-    if (input.deliveryId) {
-      const delivery = await tx.getFirstAsync<{ customer_id: string; document_state: string }>('SELECT customer_id,document_state FROM deliveries WHERE id=?', input.deliveryId);
-      if (!delivery || !['draft', 'finalized'].includes(delivery.document_state) || delivery.customer_id !== input.customerId) throw new Error('Select a draft or finalized delivery for the same customer.');
-      const live = await tx.getFirstAsync<{ id: string; document_state: string }>("SELECT id,document_state FROM billing_statements WHERE source_delivery_id=? AND document_state<>'voided'", input.deliveryId);
-      if (live) {
-        if (!(input.reuseExistingLinkedDraft && live.document_state === 'draft')) throw new Error('This delivery already has a Billing Statement.');
-        statementId = live.id;
-        await syncLinkedDeliveryLines(tx, input.deliveryId, live.id);
-        return;
+  }
+  if (input.reuseExistingLinkedDraft && input.serviceReportId) {
+    const existing = await tx.getFirstAsync<{ id: string }>(
+      `SELECT b.id FROM billing_statements b
+       WHERE b.service_report_id=? AND b.document_state='draft'
+       ORDER BY (
+         SELECT COUNT(*) FROM billing_statement_lines l
+         WHERE l.billing_statement_id=b.id
+           AND (l.source_csr_usage_id IS NOT NULL OR l.source_csr_service_usage_id IS NOT NULL OR l.source_csr_machine_service_id IS NOT NULL)
+       ) DESC, b.created_at, b.id
+       LIMIT 1`,
+      input.serviceReportId,
+    );
+    if (existing) {
+      statementId = existing.id;
+      if (await syncLinkedCsrDraftLines(tx, input.serviceReportId, statementId)) {
+        await auditAndRevise(tx, 'billing_statement.csr_draft_charges_synchronized', statementId, {
+          serviceReportId: input.serviceReportId,
+        }, now);
       }
+      return statementId;
     }
-    if (input.reuseExistingLinkedDraft && input.serviceReportId) {
-      const existing = await tx.getFirstAsync<{ id: string }>(
-        `SELECT b.id FROM billing_statements b
-         WHERE b.service_report_id=? AND b.document_state='draft'
-         ORDER BY (
-           SELECT COUNT(*) FROM billing_statement_lines l
-           WHERE l.billing_statement_id=b.id
-             AND (l.source_csr_usage_id IS NOT NULL OR l.source_csr_service_usage_id IS NOT NULL OR l.source_csr_machine_service_id IS NOT NULL)
-         ) DESC, b.created_at, b.id
-         LIMIT 1`,
-        input.serviceReportId,
-      );
-      if (existing) {
-        statementId = existing.id;
-        if (await syncLinkedCsrDraftLines(tx, input.serviceReportId, statementId)) {
-          await auditAndRevise(tx, 'billing_statement.csr_draft_charges_synchronized', statementId, {
-            serviceReportId: input.serviceReportId,
-          }, now);
-        }
-        return;
-      }
-    }
-    await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,source_delivery_id,business_date,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.deliveryId ?? null, input.businessDate, now);
-    if (input.serviceReportId) {
-      await syncLinkedCsrDraftLines(tx, input.serviceReportId);
-    }
-    if (input.deliveryId) await syncLinkedDeliveryLines(tx, input.deliveryId, id);
-    await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null, deliveryId: input.deliveryId ?? null }, now);
-  });
+  }
+  await tx.runAsync(`INSERT INTO billing_statements(id,customer_id,service_report_id,source_delivery_id,business_date,document_state,created_at) VALUES(?,?,?,?,?,'draft',?)`, id, input.customerId, input.serviceReportId ?? null, input.deliveryId ?? null, input.businessDate, now);
+  if (input.serviceReportId) {
+    await syncLinkedCsrDraftLines(tx, input.serviceReportId);
+  }
+  if (input.deliveryId) await syncLinkedDeliveryLines(tx, input.deliveryId, id);
+  await auditAndRevise(tx, 'billing_statement.draft_created', id, { serviceReportId: input.serviceReportId ?? null, deliveryId: input.deliveryId ?? null }, now);
   return statementId;
 }
 
@@ -447,46 +454,49 @@ export async function addDirectItemLine(db: SQLiteDatabase, statementId: string,
 }
 
 export async function addServiceLine(db: SQLiteDatabase, statementId: string, input: { serviceId: string; rateCentavos?: number; overrideReason?: string }): Promise<void> {
+  await db.withExclusiveTransactionAsync((tx) => addServiceLineInTx(tx, statementId, input));
+}
+
+/** Transaction-only form of addServiceLine, for callers that already hold the transaction. */
+export async function addServiceLineInTx(tx: SQLiteDatabase, statementId: string, input: { serviceId: string; rateCentavos?: number; overrideReason?: string }): Promise<void> {
   const now = new Date().toISOString();
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    const linked = await getLinkedChargeTarget(tx, statementId);
-    if (linked.service_report_id && linked.csr_state === 'draft') {
-      await insertServiceOnAllMachines(tx, linked.service_report_id, input.serviceId, input.rateCentavos, input.overrideReason);
-      await syncLinkedCsrDraftLines(tx, linked.service_report_id);
-      await auditAndRevise(tx, 'billing_statement.csr_service_added', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId }, now);
+  const linked = await getLinkedChargeTarget(tx, statementId);
+  if (linked.service_report_id && linked.csr_state === 'draft') {
+    await insertServiceOnAllMachines(tx, linked.service_report_id, input.serviceId, input.rateCentavos, input.overrideReason);
+    await syncLinkedCsrDraftLines(tx, linked.service_report_id);
+    await auditAndRevise(tx, 'billing_statement.csr_service_added', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId }, now);
+    return;
+  }
+  if (linked.service_report_id) {
+    const existing = await tx.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM service_report_machine_service WHERE service_report_id=? AND service_id=?', linked.service_report_id, input.serviceId);
+    if ((existing?.count ?? 0) > 0) {
+      if (input.rateCentavos !== undefined) throw new Error('Use the finalized CSR service prices; its source charges cannot be repriced.');
+      const unbilled = await tx.getAllAsync<{ id: string; description_snapshot: string; machine_label: string; rate_centavos: number; rate_source: string; note: string | null }>(
+        `SELECT m.id,m.description_snapshot,m.machine_label,m.rate_centavos,m.rate_source,m.note
+         FROM service_report_machine_service m
+         WHERE m.service_report_id=? AND m.service_id=? AND NOT ${machineServiceBilled('m')}
+         ORDER BY m.created_at,m.rowid`, linked.service_report_id, input.serviceId,
+      );
+      if (!unbilled.length) throw new Error('This CSR service has already been included in a Billing Statement.');
+      for (const source of unbilled) {
+        await tx.runAsync(
+          `INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_machine_service_id,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at)
+           VALUES(?,?,'service',?,?,?,1,?,?,?,?,?)`,
+          Crypto.randomUUID(), statementId, source.id, input.serviceId, `${source.description_snapshot} — ${source.machine_label}`, source.rate_centavos, source.rate_centavos, source.rate_source === 'catalog' ? 'catalog' : 'override', source.note, now,
+        );
+      }
+      await refreshTotals(tx, statementId);
+      await auditAndRevise(tx, 'billing_statement.csr_service_linked', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId, lineCount: unbilled.length }, now);
       return;
     }
-    if (linked.service_report_id) {
-      const existing = await tx.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM service_report_machine_service WHERE service_report_id=? AND service_id=?', linked.service_report_id, input.serviceId);
-      if ((existing?.count ?? 0) > 0) {
-        if (input.rateCentavos !== undefined) throw new Error('Use the finalized CSR service prices; its source charges cannot be repriced.');
-        const unbilled = await tx.getAllAsync<{ id: string; description_snapshot: string; machine_label: string; rate_centavos: number; rate_source: string; note: string | null }>(
-          `SELECT m.id,m.description_snapshot,m.machine_label,m.rate_centavos,m.rate_source,m.note
-           FROM service_report_machine_service m
-           WHERE m.service_report_id=? AND m.service_id=? AND NOT ${machineServiceBilled('m')}
-           ORDER BY m.created_at,m.rowid`, linked.service_report_id, input.serviceId,
-        );
-        if (!unbilled.length) throw new Error('This CSR service has already been included in a Billing Statement.');
-        for (const source of unbilled) {
-          await tx.runAsync(
-            `INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_machine_service_id,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at)
-             VALUES(?,?,'service',?,?,?,1,?,?,?,?,?)`,
-            Crypto.randomUUID(), statementId, source.id, input.serviceId, `${source.description_snapshot} — ${source.machine_label}`, source.rate_centavos, source.rate_centavos, source.rate_source === 'catalog' ? 'catalog' : 'override', source.note, now,
-          );
-        }
-        await refreshTotals(tx, statementId);
-        await auditAndRevise(tx, 'billing_statement.csr_service_linked', statementId, { serviceReportId: linked.service_report_id, serviceId: input.serviceId, lineCount: unbilled.length }, now);
-        return;
-      }
-    }
-    const row = await tx.getFirstAsync<{ name: string; active: number; base_rate_centavos: number }>(`SELECT s.name,s.active,s.base_rate_centavos FROM billing_statements b JOIN services s ON s.id=? WHERE b.id=? AND b.document_state='draft'`, input.serviceId, statementId);
-    if (!row || row.active !== 1) throw new Error('Select an active service for a draft statement.');
-    const rate = input.rateCentavos ?? row.base_rate_centavos; assertMoney(rate, 'Service rate');
-    const overridden = rate !== row.base_rate_centavos; const reason = input.overrideReason?.trim() || null;
-    if (overridden && !reason) throw new Error('A reason is required when changing the catalog rate.');
-    await tx.runAsync(`INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at) VALUES(?,?,'service',?,?,1,?,?,?,?,?)`, Crypto.randomUUID(), statementId, input.serviceId, row.name, rate, rate, overridden ? 'override' : 'catalog', reason, now);
-    await refreshTotals(tx, statementId); await auditAndRevise(tx, 'billing_statement.service_added', statementId, { serviceId: input.serviceId, overridden }, now);
-  });
+  }
+  const row = await tx.getFirstAsync<{ name: string; active: number; base_rate_centavos: number }>(`SELECT s.name,s.active,s.base_rate_centavos FROM billing_statements b JOIN services s ON s.id=? WHERE b.id=? AND b.document_state='draft'`, input.serviceId, statementId);
+  if (!row || row.active !== 1) throw new Error('Select an active service for a draft statement.');
+  const rate = input.rateCentavos ?? row.base_rate_centavos; assertMoney(rate, 'Service rate');
+  const overridden = rate !== row.base_rate_centavos; const reason = input.overrideReason?.trim() || null;
+  if (overridden && !reason) throw new Error('A reason is required when changing the catalog rate.');
+  await tx.runAsync(`INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at) VALUES(?,?,'service',?,?,1,?,?,?,?,?)`, Crypto.randomUUID(), statementId, input.serviceId, row.name, rate, rate, overridden ? 'override' : 'catalog', reason, now);
+  await refreshTotals(tx, statementId); await auditAndRevise(tx, 'billing_statement.service_added', statementId, { serviceId: input.serviceId, overridden }, now);
 }
 
 export async function addStatementExpense(db: SQLiteDatabase, statementId: string, input: { description: string; actualCostCentavos: number; billable: boolean; billedAmountCentavos?: number }): Promise<void> {
@@ -726,4 +736,11 @@ export async function listDeliveriesForBilling(db: SQLiteDatabase, customerId: s
     customerId,
   );
   return rows.map((row) => ({ id: row.id, dfNumber: row.df_number, businessDate: row.business_date, documentState: row.document_state, lineCount: row.line_count }));
+}
+
+/** Sets a draft statement's discount and recomputes its totals; for callers that already hold the transaction. */
+export async function applyDraftDiscountInTx(tx: SQLiteDatabase, statementId: string, discountType: BillingDiscountType, discountValue: number): Promise<void> {
+  const result = await tx.runAsync("UPDATE billing_statements SET discount_type=?,discount_value=? WHERE id=? AND document_state='draft'", discountType, discountType ? discountValue : 0, statementId);
+  if (result.changes !== 1) throw new Error('Only a draft statement can be given a discount.');
+  await refreshTotals(tx, statementId);
 }

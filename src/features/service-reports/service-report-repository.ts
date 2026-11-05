@@ -261,89 +261,99 @@ export async function createServiceReportDraft(
   db: SQLiteDatabase,
   input: CreateServiceReportDraftInput,
 ): Promise<string> {
+  let reportId = '';
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    reportId = await createServiceReportDraftInTx(tx, input);
+  });
+  return reportId;
+}
+
+/** Transaction-only form of createServiceReportDraft, for callers that already hold the transaction. */
+export async function createServiceReportDraftInTx(
+  tx: SQLiteDatabase,
+  input: CreateServiceReportDraftInput,
+): Promise<string> {
   validateBusinessDate(input.businessDate);
   const equipmentIds = [input.equipmentId, ...(input.additionalEquipmentIds ?? [])];
   if (new Set(equipmentIds).size !== equipmentIds.length) throw new Error('Each machine can be listed only once on a CSR.');
   const reportId = Crypto.randomUUID();
   const now = new Date().toISOString();
 
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    for (const additionalId of equipmentIds.slice(1)) {
-      await assertMachineAvailable(tx, input.customerId, additionalId);
-    }
-    const equipment = await tx.getFirstAsync<{
-      customer_id: string;
-      customer_active: number;
-      equipment_active: number;
-      customer_name: string;
-      customer_type: 'individual' | 'company';
-    }>(
-      `SELECT e.customer_id, c.name AS customer_name, c.customer_type, c.active AS customer_active, e.active AS equipment_active
-       FROM customer_equipment e
-       JOIN customers c ON c.id = e.customer_id
-       WHERE e.id = ? AND c.merged_into_customer_id IS NULL`,
-      input.equipmentId,
+  for (const additionalId of equipmentIds.slice(1)) {
+    await assertMachineAvailable(tx, input.customerId, additionalId);
+  }
+  const equipment = await tx.getFirstAsync<{
+    customer_id: string;
+    customer_active: number;
+    equipment_active: number;
+    customer_name: string;
+    customer_type: 'individual' | 'company';
+  }>(
+    `SELECT e.customer_id, c.name AS customer_name, c.customer_type, c.active AS customer_active, e.active AS equipment_active
+     FROM customer_equipment e
+     JOIN customers c ON c.id = e.customer_id
+     WHERE e.id = ? AND c.merged_into_customer_id IS NULL`,
+    input.equipmentId,
+  );
+  if (!equipment || equipment.customer_id !== input.customerId) {
+    throw new Error('Selected equipment does not belong to this customer.');
+  }
+  if (equipment.customer_active !== 1 || equipment.equipment_active !== 1) {
+    throw new Error('Customer and equipment must be active for new service work.');
+  }
+
+  const settings = await tx.getFirstAsync<{ owner_name: string }>("SELECT owner_name FROM settings WHERE id = 'business'");
+  const memberRows = equipment.customer_type === 'company'
+    ? await tx.getAllAsync<{ name: string }>('SELECT name FROM customer_members WHERE customer_id = ? AND active = 1 ORDER BY name COLLATE NOCASE ASC', input.customerId)
+    : [];
+  const acknowledgedBy = equipment.customer_type === 'individual'
+    ? equipment.customer_name
+    : memberRows.length === 1 ? memberRows[0].name : '';
+
+  if (input.followsCsrId) {
+    const previous = await tx.getFirstAsync<{ customer_id: string; equipment_id: string; document_state: string }>(
+      'SELECT customer_id, equipment_id, document_state FROM service_reports WHERE id = ?',
+      input.followsCsrId,
     );
-    if (!equipment || equipment.customer_id !== input.customerId) {
-      throw new Error('Selected equipment does not belong to this customer.');
+    if (!previous || previous.document_state !== 'finalized') {
+      throw new Error('A follow-up must reference a finalized CSR.');
     }
-    if (equipment.customer_active !== 1 || equipment.equipment_active !== 1) {
-      throw new Error('Customer and equipment must be active for new service work.');
+    const previousMachineIds = new Set((await listReportMachines(tx, input.followsCsrId)).map((machine) => machine.equipmentId));
+    previousMachineIds.add(previous.equipment_id);
+    if (previous.customer_id !== input.customerId || equipmentIds.some((id) => !previousMachineIds.has(id))) {
+      throw new Error('A follow-up must use the same customer and machines from the original CSR.');
     }
+  }
 
-    const settings = await tx.getFirstAsync<{ owner_name: string }>("SELECT owner_name FROM settings WHERE id = 'business'");
-    const memberRows = equipment.customer_type === 'company'
-      ? await tx.getAllAsync<{ name: string }>('SELECT name FROM customer_members WHERE customer_id = ? AND active = 1 ORDER BY name COLLATE NOCASE ASC', input.customerId)
-      : [];
-    const acknowledgedBy = equipment.customer_type === 'individual'
-      ? equipment.customer_name
-      : memberRows.length === 1 ? memberRows[0].name : '';
-
-    if (input.followsCsrId) {
-      const previous = await tx.getFirstAsync<{ customer_id: string; equipment_id: string; document_state: string }>(
-        'SELECT customer_id, equipment_id, document_state FROM service_reports WHERE id = ?',
-        input.followsCsrId,
-      );
-      if (!previous || previous.document_state !== 'finalized') {
-        throw new Error('A follow-up must reference a finalized CSR.');
-      }
-      const previousMachineIds = new Set((await listReportMachines(tx, input.followsCsrId)).map((machine) => machine.equipmentId));
-      previousMachineIds.add(previous.equipment_id);
-      if (previous.customer_id !== input.customerId || equipmentIds.some((id) => !previousMachineIds.has(id))) {
-        throw new Error('A follow-up must use the same customer and machines from the original CSR.');
-      }
-    }
-
+  await tx.runAsync(
+    `INSERT INTO service_reports
+      (id, customer_id, equipment_id, follows_csr_id, business_date,
+       serviced_by_snapshot, acknowledged_by_snapshot,
+       document_state, service_outcome, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
+    reportId,
+    input.customerId,
+    input.equipmentId,
+    input.followsCsrId ?? null,
+    input.businessDate,
+    settings?.owner_name?.trim() ?? '',
+    acknowledgedBy,
+    now,
+  );
+  for (const [index, equipmentId] of equipmentIds.entries()) {
     await tx.runAsync(
-      `INSERT INTO service_reports
-        (id, customer_id, equipment_id, follows_csr_id, business_date,
-         serviced_by_snapshot, acknowledged_by_snapshot,
-         document_state, service_outcome, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 'incomplete', ?)`,
-      reportId,
-      input.customerId,
-      input.equipmentId,
-      input.followsCsrId ?? null,
-      input.businessDate,
-      settings?.owner_name?.trim() ?? '',
-      acknowledgedBy,
-      now,
+      'INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at) VALUES (?, ?, ?, ?)',
+      reportId, equipmentId, index + 1, now,
     );
-    for (const [index, equipmentId] of equipmentIds.entries()) {
-      await tx.runAsync(
-        'INSERT INTO service_report_equipment (service_report_id, equipment_id, position, created_at) VALUES (?, ?, ?, ?)',
-        reportId, equipmentId, index + 1, now,
-      );
-    }
-    await appendAuditEvent(tx, {
-      eventType: input.followsCsrId ? 'csr.follow_up_draft_created' : 'csr.draft_created',
-      entityType: 'service_report',
-      entityId: reportId,
-      details: { followsCsrId: input.followsCsrId ?? null, machineCount: equipmentIds.length },
-      createdAt: now,
-    });
-    await incrementDatabaseRevision(tx);
+  }
+  await appendAuditEvent(tx, {
+    eventType: input.followsCsrId ? 'csr.follow_up_draft_created' : 'csr.draft_created',
+    entityType: 'service_report',
+    entityId: reportId,
+    details: { followsCsrId: input.followsCsrId ?? null, machineCount: equipmentIds.length },
+    createdAt: now,
   });
+  await incrementDatabaseRevision(tx);
   return reportId;
 }
 

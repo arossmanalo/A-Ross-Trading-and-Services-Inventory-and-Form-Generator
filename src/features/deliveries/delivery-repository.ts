@@ -113,22 +113,32 @@ export async function createDeliveryDraft(
   db: SQLiteDatabase,
   input: { customerId: string; businessDate: string } & Partial<Omit<DeliveryDraftInput, 'businessDate'>>,
 ): Promise<string> {
+  let deliveryId = '';
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    deliveryId = await createDeliveryDraftInTx(tx, input);
+  });
+  return deliveryId;
+}
+
+/** Transaction-only form of createDeliveryDraft, for callers that already hold the transaction. */
+export async function createDeliveryDraftInTx(
+  tx: SQLiteDatabase,
+  input: { customerId: string; businessDate: string } & Partial<Omit<DeliveryDraftInput, 'businessDate'>>,
+): Promise<string> {
   validateBusinessDate(input.businessDate);
   const deliveryId = Crypto.randomUUID();
   const now = new Date().toISOString();
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    const customer = await tx.getFirstAsync<{ active: number }>(
-      'SELECT active FROM customers WHERE id = ? AND merged_into_customer_id IS NULL',
-      input.customerId,
-    );
-    if (!customer || customer.active !== 1) throw new Error('Select an active customer for a delivery.');
-    await tx.runAsync(
-      `INSERT INTO deliveries (id, customer_id, document_state, business_date, delivered_by, received_by, notes, created_at)
-       VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)`,
-      deliveryId, input.customerId, input.businessDate, input.deliveredBy?.trim() ?? '', input.receivedBy?.trim() ?? '', input.notes?.trim() ?? '', now,
-    );
-    await auditAndRevise(tx, 'delivery.draft_created', deliveryId, { customerId: input.customerId }, now);
-  });
+  const customer = await tx.getFirstAsync<{ active: number }>(
+    'SELECT active FROM customers WHERE id = ? AND merged_into_customer_id IS NULL',
+    input.customerId,
+  );
+  if (!customer || customer.active !== 1) throw new Error('Select an active customer for a delivery.');
+  await tx.runAsync(
+    `INSERT INTO deliveries (id, customer_id, document_state, business_date, delivered_by, received_by, notes, created_at)
+     VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)`,
+    deliveryId, input.customerId, input.businessDate, input.deliveredBy?.trim() ?? '', input.receivedBy?.trim() ?? '', input.notes?.trim() ?? '', now,
+  );
+  await auditAndRevise(tx, 'delivery.draft_created', deliveryId, { customerId: input.customerId }, now);
   return deliveryId;
 }
 
@@ -154,36 +164,43 @@ export async function addDeliveryItemLine(
   deliveryId: string,
   input: { itemId: string; quantity: number; unitPriceCentavos?: number; overrideReason?: string },
 ): Promise<void> {
+  await db.withExclusiveTransactionAsync((tx) => addDeliveryItemLineInTx(tx, deliveryId, input));
+}
+
+/** Transaction-only form of addDeliveryItemLine, for callers that already hold the transaction. */
+export async function addDeliveryItemLineInTx(
+  tx: SQLiteDatabase,
+  deliveryId: string,
+  input: { itemId: string; quantity: number; unitPriceCentavos?: number; overrideReason?: string },
+): Promise<void> {
   assertPositiveIntegerQuantity(input.quantity);
   const now = new Date().toISOString();
-  await db.withExclusiveTransactionAsync(async (tx) => {
-    const row = await tx.getFirstAsync<{ name: string; active: number; base_selling_price_centavos: number; customer_price_centavos: number | null }>(
-      `SELECT i.name, i.active, i.base_selling_price_centavos, p.selling_price_centavos AS customer_price_centavos
-       FROM deliveries d JOIN items i ON i.id = ?
-       LEFT JOIN customer_item_prices p ON p.item_id = i.id AND p.customer_id = d.customer_id AND p.effective_to IS NULL
-       WHERE d.id = ? AND d.document_state = 'draft'`,
-      input.itemId, deliveryId,
-    );
-    if (!row) throw new Error('Only a draft delivery can be edited.');
-    if (row.active !== 1) throw new Error('Select an active inventory item.');
-    const existing = await tx.getFirstAsync<{ id: string }>('SELECT id FROM delivery_lines WHERE delivery_id = ? AND item_id = ?', deliveryId, input.itemId);
-    if (existing) throw new Error(`${row.name} is already on this delivery. Change its quantity instead.`);
-    const resolved = row.customer_price_centavos ?? row.base_selling_price_centavos;
-    const price = input.unitPriceCentavos ?? resolved;
-    assertMoney(price, 'Unit price');
-    const overridden = price !== resolved;
-    const reason = input.overrideReason?.trim() || null;
-    if (overridden && !reason) throw new Error('A reason is required when overriding the resolved item price.');
-    await tx.runAsync(
-      `INSERT INTO delivery_lines (id, delivery_id, item_id, description_snapshot, quantity_integer, unit_price_centavos, amount_centavos, price_source, override_reason, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      Crypto.randomUUID(), deliveryId, input.itemId, row.name, input.quantity, price, safeMultiply(price, input.quantity),
-      overridden ? 'override' : row.customer_price_centavos === null ? 'base' : 'customer', reason, now,
-    );
-    await refreshTotal(tx, deliveryId);
-    await syncLinkedDeliveryLines(tx, deliveryId);
-    await auditAndRevise(tx, 'delivery.item_added', deliveryId, { itemId: input.itemId, quantity: input.quantity, overridden }, now);
-  });
+  const row = await tx.getFirstAsync<{ name: string; active: number; base_selling_price_centavos: number; customer_price_centavos: number | null }>(
+    `SELECT i.name, i.active, i.base_selling_price_centavos, p.selling_price_centavos AS customer_price_centavos
+     FROM deliveries d JOIN items i ON i.id = ?
+     LEFT JOIN customer_item_prices p ON p.item_id = i.id AND p.customer_id = d.customer_id AND p.effective_to IS NULL
+     WHERE d.id = ? AND d.document_state = 'draft'`,
+    input.itemId, deliveryId,
+  );
+  if (!row) throw new Error('Only a draft delivery can be edited.');
+  if (row.active !== 1) throw new Error('Select an active inventory item.');
+  const existing = await tx.getFirstAsync<{ id: string }>('SELECT id FROM delivery_lines WHERE delivery_id = ? AND item_id = ?', deliveryId, input.itemId);
+  if (existing) throw new Error(`${row.name} is already on this delivery. Change its quantity instead.`);
+  const resolved = row.customer_price_centavos ?? row.base_selling_price_centavos;
+  const price = input.unitPriceCentavos ?? resolved;
+  assertMoney(price, 'Unit price');
+  const overridden = price !== resolved;
+  const reason = input.overrideReason?.trim() || null;
+  if (overridden && !reason) throw new Error('A reason is required when overriding the resolved item price.');
+  await tx.runAsync(
+    `INSERT INTO delivery_lines (id, delivery_id, item_id, description_snapshot, quantity_integer, unit_price_centavos, amount_centavos, price_source, override_reason, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    Crypto.randomUUID(), deliveryId, input.itemId, row.name, input.quantity, price, safeMultiply(price, input.quantity),
+    overridden ? 'override' : row.customer_price_centavos === null ? 'base' : 'customer', reason, now,
+  );
+  await refreshTotal(tx, deliveryId);
+  await syncLinkedDeliveryLines(tx, deliveryId);
+  await auditAndRevise(tx, 'delivery.item_added', deliveryId, { itemId: input.itemId, quantity: input.quantity, overridden }, now);
 }
 
 export async function updateDeliveryLineQuantity(db: SQLiteDatabase, deliveryId: string, lineId: string, quantity: number): Promise<void> {
