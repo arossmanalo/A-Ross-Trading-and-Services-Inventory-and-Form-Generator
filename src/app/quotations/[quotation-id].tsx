@@ -204,6 +204,15 @@ export default function QuotationDetailScreen() {
           </View>
         ) : null}
 
+        {quotation.convertedKind ? (
+          <View style={styles.card}>
+            <Text selectable style={styles.sectionTitle}>Converted to {quotation.convertedKind === 'repair' ? 'a repair (CSR)' : 'a delivery'}</Text>
+            {quotation.convertedServiceReportId ? <ActionButton disabled={busy} variant="secondary" onPress={() => router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': quotation.convertedServiceReportId! } })}>Open the CSR</ActionButton> : null}
+            {quotation.convertedDeliveryId ? <ActionButton disabled={busy} variant="secondary" onPress={() => router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': quotation.convertedDeliveryId! } })}>Open the delivery form</ActionButton> : null}
+            {quotation.convertedBillingStatementId ? <ActionButton disabled={busy} variant="secondary" onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': quotation.convertedBillingStatementId! } })}>Open the Billing Statement</ActionButton> : null}
+          </View>
+        ) : null}
+
         {finalized ? (
           <>
             <View style={styles.card}>
@@ -216,6 +225,7 @@ export default function QuotationDetailScreen() {
               {quotation.pdfState === 'ready'
                 ? <ActionButton disabled={busy} onPress={() => void run(async () => { await shareBundle(db, await getQuotationShareBundle(db, quotation.id)); })}>Share quotation PDF</ActionButton>
                 : <ActionButton disabled={busy} onPress={() => void run(() => retryQuotationPdf(db, quotation.id))}>Retry quotation PDF</ActionButton>}
+              {quotation.convertedKind ? null : <ActionButton disabled={busy} onPress={() => router.push({ pathname: '/quotations/convert', params: { quotationId: quotation.id } })}>Convert to repair or delivery</ActionButton>}
               {quotation.convertedKind ? null : <ActionButton disabled={busy} variant="danger" onPress={() => router.push({ pathname: '/quotations/void', params: { quotationId: quotation.id } })}>Void quotation</ActionButton>}
             </View>
           </>

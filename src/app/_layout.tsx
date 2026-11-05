@@ -135,6 +135,7 @@ export default function RootLayout() {
           <Stack.Screen name="quotations/[quotation-id]" options={{ title: 'Quotation' }} />
           <Stack.Screen name="quotations/preview" options={{ title: 'Quotation Preview' }} />
           <Stack.Screen name="quotations/charge/new" options={{ title: 'Add to Quotation', presentation: 'modal' }} />
+          <Stack.Screen name="quotations/convert" options={{ title: 'Convert Quotation', presentation: 'modal' }} />
           <Stack.Screen name="quotations/void" options={{ title: 'Void Quotation', presentation: 'modal' }} />
           <Stack.Screen name="deliveries/index" options={{ title: 'Delivery Forms' }} />
           <Stack.Screen name="deliveries/new" options={{ title: 'New Delivery Draft', presentation: 'modal' }} />
