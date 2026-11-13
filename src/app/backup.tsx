@@ -78,7 +78,7 @@ export default function BackupScreen() {
   };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 18, gap: 16, paddingBottom: 44 }}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 28, gap: 16, paddingBottom: 48, width: '100%', maxWidth: 760 }}>
       <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface }}>
         <Text selectable style={{ color: colors.label, fontSize: 20, fontWeight: '600' }}>Backup status</Text>
         <Text selectable style={{ color: colors.secondaryLabel }}>

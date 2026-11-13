@@ -134,7 +134,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  content: { gap: 18, padding: 18, paddingBottom: 44 },
+  content: { gap: 18, padding: 28, paddingBottom: 48, width: '100%', maxWidth: 760 },
   intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
   eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
   introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },

@@ -48,7 +48,7 @@ export default function ManageSignaturesScreen() {
   const hasSignedArtifact = captures.length > 0 || document.attachments.length > 0;
   return <>
     <Stack.Screen options={{title:importing?'Import Signed PDF':previewing?'Preview Signed Version':'Sign Document'}} />
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:28,gap:18,paddingBottom:48,width:'100%',maxWidth:820}}>
     <View style={{backgroundColor:colors.brandNavy,padding:18,borderRadius:10,gap:8}}>
       <Text selectable style={{color:colors.onPrimary,fontSize:20,fontWeight:'600'}}>{document.documentNumber}</Text>
       <Text selectable style={{color:colors.onPrimary}}>{document.customerName}</Text>
