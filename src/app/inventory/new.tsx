@@ -189,18 +189,18 @@ const styles = StyleSheet.create({
     gap: 6,
     padding: 16,
     backgroundColor: colors.accentTint,
-    borderRadius: 16,
+    borderRadius: 10,
     borderCurve: 'continuous',
   },
   eyebrow: {
     color: colors.brandBlue,
-    fontSize: 10,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '600',
     letterSpacing: 1,
   },
   introText: {
     color: colors.brandNavy,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
   },
   twoColumns: {
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
     fontWeight: '600',
   },

@@ -105,7 +105,7 @@ export default function MovementReportScreen() {
               }}
               style={{ padding: 14, backgroundColor: colors.surface, borderRadius: 10 }}
             >
-              <Text selectable style={{ color: colors.label, fontWeight: '700' }}>{item.name}</Text>
+              <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.name}</Text>
               <Text selectable style={{ color: colors.secondaryLabel }}>{item.sku ?? 'No SKU'} - {item.unitLabel}</Text>
             </Pressable>
           ))}
@@ -151,10 +151,10 @@ export default function MovementReportScreen() {
         <Pressable
           accessibilityRole="button"
           onPress={() => router.push({ pathname: '/inventory/item/[item-id]', params: { 'item-id': item.itemId } })}
-          style={{ padding: 16, gap: 6, borderRadius: 12, backgroundColor: colors.surface }}
+          style={{ padding: 16, gap: 6, borderRadius: 10, backgroundColor: colors.surface }}
         >
-          <Text selectable style={{ color: colors.label, fontWeight: '800' }}>{item.itemName}</Text>
-          <Text selectable style={{ color: item.quantityDelta < 0 ? colors.error : colors.success, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.itemName}</Text>
+          <Text selectable style={{ color: item.quantityDelta < 0 ? colors.error : colors.success, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
             {item.quantityDelta > 0 ? '+' : ''}{item.quantityDelta} {item.unitLabel} - {movementTypeLabel(item.movementType)}
           </Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>{item.description}</Text>
@@ -169,9 +169,9 @@ export default function MovementReportScreen() {
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <View style={{ minWidth: 130, flex: 1, padding: 14, gap: 4, borderRadius: 12, backgroundColor: colors.surface }}>
+    <View style={{ minWidth: 130, flex: 1, padding: 14, gap: 4, borderRadius: 10, backgroundColor: colors.surface }}>
       <Text selectable style={{ color: colors.secondaryLabel }}>{label}</Text>
-      <Text selectable style={{ color: colors.label, fontSize: 21, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{value}</Text>
+      <Text selectable style={{ color: colors.label, fontSize: 20, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{value}</Text>
     </View>
   );
 }

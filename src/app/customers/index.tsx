@@ -152,19 +152,19 @@ const styles = StyleSheet.create({
   },
   headerEyebrow: {
     color: colors.brandBlue,
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '600',
     letterSpacing: 1.2,
   },
   headerText: {
     color: colors.secondaryLabel,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
   },
   addButton: {
     color: colors.brandBlue,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '600',
   },
   row: {
     minHeight: 82,
@@ -185,8 +185,8 @@ const styles = StyleSheet.create({
   customerName: {
     flexShrink: 1,
     color: colors.label,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '600',
   },
   customerMeta: {
     color: colors.secondaryLabel,
@@ -195,8 +195,8 @@ const styles = StyleSheet.create({
   },
   inactiveBadge: {
     color: colors.secondaryLabel,
-    fontSize: 9,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '600',
     letterSpacing: 0.6,
   },
   countPill: {
@@ -206,19 +206,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: colors.accentTint,
-    borderRadius: 14,
+    borderRadius: 10,
     borderCurve: 'continuous',
   },
   countValue: {
     color: colors.brandNavy,
     fontSize: 17,
-    fontWeight: '900',
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   countLabel: {
     color: colors.brandNavy,
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
   },
   separator: {
     height: StyleSheet.hairlineWidth,
@@ -233,13 +233,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.label,
-    fontSize: 21,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '600',
   },
   emptyBody: {
     maxWidth: 320,
     color: colors.secondaryLabel,
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 21,
     textAlign: 'center',
   },
@@ -249,13 +249,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 20,
     backgroundColor: colors.brandBlue,
-    borderRadius: 14,
+    borderRadius: 10,
     borderCurve: 'continuous',
   },
   emptyActionText: {
     color: colors.onPrimary,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   errorText: {
     color: colors.error,

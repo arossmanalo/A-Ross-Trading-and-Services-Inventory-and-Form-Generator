@@ -96,12 +96,12 @@ export default function NewReportItemUsageScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 14, padding: 18, paddingBottom: 44 },
-  eyebrow: { color: colors.brandBlue, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
   help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
+  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
   switchRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
   switchCopy: { flex: 1, gap: 4 },
-  switchTitle: { color: colors.label, fontSize: 14, fontWeight: '800' },
-  itemMeta: { color: colors.secondaryLabel, fontSize: 12, lineHeight: 17 },
+  switchTitle: { color: colors.label, fontSize: 15, fontWeight: '600' },
+  itemMeta: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
   errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 });

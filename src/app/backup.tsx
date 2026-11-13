@@ -79,23 +79,23 @@ export default function BackupScreen() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 18, gap: 16, paddingBottom: 44 }}>
-      <View style={{ padding: 16, gap: 8, borderRadius: 12, backgroundColor: colors.surface }}>
-        <Text selectable style={{ color: colors.label, fontSize: 18, fontWeight: '800' }}>Backup status</Text>
+      <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface }}>
+        <Text selectable style={{ color: colors.label, fontSize: 20, fontWeight: '600' }}>Backup status</Text>
         <Text selectable style={{ color: colors.secondaryLabel }}>
           The app creates one .arossbackup file, then opens Android sharing so you can manually upload it to private Google Drive.
         </Text>
       </View>
 
-      <View style={{ padding: 16, gap: 8, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.warning }}>
-        <Text selectable style={{ color: colors.warning, fontWeight: '800' }}>Unencrypted backup</Text>
+      <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.warning }}>
+        <Text selectable style={{ color: colors.warning, fontWeight: '600' }}>Unencrypted backup</Text>
         <Text selectable style={{ color: colors.secondaryLabel }}>
           Backup files may contain customer information, signatures, and returned signed PDFs. Store them only in a private Drive location.
         </Text>
       </View>
 
       {status ? (
-        <View style={{ padding: 16, gap: 8, borderRadius: 12, backgroundColor: colors.surface }}>
-          <Text selectable style={{ color: colors.label, fontWeight: '800' }}>Revision {status.currentRevision}</Text>
+        <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface }}>
+          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>Revision {status.currentRevision}</Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>
             {status.revisionsNotExported === 0 ? 'All recorded revisions are included in the latest export.' : `${status.revisionsNotExported} revision(s) are not included in the latest export.`}
           </Text>

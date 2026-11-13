@@ -68,14 +68,14 @@ export default function VoidDeliveryScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 18, paddingBottom: 44 },
-  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 16, borderCurve: 'continuous' },
-  warningTitle: { color: colors.error, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  warningText: { color: colors.error, fontSize: 14, lineHeight: 20 },
-  lineRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.surface, borderRadius: 14, borderCurve: 'continuous' },
+  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 10, borderCurve: 'continuous' },
+  warningTitle: { color: colors.error, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
+  warningText: { color: colors.error, fontSize: 15, lineHeight: 20 },
+  lineRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.surface, borderRadius: 10, borderCurve: 'continuous' },
   lineCopy: { flex: 1, gap: 3 },
-  lineTitle: { color: colors.label, fontSize: 14, fontWeight: '800' },
+  lineTitle: { color: colors.label, fontSize: 15, fontWeight: '600' },
   switchCopy: { alignItems: 'center', gap: 4 },
-  help: { color: colors.secondaryLabel, fontSize: 12, lineHeight: 17 },
+  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
   reason: { minHeight: 96 },
   error: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });

@@ -80,9 +80,9 @@ export default function NewDeliveryItemScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 14, padding: 18, paddingBottom: 44 },
-  eyebrow: { color: colors.brandBlue, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
-  selectedTitle: { color: colors.brandNavy, fontSize: 17, fontWeight: '900' },
+  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
+  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
+  selectedTitle: { color: colors.brandNavy, fontSize: 17, fontWeight: '600' },
   help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
   warning: { color: colors.warning, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   error: { color: colors.error, fontSize: 13, fontWeight: '600' },

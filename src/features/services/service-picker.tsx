@@ -127,20 +127,20 @@ export function ServicePicker({ services, onSelect, onCreated, heading, disabled
 
 const styles = StyleSheet.create({
   container: { gap: 10 },
-  heading: { color: colors.brandNavy, fontSize: 15, fontWeight: '800' },
-  count: { color: colors.secondaryLabel, fontSize: 12 },
+  heading: { color: colors.brandNavy, fontSize: 15, fontWeight: '600' },
+  count: { color: colors.secondaryLabel, fontSize: 13 },
   list: {
     maxHeight: 280,
     borderWidth: 1,
     borderColor: colors.separator,
     borderCurve: 'continuous',
-    borderRadius: 14,
+    borderRadius: 10,
     backgroundColor: colors.surface,
   },
   row: { minHeight: 56, justifyContent: 'center', gap: 2, paddingHorizontal: 14, paddingVertical: 10 },
   rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-  rowName: { color: colors.label, fontSize: 15, fontWeight: '700' },
-  rowMeta: { color: colors.secondaryLabel, fontSize: 12 },
+  rowName: { color: colors.label, fontSize: 15, fontWeight: '600' },
+  rowMeta: { color: colors.secondaryLabel, fontSize: 13 },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.45 },
   quickAdd: {
@@ -149,9 +149,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.brandBlue,
     borderCurve: 'continuous',
-    borderRadius: 14,
-    backgroundColor: '#eaf2ff',
+    borderRadius: 10,
+    backgroundColor: colors.accentTint,
   },
-  quickAddTitle: { color: colors.brandNavy, fontSize: 15, fontWeight: '800' },
+  quickAddTitle: { color: colors.brandNavy, fontSize: 15, fontWeight: '600' },
   error: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 });

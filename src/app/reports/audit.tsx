@@ -100,8 +100,8 @@ export default function AuditReportScreen() {
       )}
       ListEmptyComponent={<Text selectable>{busy ? 'Loading...' : 'No audit rows match these filters.'}</Text>}
       renderItem={({ item }) => (
-        <View style={{ padding: 16, gap: 6, borderRadius: 12, backgroundColor: colors.surface }}>
-          <Text selectable style={{ color: colors.label, fontWeight: '800' }}>{item.eventType}</Text>
+        <View style={{ padding: 16, gap: 6, borderRadius: 10, backgroundColor: colors.surface }}>
+          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.eventType}</Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>
             {auditEntityLabel(item.entityType)} - {item.entityId}
           </Text>

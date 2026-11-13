@@ -110,5 +110,5 @@ const styles = StyleSheet.create({
   optionSelected: { backgroundColor: colors.accentTint },
   optionText: { color: colors.label, fontSize: fontSize.body },
   optionTextSelected: { color: colors.brandNavy, fontSize: fontSize.body, fontWeight: '600' },
-  check: { color: colors.primary, fontSize: fontSize.subhead, fontWeight: '700' },
+  check: { color: colors.primary, fontSize: fontSize.subhead, fontWeight: '600' },
 });

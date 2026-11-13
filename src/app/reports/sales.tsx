@@ -102,7 +102,7 @@ export default function SalesReportScreen() {
               }}
               style={{ padding: 14, backgroundColor: colors.surface, borderRadius: 10 }}
             >
-              <Text selectable style={{ color: colors.label, fontWeight: '700' }}>{customer.name}{customer.active ? '' : ' (inactive)'}</Text>
+              <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{customer.name}{customer.active ? '' : ' (inactive)'}</Text>
             </Pressable>
           ))}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -136,9 +136,9 @@ export default function SalesReportScreen() {
         <Pressable
           accessibilityRole="button"
           onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': item.billingStatementId } })}
-          style={{ padding: 16, gap: 6, borderRadius: 12, backgroundColor: colors.surface }}
+          style={{ padding: 16, gap: 6, borderRadius: 10, backgroundColor: colors.surface }}
         >
-          <Text selectable style={{ color: colors.label, fontWeight: '800' }}>{item.description}</Text>
+          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.description}</Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>{item.customerName} - {item.billingStatementNumber ?? 'Billing Statement'}{item.serviceReportNumber ? ` - ${item.serviceReportNumber}` : ''}{item.controlNumber ? ` - Control No. ${item.controlNumber}` : ''}</Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>
             {lineTypeLabel(item.lineType)} - {item.quantity} x {PHP.format(item.unitPriceCentavos / 100)} = {PHP.format(item.amountCentavos / 100)}

@@ -82,13 +82,13 @@ export default function VoidServiceReportScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 18, paddingBottom: 44 },
-  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 16, borderCurve: 'continuous' },
-  warningTitle: { color: colors.error, fontSize: 18, fontWeight: '900' },
+  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 10, borderCurve: 'continuous' },
+  warningTitle: { color: colors.error, fontSize: 20, fontWeight: '600' },
   warningText: { color: colors.label, fontSize: 13, lineHeight: 19 },
   multiline: { minHeight: 90 },
-  disposition: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 14, borderCurve: 'continuous', backgroundColor: colors.surface },
+  disposition: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.surface },
   copy: { flex: 1, gap: 4 },
-  itemName: { color: colors.label, fontSize: 14, fontWeight: '800' },
-  help: { color: colors.secondaryLabel, fontSize: 12, lineHeight: 17 },
+  itemName: { color: colors.label, fontSize: 15, fontWeight: '600' },
+  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
   errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
 });

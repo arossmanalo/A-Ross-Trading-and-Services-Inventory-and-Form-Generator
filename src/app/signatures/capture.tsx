@@ -48,7 +48,7 @@ export default function CaptureScreen() {
   // The document owns scrolling. Nesting it in a native ScrollView and toggling
   // that parent's responder during a stroke can leave Android presses cancelled.
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex:1,padding:18,gap:12,paddingBottom:18}}>
-    <Text numberOfLines={2} style={{fontWeight:'700'}}>{target ?? 'Loading document…'}</Text>
+    <Text numberOfLines={2} style={{fontWeight:'600'}}>{target ?? 'Loading document…'}</Text>
     <Text>{ownerType === 'settings' ? 'Default preparer signature for future documents only.' : `Sign in the ${role} box, then save and review before finalizing.`}</Text>
     <FormField label="Signer’s full name" value={name} onChangeText={setName} editable={!busy} maxLength={200} />
     {ownerType === 'settings' ? <SignaturePad disabled={busy || !target} saveLabel="Save default signature" onCapture={data => {

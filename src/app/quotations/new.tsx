@@ -81,9 +81,9 @@ export default function NewQuotationScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
-  title: { color: colors.label, fontSize: 16, fontWeight: '900' },
+  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
+  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
+  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
+  title: { color: colors.label, fontSize: 17, fontWeight: '600' },
   error: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });

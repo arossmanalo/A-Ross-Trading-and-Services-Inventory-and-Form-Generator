@@ -31,7 +31,7 @@ export function BusinessLogoSettings() {
     } catch(e) {setError(e instanceof Error?e.message:'Could not update logo.');} finally {setBusy(false);}
   };
   return <View style={{gap:12}}>
-    <Text selectable style={{fontWeight:'700'}}>Business logo</Text>
+    <Text selectable style={{fontWeight:'600'}}>Business logo</Text>
     <Image
       accessibilityLabel="A.Ross Trading and Services logo"
       source={logo ? {uri:logo} : require('../../../assets/a-ross-logo.png')}

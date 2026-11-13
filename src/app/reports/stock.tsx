@@ -32,8 +32,8 @@ export default function StockReportScreen() {
       {error?<Text selectable style={{color:colors.error}}>{error}</Text>:null}
     </View>}
     ListEmptyComponent={<Text selectable>{busy?'Loading…':'No inventory items match these filters.'}</Text>}
-    renderItem={({item})=><Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/inventory/item/[item-id]',params:{'item-id':item.id}})} style={{padding:16,gap:6,borderRadius:12,backgroundColor:colors.surface}}>
-      <Text selectable style={{color:colors.label,fontWeight:'700'}}>{item.name}{item.active?'':' · Inactive'}</Text>
+    renderItem={({item})=><Pressable accessibilityRole="button" onPress={()=>router.push({pathname:'/inventory/item/[item-id]',params:{'item-id':item.id}})} style={{padding:16,gap:6,borderRadius:10,backgroundColor:colors.surface}}>
+      <Text selectable style={{color:colors.label,fontWeight:'600'}}>{item.name}{item.active?'':' · Inactive'}</Text>
       <Text selectable style={{color:colors.secondaryLabel}}>{item.sku??'No SKU'} · {item.currentStock} {item.unitLabel} · Threshold {item.lowStockThreshold}</Text>
       {item.active&&item.currentStock<=item.lowStockThreshold?<Text style={{color:colors.error}}>Low stock</Text>:null}
     </Pressable>}/>;

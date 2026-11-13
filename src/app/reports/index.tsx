@@ -50,9 +50,9 @@ export default function FinancialReportsScreen() {
     {query.trim()?customers.filter(c=>c.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0,15).map(c=><Pressable key={c.id} accessibilityRole="button" disabled={busy} onPress={()=>{setCustomerId(c.id);setQuery('');}} style={{padding:14,backgroundColor:colors.surface,borderRadius:10}}><Text style={{color:colors.label}}>{c.name}{c.active?'':' (inactive)'}</Text></Pressable>):null}
     <ActionButton disabled={busy} onPress={()=>void generate()}>{busy?'Working…':'Generate report'}</ActionButton>
     {loaded?<>
-      <Text selectable style={{fontWeight:'700',color:colors.label}}>Results: {loaded.filter.from} to {loaded.filter.to} · {loaded.customerName}</Text>
+      <Text selectable style={{fontWeight:'600',color:colors.label}}>Results: {loaded.filter.from} to {loaded.filter.to} · {loaded.customerName}</Text>
       <Text selectable>{loaded.report.statementCount} finalized statements</Text>
-      {FINANCIAL_METRICS.map(({key,label})=><View key={key} style={{padding:16,gap:6,backgroundColor:colors.surface,borderRadius:12}}><Text selectable style={{color:colors.secondaryLabel}}>{label}</Text><Text selectable style={{color:colors.label,fontSize:23,fontWeight:'700',fontVariant:['tabular-nums']}}>{PHP.format(loaded.report[key]/100)}</Text></View>)}
+      {FINANCIAL_METRICS.map(({key,label})=><View key={key} style={{padding:16,gap:6,backgroundColor:colors.surface,borderRadius:10}}><Text selectable style={{color:colors.secondaryLabel}}>{label}</Text><Text selectable style={{color:colors.label,fontSize:28,fontWeight:'600',fontVariant:['tabular-nums']}}>{PHP.format(loaded.report[key]/100)}</Text></View>)}
       <Text selectable>Net Revenue After Recorded Expenses excludes untracked item acquisition and internal labor costs.</Text>
       <ActionButton variant="secondary" disabled={busy} onPress={()=>{
         setBusy(true);setError(null);

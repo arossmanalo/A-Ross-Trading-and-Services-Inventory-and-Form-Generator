@@ -104,7 +104,7 @@ export default function CollectionsReportScreen() {
               }}
               style={{ padding: 14, backgroundColor: colors.surface, borderRadius: 10 }}
             >
-              <Text selectable style={{ color: colors.label, fontWeight: '700' }}>{customer.name}{customer.active ? '' : ' (inactive)'}</Text>
+              <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{customer.name}{customer.active ? '' : ' (inactive)'}</Text>
             </Pressable>
           ))}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -145,9 +145,9 @@ export default function CollectionsReportScreen() {
         <Pressable
           accessibilityRole="button"
           onPress={() => router.push({ pathname: '/payments/[payment-id]', params: { 'payment-id': item.id } })}
-          style={{ padding: 16, gap: 6, borderRadius: 12, backgroundColor: colors.surface }}
+          style={{ padding: 16, gap: 6, borderRadius: 10, backgroundColor: colors.surface }}
         >
-          <Text selectable style={{ color: colors.label, fontWeight: '800' }}>{item.paNumber ?? 'Payment'} - {PHP.format(item.amountCentavos / 100)}</Text>
+          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.paNumber ?? 'Payment'} - {PHP.format(item.amountCentavos / 100)}</Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>{item.customerName} - {item.billingStatementNumber ?? 'Billing Statement'}</Text>
           <Text selectable style={{ color: colors.secondaryLabel }}>{item.businessDate} - {methodLabel(item.method)}{item.referenceNumber ? ` - ${item.referenceNumber}` : ''}</Text>
           {item.state === 'voided' ? <Text selectable style={{ color: colors.error }}>Voided: {item.voidReason ?? 'No reason recorded'}</Text> : null}

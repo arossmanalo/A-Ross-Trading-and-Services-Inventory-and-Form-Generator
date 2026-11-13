@@ -80,10 +80,10 @@ export default function EditEquipmentScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { gap: 18, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
+  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
+  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
+  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
   multiline: { minHeight: 104 },
   actions: { gap: 10, paddingTop: 4 },
-  errorText: { color: colors.error, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  errorText: { color: colors.error, fontSize: 15, lineHeight: 20, fontWeight: '600' },
 });

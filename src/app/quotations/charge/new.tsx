@@ -125,14 +125,14 @@ export default function NewQuotationChargeScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 14, padding: 18, paddingBottom: 44 },
-  eyebrow: { color: colors.brandBlue, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
   tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  tab: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 20, backgroundColor: colors.surface },
+  tab: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, backgroundColor: colors.surface },
   activeTab: { borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  tabText: { color: colors.secondaryLabel, fontSize: 12, fontWeight: '800' },
+  tabText: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600' },
   activeTabText: { color: colors.brandNavy },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
-  selectedTitle: { color: colors.brandNavy, fontSize: 17, fontWeight: '900' },
+  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
+  selectedTitle: { color: colors.brandNavy, fontSize: 17, fontWeight: '600' },
   help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
   error: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });
