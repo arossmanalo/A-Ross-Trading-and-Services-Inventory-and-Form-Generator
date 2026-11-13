@@ -20,7 +20,7 @@ type ListPaneHeaderProps = {
   showTotals: boolean;
   onToggleTotals: () => void;
   onClearFilters?: () => void;
-  sales?: { totalCentavos: number; count: number; noun: string };
+  sales?: { totalCentavos: number; count: number; noun: string; nounPlural?: string };
   error?: string | null;
 };
 
@@ -70,7 +70,13 @@ export function ListPaneHeader(props: ListPaneHeaderProps) {
       {props.filtersOpen ? <View style={styles.filters}>{props.filters}</View> : null}
       <Text style={text.meta}>{props.countLine}</Text>
       {props.sales ? (
-        <SalesTotalCard totalCentavos={props.sales.totalCentavos} count={props.sales.count} noun={props.sales.noun} hidden={!props.showTotals} />
+        <SalesTotalCard
+          totalCentavos={props.sales.totalCentavos}
+          count={props.sales.count}
+          noun={props.sales.noun}
+          nounPlural={props.sales.nounPlural}
+          hidden={!props.showTotals}
+        />
       ) : null}
       {props.error ? <Text style={text.error}>{props.error}</Text> : null}
     </View>

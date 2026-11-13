@@ -9,15 +9,17 @@ type SalesTotalCardProps = {
   count: number;
   /** Noun for the counted documents, for example "service report". */
   noun: string;
+  /** Plural when it is not the noun plus "s", for example "deliveries". */
+  nounPlural?: string;
   hidden?: boolean;
 };
 
 /** Total of the documents currently shown, for a search or a set of filters. */
-export function SalesTotalCard({ totalCentavos, count, noun, hidden = false }: SalesTotalCardProps) {
+export function SalesTotalCard({ totalCentavos, count, noun, nounPlural = `${noun}s`, hidden = false }: SalesTotalCardProps) {
   return (
     <View style={styles.card}>
       <Text selectable style={text.meta}>
-        Total of sales · {count} {noun}{count === 1 ? '' : 's'} counted, voided left out
+        Total of sales · {count} {count === 1 ? noun : nounPlural} counted, voided left out
       </Text>
       <Text selectable style={styles.amount}>{hidden ? '₱ ••••••' : formatCentavos(totalCentavos)}</Text>
     </View>

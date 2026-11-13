@@ -1,15 +1,17 @@
-import { Link, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
 import { DateRangeFields } from '@/components/date-range-fields';
 import { Dropdown } from '@/components/dropdown';
-import { FormField } from '@/components/form-field';
-import { SalesTotalCard } from '@/components/sales-total-card';
+import { ListEmpty, ListPaneHeader, listRowStyles } from '@/components/list-pane';
+import { SplitView, useSplitLayout } from '@/components/split-view';
+import { StatusChip, documentStateTone, sentenceCase } from '@/components/status-chip';
 import { getLocalBusinessDate } from '@/domain/business-date';
+import { formatDisplayDate } from '@/domain/calendar';
 import { formatCentavos } from '@/domain/money';
+import { DeliveryDetailView } from '@/features/deliveries/delivery-detail-view';
 import {
   DEFAULT_DELIVERY_CRITERIA,
   DELIVERY_BILLING_OPTIONS,
@@ -24,47 +26,58 @@ import {
 import { listDeliveries } from '@/features/deliveries/delivery-repository';
 import type { DeliveryListItem } from '@/features/deliveries/delivery-types';
 import { colors } from '@/theme/colors';
+import { text } from '@/theme/typography';
 
-const DeliveryRow = memo(function DeliveryRow({ delivery, showTotal }: { delivery: DeliveryListItem; showTotal: boolean }) {
-  const open = useCallback(() => {
-    router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': delivery.id } });
-  }, [delivery.id]);
+type DeliveryRowProps = {
+  delivery: DeliveryListItem;
+  showTotal: boolean;
+  selected: boolean;
+  onOpen: (deliveryId: string) => void;
+};
+
+const DeliveryRow = memo(function DeliveryRow({ delivery, showTotal, selected, onOpen }: DeliveryRowProps) {
+  const statement = delivery.linkedStatements[0];
   return (
-    <Pressable accessibilityRole="button" onPress={open} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
-      <View style={styles.rowCopy}>
-        <View style={styles.titleLine}>
-          <Text selectable style={styles.number}>{delivery.dfNumber ?? 'DRAFT'}</Text>
-          <Text selectable style={delivery.documentState === 'draft' ? styles.draftBadge : delivery.documentState === 'voided' ? styles.voidBadge : styles.finalBadge}>
-            {delivery.documentState.toUpperCase()}
-          </Text>
-        </View>
-        <Text selectable style={styles.customer}>{delivery.customerName}</Text>
-        <Text selectable style={styles.meta}>{delivery.businessDate}</Text>
-        {delivery.linkedStatements.length ? (
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={`Open ${delivery.linkedStatements[0].bsNumber ?? 'draft Billing Statement'}`}
-            hitSlop={6}
-            onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': delivery.linkedStatements[0].id } })}
-            style={styles.billingChip}
-          >
-            <Text style={styles.billingChipText}>{delivery.linkedStatements[0].bsNumber ?? 'Draft statement'} ›</Text>
-          </Pressable>
-        ) : null}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(delivery.id)}
+      style={({ pressed }) => [listRowStyles.row, selected ? listRowStyles.selected : null, pressed && !selected ? listRowStyles.pressed : null]}
+    >
+      <View style={listRowStyles.titleLine}>
+        <Text style={listRowStyles.number}>{delivery.dfNumber ?? 'Draft'}</Text>
+        <StatusChip label={sentenceCase(delivery.documentState)} tone={documentStateTone(delivery.documentState)} />
       </View>
-      <View style={styles.stateCopy}>
-        <Text selectable style={styles.total}>{showTotal ? formatCentavos(delivery.totalCentavos) : '₱ ••••••'}</Text>
-        {delivery.documentState === 'finalized' ? <Text selectable style={styles.pdf}>PDF {delivery.pdfState}</Text> : null}
+      <Text numberOfLines={1} style={text.bodyStrong}>{delivery.customerName}</Text>
+      <View style={listRowStyles.metaLine}>
+        <Text numberOfLines={1} style={[text.meta, { flex: 1 }]}>
+          {formatDisplayDate(delivery.businessDate)}{delivery.documentState === 'finalized' ? ` · PDF ${delivery.pdfState.replaceAll('_', ' ')}` : ''}
+        </Text>
+        <Text style={text.amount}>{showTotal ? formatCentavos(delivery.totalCentavos) : '₱ ••••••'}</Text>
       </View>
+      {statement ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${statement.bsNumber ?? 'draft Billing Statement'}`}
+          hitSlop={6}
+          onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statement.id } })}
+          style={listRowStyles.linkChip}
+        >
+          <Text style={listRowStyles.linkChipText}>{statement.bsNumber ?? 'Draft statement'} ›</Text>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 });
 
 export default function DeliveriesScreen() {
   const db = useSQLiteContext();
+  const split = useSplitLayout();
   const [rows, setRows] = useState<DeliveryListItem[]>([]);
   const [criteria, setCriteria] = useState<DeliveryCriteria>(DEFAULT_DELIVERY_CRITERIA);
   const [showTotals, setShowTotals] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +101,7 @@ export default function DeliveriesScreen() {
   const visible = useMemo(() => filterDeliveries(rows, criteria, today), [criteria, rows, today]);
   const filtered = hasActiveDeliveryFilters(criteria);
   const totals = useMemo(() => sumDeliveryValue(visible), [visible]);
+  const activeFilterCount = [criteria.state !== DEFAULT_DELIVERY_CRITERIA.state, criteria.billing !== DEFAULT_DELIVERY_CRITERIA.billing, criteria.period !== DEFAULT_DELIVERY_CRITERIA.period].filter(Boolean).length;
   const update = <K extends keyof DeliveryCriteria>(key: K, value: DeliveryCriteria[K]) => setCriteria((current) => ({ ...current, [key]: value }));
   const changePeriod = (period: DeliveryCriteria['period']) => setCriteria((current) => ({
     ...current,
@@ -97,94 +111,78 @@ export default function DeliveriesScreen() {
     to: period === 'custom' && !current.to ? today : current.to,
   }));
 
-  return (
+  const openDelivery = useCallback((deliveryId: string) => {
+    if (split) setSelectedId(deliveryId);
+    else router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': deliveryId } });
+  }, [split]);
+
+  const list = (
     <FlatList
-      contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={visible.length ? styles.content : styles.emptyContent}
       data={visible}
-      extraData={showTotals}
+      extraData={`${showTotals}:${selectedId}:${split}`}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <DeliveryRow delivery={item} showTotal={showTotals} />}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      renderItem={({ item }) => (
+        <DeliveryRow delivery={item} showTotal={showTotals} selected={split && item.id === selectedId} onOpen={openDelivery} />
+      )}
       refreshing={loading && rows.length > 0}
       onRefresh={load}
-      ListHeaderComponent={
-        <View style={styles.header}>
-          <Text selectable style={styles.eyebrow}>DELIVERY FORMS</Text>
-          <Text selectable style={styles.help}>Deliveries list inventory items. Finalizing one deducts the delivered quantities from stock, and its Billing Statement bills what was delivered.</Text>
-          <Link href="/deliveries/new" asChild>
-            <Pressable accessibilityRole="button" style={styles.newButton}>
-              <Text selectable style={styles.newText}>New delivery draft</Text>
-            </Pressable>
-          </Link>
-          <FormField
-            autoCapitalize="none"
-            autoCorrect={false}
-            label="Search"
-            onChangeText={(value) => update('query', value)}
-            placeholder="DF number, customer, item, date, amount…"
-            returnKeyType="search"
-            value={criteria.query}
-          />
-          <View style={styles.filters}>
-            <Dropdown label="STATUS" value={criteria.state} options={DELIVERY_STATE_OPTIONS} onChange={(value) => update('state', value)} />
-            <Dropdown label="BILLING" value={criteria.billing} options={DELIVERY_BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
-            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
-            <Dropdown label="SORT BY" value={criteria.sort} options={DELIVERY_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
-          </View>
-          {criteria.period === 'custom' ? <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} /> : null}
-          <View style={styles.resultLine}>
-            <Text selectable style={styles.help}>{visible.length} of {rows.length} deliver{rows.length === 1 ? 'y' : 'ies'}</Text>
-            <ActionButton compact variant="secondary" onPress={() => setShowTotals((current) => !current)}>{showTotals ? 'Hide totals' : 'Show totals'}</ActionButton>
-            {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_DELIVERY_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
-          </View>
-          {filtered ? <SalesTotalCard totalCentavos={totals.totalCentavos} count={totals.count} noun="delivery" hidden={!showTotals} /> : null}
-          {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-        </View>
-      }
-      ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandBlue} size="large" /> : rows.length && filtered ? (
-        <View style={styles.empty}>
-          <Text selectable style={styles.emptyTitle}>No matching deliveries</Text>
-          <Text selectable style={styles.help}>Try a different search or clear the filters.</Text>
-        </View>
+      ListHeaderComponent={(
+        <ListPaneHeader
+          newLabel="New delivery draft"
+          onNew={() => router.push('/deliveries/new')}
+          query={criteria.query}
+          onQueryChange={(value) => update('query', value)}
+          searchPlaceholder="DF number, customer, item, date, amount"
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((open) => !open)}
+          activeFilterCount={activeFilterCount}
+          filters={(
+            <>
+              <Dropdown label="Status" value={criteria.state} options={DELIVERY_STATE_OPTIONS} onChange={(value) => update('state', value)} />
+              <Dropdown label="Billing" value={criteria.billing} options={DELIVERY_BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
+              <Dropdown label="Date" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
+              <Dropdown label="Sort by" value={criteria.sort} options={DELIVERY_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
+              {criteria.period === 'custom' ? (
+                <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} />
+              ) : null}
+            </>
+          )}
+          countLine={`${visible.length} of ${rows.length} deliver${rows.length === 1 ? 'y' : 'ies'}`}
+          showTotals={showTotals}
+          onToggleTotals={() => setShowTotals((current) => !current)}
+          onClearFilters={filtered ? () => setCriteria((current) => ({ ...DEFAULT_DELIVERY_CRITERIA, sort: current.sort })) : undefined}
+          sales={filtered ? { totalCentavos: totals.totalCentavos, count: totals.count, noun: 'delivery', nounPlural: 'deliveries' } : undefined}
+          error={error}
+        />
+      )}
+      ListEmptyComponent={loading ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} /> : rows.length && filtered ? (
+        <ListEmpty title="No matching deliveries" body="Try a different search or clear the filters." />
       ) : (
-        <View style={styles.empty}>
-          <Text selectable style={styles.emptyTitle}>No deliveries yet</Text>
-          <Text selectable style={styles.help}>Create a draft for a registered customer.</Text>
-        </View>
+        <ListEmpty title="No deliveries yet" body="Deliveries list inventory items. Finalizing one deducts the delivered quantities from stock. Create a draft for a registered customer." />
       )}
     />
   );
-}
 
-const styles = StyleSheet.create({
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  resultLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  billingChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  billingChipText: { color: colors.brandNavy, fontSize: 13, fontWeight: '600' },
-  content: { paddingHorizontal: 18, paddingBottom: 44 },
-  emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
-  header: { gap: 10, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 19 },
-  newButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandBlue, borderRadius: 10, borderCurve: 'continuous' },
-  newText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
-  row: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  rowCopy: { flex: 1, gap: 4 },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  number: { color: colors.label, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  total: { color: colors.brandNavy, fontSize: 15, fontWeight: '600', textAlign: 'right', fontVariant: ['tabular-nums'] },
-  customer: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  meta: { color: colors.secondaryLabel, fontSize: 13 },
-  draftBadge: { color: colors.warning, fontSize: 13, fontWeight: '600' },
-  finalBadge: { color: colors.success, fontSize: 13, fontWeight: '600' },
-  voidBadge: { color: colors.error, fontSize: 13, fontWeight: '600' },
-  stateCopy: { maxWidth: 150, alignItems: 'flex-end', gap: 4 },
-  pdf: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 28 },
-  emptyTitle: { color: colors.label, fontSize: 20, fontWeight: '600' },
-  error: { color: colors.error, fontSize: 13 },
-  pressed: { opacity: 0.72 },
-});
+  if (!split) return list;
+
+  return (
+    <SplitView
+      list={list}
+      detail={selectedId ? (
+        <DeliveryDetailView
+          key={selectedId}
+          embedded
+          deliveryId={selectedId}
+          onDeleted={() => {
+            setSelectedId(null);
+            void load();
+          }}
+          onChanged={() => void load()}
+        />
+      ) : null}
+      emptyTitle="Select a delivery"
+      emptyBody="Its items, value and actions open here."
+    />
+  );
+}
