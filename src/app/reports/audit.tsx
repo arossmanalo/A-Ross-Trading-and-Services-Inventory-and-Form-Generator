@@ -17,6 +17,7 @@ import {
   type AuditReportRow,
 } from '@/features/reports/audit-report';
 import { shareCsvReport } from '@/features/reports/report-export';
+import { ReportFrame } from '@/components/report-frame';
 import { colors } from '@/theme/colors';
 
 export default function AuditReportScreen() {
@@ -50,6 +51,7 @@ export default function AuditReportScreen() {
   }, [generate]));
 
   return (
+    <ReportFrame>
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
@@ -110,5 +112,6 @@ export default function AuditReportScreen() {
         </View>
       )}
     />
+    </ReportFrame>
   );
 }

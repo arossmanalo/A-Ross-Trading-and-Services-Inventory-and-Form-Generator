@@ -19,6 +19,7 @@ import {
   type SalesReportRow,
 } from '@/features/reports/sales-report';
 import { shareCsvReport } from '@/features/reports/report-export';
+import { ReportFrame } from '@/components/report-frame';
 import { colors } from '@/theme/colors';
 
 const PHP = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -73,6 +74,7 @@ export default function SalesReportScreen() {
   }, [customerId, db, from, lineType, to]);
 
   return (
+    <ReportFrame>
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
@@ -147,5 +149,6 @@ export default function SalesReportScreen() {
         </Pressable>
       )}
     />
+    </ReportFrame>
   );
 }

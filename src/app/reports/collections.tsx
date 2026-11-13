@@ -22,6 +22,7 @@ import {
   type CollectionsReportRow,
 } from '@/features/reports/collections-report';
 import { shareCsvReport } from '@/features/reports/report-export';
+import { ReportFrame } from '@/components/report-frame';
 import { colors } from '@/theme/colors';
 
 const PHP = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -77,6 +78,7 @@ export default function CollectionsReportScreen() {
   }, [customerId, db, from, method, state, to]);
 
   return (
+    <ReportFrame>
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
@@ -154,5 +156,6 @@ export default function CollectionsReportScreen() {
         </Pressable>
       )}
     />
+    </ReportFrame>
   );
 }

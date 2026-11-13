@@ -18,6 +18,7 @@ import {
   type MovementTypeFilter,
 } from '@/features/reports/inventory-report';
 import { shareCsvReport } from '@/features/reports/report-export';
+import { ReportFrame } from '@/components/report-frame';
 import { colors } from '@/theme/colors';
 
 const MOVEMENT_FILTERS: MovementTypeFilter[] = ['all', 'restock', 'sale', 'nonbillable_usage', 'consumption', 'reversal'];
@@ -75,6 +76,7 @@ export default function MovementReportScreen() {
     : [];
 
   return (
+    <ReportFrame>
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
@@ -164,6 +166,7 @@ export default function MovementReportScreen() {
         </Pressable>
       )}
     />
+    </ReportFrame>
   );
 }
 

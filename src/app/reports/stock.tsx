@@ -8,6 +8,7 @@ import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import { filterStockReport, stockReportCsv, type StockFilter } from '@/features/reports/inventory-report';
 import { shareCsvReport } from '@/features/reports/report-export';
+import { ReportFrame } from '@/components/report-frame';
 import { colors } from '@/theme/colors';
 
 export default function StockReportScreen() {
@@ -19,7 +20,7 @@ export default function StockReportScreen() {
   const load=useCallback(async()=>{setBusy(true);setError(null);try{setItems(await listInventoryItems(db));}catch(e){setError(e instanceof Error?e.message:'Could not load stock.');}finally{setBusy(false);}},[db]);
   useFocusEffect(useCallback(()=>{void load();},[load]));
   const rows=filterStockReport(items,query,status);
-  return <FlatList contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:12,paddingBottom:44}}
+  return <ReportFrame><FlatList contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:12,paddingBottom:44}}
     data={rows} keyExtractor={item=>item.id} refreshing={busy} onRefresh={()=>void load()}
     ListHeaderComponent={<View style={{gap:14,marginBottom:16}}>
       <Text selectable>Current stock is calculated from all recorded movements. Tap an item to see its movement history.</Text>
@@ -36,5 +37,5 @@ export default function StockReportScreen() {
       <Text selectable style={{color:colors.label,fontWeight:'600'}}>{item.name}{item.active?'':' · Inactive'}</Text>
       <Text selectable style={{color:colors.secondaryLabel}}>{item.sku??'No SKU'} · {item.currentStock} {item.unitLabel} · Threshold {item.lowStockThreshold}</Text>
       {item.active&&item.currentStock<=item.lowStockThreshold?<Text style={{color:colors.error}}>Low stock</Text>:null}
-    </Pressable>}/>;
+    </Pressable>}/></ReportFrame>;
 }

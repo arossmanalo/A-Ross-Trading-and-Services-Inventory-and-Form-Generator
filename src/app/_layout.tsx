@@ -94,12 +94,12 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ title: 'Overview', headerShown: false }} />
           <Stack.Screen name="backup" options={{ title: 'Backup' }} />
           <Stack.Screen name="search" options={{ title: 'Search' }} />
-          <Stack.Screen name="reports/index" options={{ title: 'Financial reports' }} />
-          <Stack.Screen name="reports/stock" options={{ title: 'Stock report' }} />
-          <Stack.Screen name="reports/movements" options={{ title: 'Movement report' }} />
-          <Stack.Screen name="reports/audit" options={{ title: 'Audit report' }} />
-          <Stack.Screen name="reports/collections" options={{ title: 'Collections report' }} />
-          <Stack.Screen name="reports/sales" options={{ title: 'Sales report' }} />
+          <Stack.Screen name="reports/index" options={{ title: 'Financial reports', animation: 'none' }} />
+          <Stack.Screen name="reports/stock" options={{ title: 'Stock report', animation: 'none' }} />
+          <Stack.Screen name="reports/movements" options={{ title: 'Movement report', animation: 'none' }} />
+          <Stack.Screen name="reports/audit" options={{ title: 'Audit report', animation: 'none' }} />
+          <Stack.Screen name="reports/collections" options={{ title: 'Collections report', animation: 'none' }} />
+          <Stack.Screen name="reports/sales" options={{ title: 'Sales report', animation: 'none' }} />
           <Stack.Screen name="inventory/index" options={{ title: 'Inventory' }} />
           <Stack.Screen
             name="inventory/new"
