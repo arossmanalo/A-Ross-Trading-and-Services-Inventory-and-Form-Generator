@@ -853,7 +853,7 @@ export async function finalizeServiceReport(
         usage.billable === 1 ? 'sale' : 'nonbillable_usage',
         -usage.quantity_integer,
         reportId,
-        `${csrNumber}: ${usage.item_name}`,
+        `${csrNumber}: ${usage.item_name}${usage.control_number ? ` (Control No. ${usage.control_number})` : ''}`,
         now,
       );
     }

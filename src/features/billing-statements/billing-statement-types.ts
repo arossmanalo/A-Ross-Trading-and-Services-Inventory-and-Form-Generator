@@ -51,6 +51,8 @@ export type BillingStatementLine = {
   amountCentavos: number;
   priceSource: BillingPriceSource | null;
   overrideReason: string | null;
+  /** Control number of the CSR item usage this line bills, if any. */
+  controlNumber: string | null;
 };
 
 export type BillingExpense = {
@@ -86,4 +88,5 @@ export type EligibleCsrUsage = {
   unitLabel: string;
   unitPriceCentavos: number;
   amountCentavos: number;
+  controlNumber: string | null;
 };

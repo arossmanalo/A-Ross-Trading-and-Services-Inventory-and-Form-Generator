@@ -14,12 +14,14 @@ vi.mock('expo-crypto', () => ({
 }));
 
 import { DEFAULT_CRITERIA, filterServiceReports } from '@/features/service-reports/service-report-filter';
+import { filterSalesReport, getSalesReport, salesReportCsv } from '@/features/reports/sales-report';
 import {
   addDirectItemLine,
   addServiceLine,
   createBillingStatementDraft,
   finalizeBillingStatement,
   getBillingStatement,
+  listBillingStatements,
   removeBillingLine,
 } from '@/features/billing-statements/billing-statement-repository';
 import {
@@ -290,6 +292,30 @@ describe('CSRs with several machines', () => {
     expect(found('CN-00123')).toEqual([tagged]);
     expect(found('CN-99999')).toEqual([]);
     await expect(addReportItemUsage(db, plain, 'item', 1, true, 'x'.repeat(101))).rejects.toThrow(/100 characters/);
+  });
+
+  it('carries the control number to the linked Billing Statement, its PDF, search, sales report and stock movement', async () => {
+    const reportId = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer' });
+    await addReportItemUsage(db, reportId, 'item', 1, true, 'CN-777');
+    const statementId = await createBillingStatementDraft(db, { ...DRAFT, serviceReportId: reportId });
+
+    const draft = await getBillingStatement(db, statementId);
+    expect(draft?.lines.find((line) => line.lineType === 'item')).toMatchObject({ description: 'Detergent', controlNumber: 'CN-777' });
+
+    await finalizeServiceReport(db, reportId);
+    const finalized = await finalizeBillingStatement(db, statementId);
+    expect(finalized.snapshot.lines).toEqual(expect.arrayContaining([expect.objectContaining({ description: 'Detergent', controlNumber: 'CN-777' })]));
+    expect(finalized.html).toContain('Control No. CN-777');
+
+    const statements = await listBillingStatements(db);
+    expect(statements.find((statement) => statement.id === statementId)?.searchText).toContain('cn-777');
+
+    const sales = await getSalesReport(db, { from: '2026-09-01', to: '2026-09-30' });
+    expect(sales.find((row) => row.lineType === 'item')?.controlNumber).toBe('CN-777');
+    expect(filterSalesReport(sales, 'cn-777')).toHaveLength(1);
+    expect(salesReportCsv(sales)).toContain('CN-777');
+
+    expect(raw.prepare("SELECT description FROM inventory_movements WHERE service_report_id=?").all(reportId)).toEqual([{ description: 'CSR-000001: Detergent (Control No. CN-777)' }]);
   });
 
   it('labels multi-machine CSRs in the list', async () => {

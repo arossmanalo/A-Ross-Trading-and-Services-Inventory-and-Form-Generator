@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1 } from '@/db/schema';
+import { schemaSql } from '@/test-utils/schema';
 import {
   filterSalesReport,
   getSalesReport,
@@ -19,7 +19,7 @@ describe('sales reporting', () => {
 
   beforeEach(() => {
     raw = new DatabaseSync(':memory:');
-    raw.exec(SCHEMA_V1);
+    raw.exec(schemaSql());
     db = {
       getAllAsync: async <T>(sql: string, ...params: Array<string | number | null>) => raw.prepare(sql).all(...params) as T[],
     } as unknown as SQLiteDatabase;

@@ -13,7 +13,7 @@ const snapshot: BillingStatementRenderSnapshot = {
 };
 
 // The Quotation shares this template's styles; this guards the Billing Statement's output against drift.
-it('renders the Billing Statement exactly as before the form styles were shared', () => {
+it('renders the Billing Statement exactly as expected (template billing-a4-v8)', () => {
   const hash = createHash('sha256').update(buildBillingStatementHtml(snapshot)).digest('hex');
-  expect(hash).toBe('defe04cc26cb1ccc412785c7dd861e47fc50edc526e22ccee0a91b61b01c77e2');
+  expect(hash).toBe('57b100efb647ed242b3d478ee64d2f68a539f2167534717e6d9e2808e8a1d05e');
 });

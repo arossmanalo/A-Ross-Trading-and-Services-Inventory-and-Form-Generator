@@ -83,6 +83,7 @@ export async function getBillingStatementPreview(
         unitLabel: line.lineType === 'item' ? unitLabels.get(line.id) ?? 'item' : line.lineType === 'service' && line.quantity > 1 ? 'machines' : line.lineType,
         unitPriceCentavos: line.unitPriceCentavos,
         amountCentavos: line.amountCentavos,
+        controlNumber: line.controlNumber,
       })),
       subtotalCentavos: statement.subtotalCentavos,
       discountLabel,

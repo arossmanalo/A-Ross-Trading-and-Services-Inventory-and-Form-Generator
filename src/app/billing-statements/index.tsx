@@ -149,7 +149,7 @@ export default function BillingStatementsScreen() {
             autoCorrect={false}
             label="Search"
             onChangeText={(value) => update('query', value)}
-            placeholder="BS number, customer, CSR or PA number, date, amount…"
+            placeholder="BS number, customer, CSR, PA or control number, date…"
             returnKeyType="search"
             value={criteria.query}
           />

@@ -1,7 +1,7 @@
 import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const BILLING_STATEMENT_TEMPLATE_VERSION = 'billing-a4-v7';
+export const BILLING_STATEMENT_TEMPLATE_VERSION = 'billing-a4-v8';
 
 export type BillingStatementRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -11,7 +11,7 @@ export type BillingStatementRenderSnapshot = {
   business: { logoDataUrl?: string | null; name: string; address: string; contactDetails: string };
   customer: { name: string; address: string };
   serviceReportNumber: string | null;
-  lines: Array<{ description: string; quantity: number; unitLabel: string; unitPriceCentavos: number; amountCentavos: number }>;
+  lines: Array<{ description: string; quantity: number; unitLabel: string; unitPriceCentavos: number; amountCentavos: number; /** Absent on snapshots from before control numbers. */ controlNumber?: string | null }>;
   subtotalCentavos: number;
   discountLabel: string | null;
   discountCentavos: number;
@@ -30,10 +30,10 @@ export const BILLING_FORM_CSS = `@page{size:A4;margin:14mm 12mm 15mm}*{box-sizin
 const PHP_FORMATTER = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
 
 export function buildBillingStatementHtml(snapshot: BillingStatementRenderSnapshot): string {
-  const rows = snapshot.lines.map((line) => `<tr><td>${escapeHtml(line.description)}</td><td class="number">${line.quantity} ${escapeHtml(line.unitLabel)}</td><td class="number">${money(line.unitPriceCentavos)}</td><td class="number">${money(line.amountCentavos)}</td></tr>`).join('');
+  const rows = snapshot.lines.map((line) => `<tr><td>${escapeHtml(line.description)}${line.controlNumber ? `<div class="control-number">Control No. ${escapeHtml(line.controlNumber)}</div>` : ''}</td><td class="number">${line.quantity} ${escapeHtml(line.unitLabel)}</td><td class="number">${money(line.unitPriceCentavos)}</td><td class="number">${money(line.amountCentavos)}</td></tr>`).join('');
   const vat = vatSummary(snapshot);
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-    ${BILLING_FORM_CSS}
+    ${BILLING_FORM_CSS}.control-number{color:#475569;font-size:8px}
   </style></head><body>${buildDocumentHeader(snapshot.business)}<h1 class="title">Billing Statement — Not a Tax Invoice</h1><section class="meta"><div class="meta-box"><span class="label">Client</span><span class="value">${escapeHtml(snapshot.customer.name)}\n${escapeHtml(snapshot.customer.address)}</span></div><div class="meta-box"><span class="label">Billing Statement</span><span class="value">${escapeHtml(snapshot.bsNumber)}\nDate ${escapeHtml(snapshot.businessDate)}${snapshot.serviceReportNumber ? `\nCSR ${escapeHtml(snapshot.serviceReportNumber)}` : ''}</span></div></section><table><thead><tr><th>Description</th><th class="number">Quantity</th><th class="number">Unit Price</th><th class="number">Amount</th></tr></thead><tbody>${rows}</tbody></table><section class="totals"><div class="total-row"><span>Subtotal</span><span>${money(snapshot.subtotalCentavos)}</span></div>${snapshot.discountCentavos ? `<div class="total-row"><span>${escapeHtml(snapshot.discountLabel ?? 'Discount')}</span><span>− ${money(snapshot.discountCentavos)}</span></div>` : ''}<div class="total-row"><span>Total</span><span>${money(snapshot.totalCentavos)}</span></div>${paymentRows(snapshot)}<div class="total-row grand"><span>Balance Due</span><span>${money(snapshot.balanceDueCentavos)}</span></div><div class="vat">${escapeHtml(vat)}</div></section><footer class="footer"><div class="disclaimer">This is a billing statement, not a tax invoice. All prices are VAT ${snapshot.vatDisplayMode === 'exclusive' ? 'exclusive' : snapshot.vatDisplayMode === 'inclusive' ? 'inclusive' : 'not VAT-classified'}.</div><div class="fingerprint">${escapeHtml(snapshot.bsNumber)} · Revision 1 · ${BILLING_STATEMENT_TEMPLATE_VERSION} · ${escapeHtml(snapshot.fingerprint)}</div></footer></body></html>`;
   const signatureSection = '<section class="signatures"><div class="signature" data-signature-role="preparer"><div class="signature-writing" data-signature-image-slot="preparer"></div><div class="signature-name" data-signature-name-slot="preparer"></div><div class="signature-label">Prepared By</div></div><div class="signature" data-signature-role="customer"><div class="signature-writing" data-signature-image-slot="customer"></div><div class="signature-name" data-signature-name-slot="customer"></div><div class="signature-label">Customer</div></div></section>';
   const withSignatures = html.replace('<footer class="footer">', `${signatureSection}<footer class="footer">`)

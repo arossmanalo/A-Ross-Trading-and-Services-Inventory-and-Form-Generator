@@ -17,6 +17,8 @@ export type SalesReportRow = {
   priceSource: string | null;
   overrideReason: string | null;
   serviceReportNumber: string | null;
+  /** Control number of the billed CSR item, if any. */
+  controlNumber: string | null;
   statementSubtotalCentavos: number;
   statementDiscountCentavos: number;
   statementTotalCentavos: number;
@@ -37,6 +39,7 @@ type SalesReportSqlRow = {
   price_source: string | null;
   override_reason: string | null;
   csr_number: string | null;
+  control_number: string | null;
   subtotal_centavos: number;
   discounted_total_centavos: number;
 };
@@ -73,6 +76,7 @@ export async function getSalesReport(db: SQLiteDatabase, filter: SalesReportFilt
        l.price_source,
        l.override_reason,
        r.csr_number,
+       u.control_number,
        b.subtotal_centavos,
        b.discounted_total_centavos
      FROM billing_statement_lines l
@@ -107,6 +111,7 @@ export async function getSalesReport(db: SQLiteDatabase, filter: SalesReportFilt
     priceSource: row.price_source,
     overrideReason: row.override_reason,
     serviceReportNumber: row.csr_number,
+    controlNumber: row.control_number,
     statementSubtotalCentavos: row.subtotal_centavos,
     statementDiscountCentavos: row.subtotal_centavos - row.discounted_total_centavos,
     statementTotalCentavos: row.discounted_total_centavos,
@@ -124,12 +129,13 @@ export function filterSalesReport(rows: SalesReportRow[], query: string): SalesR
     row.priceSource ?? '',
     row.overrideReason ?? '',
     row.serviceReportNumber ?? '',
+    row.controlNumber ?? '',
   ].some(value => value.toLowerCase().includes(text)));
 }
 
 export function salesReportCsv(rows: SalesReportRow[]): string {
   return csv([
-    ['Statement date','Billing Statement','Customer','Line type','Description','Quantity','Unit price PHP','Line amount PHP','CSR','Price source','Override reason','Statement discount PHP','Statement total PHP'],
+    ['Statement date','Billing Statement','Customer','Line type','Description','Quantity','Unit price PHP','Line amount PHP','CSR','Control number','Price source','Override reason','Statement discount PHP','Statement total PHP'],
     ...rows.map(row => [
       row.businessDate,
       row.billingStatementNumber ?? '',
@@ -140,6 +146,7 @@ export function salesReportCsv(rows: SalesReportRow[]): string {
       (row.unitPriceCentavos / 100).toFixed(2),
       (row.amountCentavos / 100).toFixed(2),
       row.serviceReportNumber ?? '',
+      row.controlNumber ?? '',
       row.priceSource ?? '',
       row.overrideReason ?? '',
       (row.statementDiscountCentavos / 100).toFixed(2),
