@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/theme/colors';
 import { fontSize, text } from '@/theme/typography';
@@ -15,11 +15,12 @@ type SheetFrameProps = {
  * still visible, dimmed, beside it. Tapping the dimmed area closes the form.
  */
 export function SheetFrame({ title, onClose, children }: SheetFrameProps) {
-  const { width } = useWindowDimensions();
-  const panelWidth = width < 720 ? width : Math.min(600, Math.round(width * 0.5));
+  const [available, setAvailable] = useState(0);
+  // The space beside the side menu: narrow spaces get a full-width panel.
+  const panelWidth = available < 760 ? '100%' : Math.min(600, Math.max(520, Math.round(available * 0.5)));
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}>
       <Pressable accessibilityLabel={`Close ${title}`} onPress={onClose} style={styles.scrim} />
       <View accessibilityViewIsModal style={[styles.panel, { width: panelWidth }]}>
         <View style={styles.header}>
