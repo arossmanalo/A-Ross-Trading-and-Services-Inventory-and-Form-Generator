@@ -1,16 +1,18 @@
-import { Link, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
 import { DateRangeFields } from '@/components/date-range-fields';
 import { Dropdown } from '@/components/dropdown';
-import { FormField } from '@/components/form-field';
-import { SalesTotalCard } from '@/components/sales-total-card';
+import { ListEmpty, ListPaneHeader, listRowStyles } from '@/components/list-pane';
+import { SplitView, useSplitLayout } from '@/components/split-view';
+import { StatusChip, documentStateTone, sentenceCase } from '@/components/status-chip';
 import { getLocalBusinessDate } from '@/domain/business-date';
+import { formatDisplayDate } from '@/domain/calendar';
 import { formatCentavos } from '@/domain/money';
 import { isQuotationExpired } from '@/domain/quotation';
+import { QuotationDetailView } from '@/features/quotations/quotation-detail-view';
 import {
   DEFAULT_QUOTATION_CRITERIA,
   PERIOD_OPTIONS,
@@ -25,43 +27,53 @@ import {
 import { listQuotations } from '@/features/quotations/quotation-repository';
 import type { QuotationListItem } from '@/features/quotations/quotation-types';
 import { colors } from '@/theme/colors';
+import { text } from '@/theme/typography';
 
-const QuotationRow = memo(function QuotationRow({ quotation, showTotal, today }: { quotation: QuotationListItem; showTotal: boolean; today: string }) {
-  const open = useCallback(() => {
-    router.push({ pathname: '/quotations/[quotation-id]', params: { 'quotation-id': quotation.id } });
-  }, [quotation.id]);
+type QuotationRowProps = {
+  quotation: QuotationListItem;
+  showTotal: boolean;
+  today: string;
+  selected: boolean;
+  onOpen: (quotationId: string) => void;
+};
+
+const QuotationRow = memo(function QuotationRow({ quotation, showTotal, today, selected, onOpen }: QuotationRowProps) {
   const expired = quotation.documentState === 'finalized' && !quotation.convertedKind && isQuotationExpired(quotation.validUntil, today);
   return (
-    <Pressable accessibilityRole="button" onPress={open} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
-      <View style={styles.rowCopy}>
-        <View style={styles.titleLine}>
-          <Text selectable style={styles.number}>{quotation.qtNumber ?? 'DRAFT'}</Text>
-          <Text selectable style={quotation.documentState === 'draft' ? styles.draftBadge : quotation.documentState === 'voided' ? styles.voidBadge : styles.finalBadge}>
-            {quotation.documentState.toUpperCase()}
-          </Text>
-          {expired ? <Text selectable style={styles.voidBadge}>EXPIRED</Text> : null}
-        </View>
-        <Text selectable style={styles.customer}>{quotation.customerName}</Text>
-        <Text selectable style={styles.meta}>{quotation.businessDate} · valid until {quotation.validUntil}</Text>
-        {quotation.convertedKind ? (
-          <View style={styles.convertedChip}>
-            <Text style={styles.convertedChipText}>Converted · {quotation.convertedKind === 'repair' ? 'Repair (CSR)' : 'Delivery'}</Text>
-          </View>
-        ) : null}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(quotation.id)}
+      style={({ pressed }) => [listRowStyles.row, selected ? listRowStyles.selected : null, pressed && !selected ? listRowStyles.pressed : null]}
+    >
+      <View style={listRowStyles.titleLine}>
+        <Text style={listRowStyles.number}>{quotation.qtNumber ?? 'Draft'}</Text>
+        {expired ? <StatusChip label="Expired" tone="neutral" /> : null}
+        <StatusChip label={sentenceCase(quotation.documentState)} tone={documentStateTone(quotation.documentState)} />
       </View>
-      <View style={styles.stateCopy}>
-        <Text selectable style={styles.total}>{showTotal ? formatCentavos(quotation.totalCentavos) : '₱ ••••••'}</Text>
-        {quotation.documentState === 'finalized' ? <Text selectable style={styles.pdf}>PDF {quotation.pdfState}</Text> : null}
+      <Text numberOfLines={1} style={text.bodyStrong}>{quotation.customerName}</Text>
+      <View style={listRowStyles.metaLine}>
+        <Text numberOfLines={1} style={[text.meta, { flex: 1 }]}>
+          {formatDisplayDate(quotation.businessDate)} · valid until {formatDisplayDate(quotation.validUntil)}
+        </Text>
+        <Text style={text.amount}>{showTotal ? formatCentavos(quotation.totalCentavos) : '₱ ••••••'}</Text>
       </View>
+      {quotation.documentState === 'finalized' ? <Text style={text.meta}>PDF {quotation.pdfState.replaceAll('_', ' ')}</Text> : null}
+      {quotation.convertedKind ? (
+        <Text style={listRowStyles.linkChipText}>Converted · {quotation.convertedKind === 'repair' ? 'Repair (CSR)' : 'Delivery'}</Text>
+      ) : null}
     </Pressable>
   );
 });
 
 export default function QuotationsScreen() {
   const db = useSQLiteContext();
+  const split = useSplitLayout();
   const [rows, setRows] = useState<QuotationListItem[]>([]);
   const [criteria, setCriteria] = useState<QuotationCriteria>(DEFAULT_QUOTATION_CRITERIA);
   const [showTotals, setShowTotals] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,6 +97,7 @@ export default function QuotationsScreen() {
   const visible = useMemo(() => filterQuotations(rows, criteria, today), [criteria, rows, today]);
   const filtered = hasActiveQuotationFilters(criteria);
   const totals = useMemo(() => sumQuotationTotals(visible), [visible]);
+  const activeFilterCount = [criteria.state !== DEFAULT_QUOTATION_CRITERIA.state, criteria.conversion !== DEFAULT_QUOTATION_CRITERIA.conversion, criteria.period !== DEFAULT_QUOTATION_CRITERIA.period].filter(Boolean).length;
   const update = <K extends keyof QuotationCriteria>(key: K, value: QuotationCriteria[K]) => setCriteria((current) => ({ ...current, [key]: value }));
   const changePeriod = (period: QuotationCriteria['period']) => setCriteria((current) => ({
     ...current,
@@ -94,94 +107,78 @@ export default function QuotationsScreen() {
     to: period === 'custom' && !current.to ? today : current.to,
   }));
 
-  return (
+  const openQuotation = useCallback((quotationId: string) => {
+    if (split) setSelectedId(quotationId);
+    else router.push({ pathname: '/quotations/[quotation-id]', params: { 'quotation-id': quotationId } });
+  }, [split]);
+
+  const list = (
     <FlatList
-      contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={visible.length ? styles.content : styles.emptyContent}
       data={visible}
-      extraData={showTotals}
+      extraData={`${showTotals}:${selectedId}:${split}`}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <QuotationRow quotation={item} showTotal={showTotals} today={today} />}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      renderItem={({ item }) => (
+        <QuotationRow quotation={item} showTotal={showTotals} today={today} selected={split && item.id === selectedId} onOpen={openQuotation} />
+      )}
       refreshing={loading && rows.length > 0}
       onRefresh={load}
-      ListHeaderComponent={
-        <View style={styles.header}>
-          <Text selectable style={styles.eyebrow}>QUOTATIONS</Text>
-          <Text selectable style={styles.help}>A quotation lists the items and services you are offering and a valid-until date. A finalized one can become a repair (CSR) or a delivery, each with its Billing Statement.</Text>
-          <Link href="/quotations/new" asChild>
-            <Pressable accessibilityRole="button" style={styles.newButton}>
-              <Text selectable style={styles.newText}>New quotation draft</Text>
-            </Pressable>
-          </Link>
-          <FormField
-            autoCapitalize="none"
-            autoCorrect={false}
-            label="Search"
-            onChangeText={(value) => update('query', value)}
-            placeholder="QT number, customer, item or service, date, amount…"
-            returnKeyType="search"
-            value={criteria.query}
-          />
-          <View style={styles.filters}>
-            <Dropdown label="STATUS" value={criteria.state} options={QUOTATION_STATE_OPTIONS} onChange={(value) => update('state', value)} />
-            <Dropdown label="CONVERSION" value={criteria.conversion} options={QUOTATION_CONVERSION_OPTIONS} onChange={(value) => update('conversion', value)} />
-            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
-            <Dropdown label="SORT BY" value={criteria.sort} options={QUOTATION_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
-          </View>
-          {criteria.period === 'custom' ? <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} /> : null}
-          <View style={styles.resultLine}>
-            <Text selectable style={styles.help}>{visible.length} of {rows.length} quotation{rows.length === 1 ? '' : 's'}</Text>
-            <ActionButton compact variant="secondary" onPress={() => setShowTotals((current) => !current)}>{showTotals ? 'Hide totals' : 'Show totals'}</ActionButton>
-            {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_QUOTATION_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
-          </View>
-          {filtered ? <SalesTotalCard totalCentavos={totals.totalCentavos} count={totals.count} noun="quotation" hidden={!showTotals} /> : null}
-          {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-        </View>
-      }
-      ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandBlue} size="large" /> : rows.length && filtered ? (
-        <View style={styles.empty}>
-          <Text selectable style={styles.emptyTitle}>No matching quotations</Text>
-          <Text selectable style={styles.help}>Try a different search or clear the filters.</Text>
-        </View>
+      ListHeaderComponent={(
+        <ListPaneHeader
+          newLabel="New quotation draft"
+          onNew={() => router.push('/quotations/new')}
+          query={criteria.query}
+          onQueryChange={(value) => update('query', value)}
+          searchPlaceholder="QT number, customer, item or service, amount"
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((open) => !open)}
+          activeFilterCount={activeFilterCount}
+          filters={(
+            <>
+              <Dropdown label="Status" value={criteria.state} options={QUOTATION_STATE_OPTIONS} onChange={(value) => update('state', value)} />
+              <Dropdown label="Conversion" value={criteria.conversion} options={QUOTATION_CONVERSION_OPTIONS} onChange={(value) => update('conversion', value)} />
+              <Dropdown label="Date" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
+              <Dropdown label="Sort by" value={criteria.sort} options={QUOTATION_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
+              {criteria.period === 'custom' ? (
+                <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} />
+              ) : null}
+            </>
+          )}
+          countLine={`${visible.length} of ${rows.length} quotation${rows.length === 1 ? '' : 's'}`}
+          showTotals={showTotals}
+          onToggleTotals={() => setShowTotals((current) => !current)}
+          onClearFilters={filtered ? () => setCriteria((current) => ({ ...DEFAULT_QUOTATION_CRITERIA, sort: current.sort })) : undefined}
+          sales={filtered ? { totalCentavos: totals.totalCentavos, count: totals.count, noun: 'quotation' } : undefined}
+          error={error}
+        />
+      )}
+      ListEmptyComponent={loading ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} /> : rows.length && filtered ? (
+        <ListEmpty title="No matching quotations" body="Try a different search or clear the filters." />
       ) : (
-        <View style={styles.empty}>
-          <Text selectable style={styles.emptyTitle}>No quotations yet</Text>
-          <Text selectable style={styles.help}>Create a draft for a registered customer.</Text>
-        </View>
+        <ListEmpty title="No quotations yet" body="A quotation lists the items and services you offer and a valid-until date. Create a draft for a registered customer." />
       )}
     />
   );
-}
 
-const styles = StyleSheet.create({
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  resultLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  convertedChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successTint },
-  convertedChipText: { color: colors.success, fontSize: 13, fontWeight: '600' },
-  content: { paddingHorizontal: 18, paddingBottom: 44 },
-  emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
-  header: { gap: 10, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 19 },
-  newButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandBlue, borderRadius: 10, borderCurve: 'continuous' },
-  newText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
-  row: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  rowCopy: { flex: 1, gap: 4 },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  number: { color: colors.label, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  total: { color: colors.brandNavy, fontSize: 15, fontWeight: '600', textAlign: 'right', fontVariant: ['tabular-nums'] },
-  customer: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  meta: { color: colors.secondaryLabel, fontSize: 13 },
-  draftBadge: { color: colors.warning, fontSize: 13, fontWeight: '600' },
-  finalBadge: { color: colors.success, fontSize: 13, fontWeight: '600' },
-  voidBadge: { color: colors.error, fontSize: 13, fontWeight: '600' },
-  stateCopy: { maxWidth: 150, alignItems: 'flex-end', gap: 4 },
-  pdf: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 28 },
-  emptyTitle: { color: colors.label, fontSize: 20, fontWeight: '600' },
-  error: { color: colors.error, fontSize: 13 },
-  pressed: { opacity: 0.72 },
-});
+  if (!split) return list;
+
+  return (
+    <SplitView
+      list={list}
+      detail={selectedId ? (
+        <QuotationDetailView
+          key={selectedId}
+          embedded
+          quotationId={selectedId}
+          onDeleted={() => {
+            setSelectedId(null);
+            void load();
+          }}
+          onChanged={() => void load()}
+        />
+      ) : null}
+      emptyTitle="Select a quotation"
+      emptyBody="Its lines, totals and actions open here. A finalized quotation can become a repair (CSR) or a delivery."
+    />
+  );
+}
