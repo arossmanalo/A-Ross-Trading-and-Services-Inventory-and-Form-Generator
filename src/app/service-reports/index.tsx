@@ -1,15 +1,17 @@
-import { Link, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
 import { DateRangeFields } from '@/components/date-range-fields';
 import { Dropdown } from '@/components/dropdown';
-import { FormField } from '@/components/form-field';
-import { SalesTotalCard } from '@/components/sales-total-card';
+import { ListEmpty, ListPaneHeader, listRowStyles } from '@/components/list-pane';
+import { SplitView, useSplitLayout } from '@/components/split-view';
+import { StatusChip, documentStateTone, sentenceCase } from '@/components/status-chip';
 import { getLocalBusinessDate } from '@/domain/business-date';
+import { formatDisplayDate } from '@/domain/calendar';
 import { formatCentavos } from '@/domain/money';
+import { ServiceReportDetailView } from '@/features/service-reports/service-report-detail-view';
 import {
   BILLING_OPTIONS,
   DEFAULT_CRITERIA,
@@ -25,51 +27,63 @@ import {
 import { listServiceReports } from '@/features/service-reports/service-report-repository';
 import type { ServiceReportListItem, ServiceReportSummary } from '@/features/service-reports/service-report-types';
 import { colors } from '@/theme/colors';
+import { text } from '@/theme/typography';
 
-const ReportRow = memo(function ReportRow({ report, showTotal }: { report: ServiceReportSummary; showTotal: boolean }) {
-  const openReport = useCallback(() => {
-    router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': report.id } });
-  }, [report.id]);
+type ReportRowProps = {
+  report: ServiceReportSummary;
+  showTotal: boolean;
+  selected: boolean;
+  onOpen: (reportId: string) => void;
+};
+
+const ReportRow = memo(function ReportRow({ report, showTotal, selected, onOpen }: ReportRowProps) {
   const billed = report.linkedStatements.filter((statement) => statement.documentState !== 'voided');
   return (
-    <Pressable accessibilityRole="button" onPress={openReport} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
-      <View style={styles.rowCopy}>
-        <View style={styles.titleLine}>
-          <Text selectable style={styles.number}>{report.csrNumber ?? 'DRAFT'}</Text>
-          <Text selectable style={report.documentState === 'draft' ? styles.draftBadge : styles.finalBadge}>
-            {report.documentState.toUpperCase()}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(report.id)}
+      style={({ pressed }) => [listRowStyles.row, selected ? listRowStyles.selected : null, pressed && !selected ? listRowStyles.pressed : null]}
+    >
+      <View style={listRowStyles.titleLine}>
+        <Text style={listRowStyles.number}>{report.csrNumber ?? 'Draft'}</Text>
+        <StatusChip label={sentenceCase(report.documentState)} tone={documentStateTone(report.documentState)} />
+      </View>
+      <Text numberOfLines={1} style={text.bodyStrong}>{report.customerName}</Text>
+      <View style={listRowStyles.metaLine}>
+        <Text numberOfLines={1} style={[text.meta, { flex: 1 }]}>
+          {report.equipmentName} · {formatDisplayDate(report.businessDate)} · {sentenceCase(report.serviceOutcome)}
+        </Text>
+        <Text style={text.amount}>{showTotal ? formatCentavos(report.totalBillCentavos) : '₱ ••••••'}</Text>
+      </View>
+      {report.documentState === 'finalized' ? <Text style={text.meta}>PDF {report.pdfState.replaceAll('_', ' ')}</Text> : null}
+      {billed.length ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={billed.length === 1 ? `Open ${billed[0].bsNumber ?? 'draft Billing Statement'}` : 'Open this CSR to see its Billing Statements'}
+          hitSlop={6}
+          onPress={() => (billed.length === 1
+            ? router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': billed[0].id } })
+            : onOpen(report.id))}
+          style={listRowStyles.linkChip}
+        >
+          <Text style={listRowStyles.linkChipText}>
+            {billed[0].bsNumber ?? 'Draft statement'}{billed.length > 1 ? ` +${billed.length - 1} more` : ''} ›
           </Text>
-        </View>
-        <Text selectable style={styles.customer}>{report.customerName}</Text>
-        <Text selectable style={styles.meta}>{report.equipmentName} · {report.businessDate}</Text>
-        {billed.length ? (
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={billed.length === 1 ? `Open ${billed[0].bsNumber ?? 'draft Billing Statement'}` : 'Open this CSR to see its Billing Statements'}
-            hitSlop={6}
-            onPress={() => (billed.length === 1
-              ? router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': billed[0].id } })
-              : openReport())}
-            style={styles.billingChip}
-          >
-            <Text style={styles.billingChipText}>{billed[0].bsNumber ?? 'Draft statement'}{billed.length > 1 ? ` +${billed.length - 1} more` : ''} ›</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      <View style={styles.stateCopy}>
-        <Text selectable style={styles.outcome}>{formatOutcome(report.serviceOutcome)}</Text>
-        <Text selectable style={styles.total}>{showTotal ? formatCentavos(report.totalBillCentavos) : '₱ ••••••'}</Text>
-        {report.documentState === 'finalized' ? <Text selectable style={styles.pdfState}>PDF {report.pdfState}</Text> : null}
-      </View>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 });
 
 export default function ServiceReportsScreen() {
   const db = useSQLiteContext();
+  const split = useSplitLayout();
   const [reports, setReports] = useState<ServiceReportListItem[]>([]);
   const [criteria, setCriteria] = useState<ServiceReportCriteria>(DEFAULT_CRITERIA);
   const [showTotals, setShowTotals] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +106,7 @@ export default function ServiceReportsScreen() {
   const visible = useMemo(() => filterServiceReports(reports, criteria, getLocalBusinessDate()), [criteria, reports]);
   const filtered = hasActiveFilters(criteria);
   const sales = useMemo(() => sumServiceReportSales(visible), [visible]);
+  const activeFilterCount = [criteria.state !== 'all', criteria.outcome !== 'all', criteria.billing !== 'any', criteria.period !== 'all'].filter(Boolean).length;
   const update = <K extends keyof ServiceReportCriteria>(key: K, value: ServiceReportCriteria[K]) => setCriteria((current) => ({ ...current, [key]: value }));
 
   const changePeriod = (period: ServiceReportCriteria['period']) => setCriteria((current) => {
@@ -100,100 +115,79 @@ export default function ServiceReportsScreen() {
     return { ...current, period, from: period === 'custom' && !current.from ? today : current.from, to: period === 'custom' && !current.to ? today : current.to };
   });
 
-  return (
+  const openReport = useCallback((reportId: string) => {
+    if (split) setSelectedId(reportId);
+    else router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': reportId } });
+  }, [split]);
+
+  const list = (
     <FlatList
-      contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={visible.length ? styles.content : styles.emptyContent}
       data={visible}
       keyExtractor={(report) => report.id}
-      extraData={showTotals}
-      renderItem={({ item }) => <ReportRow report={item} showTotal={showTotals} />}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      extraData={`${showTotals}:${selectedId}:${split}`}
+      renderItem={({ item }) => (
+        <ReportRow report={item} showTotal={showTotals} selected={split && item.id === selectedId} onOpen={openReport} />
+      )}
       refreshing={loading && reports.length > 0}
       onRefresh={loadReports}
-      ListHeaderComponent={
-        <View style={styles.header}>
-          <Text selectable style={styles.eyebrow}>CUSTOMER SERVICE REPORTS</Text>
-          <Text selectable style={styles.headerText}>Drafts are unnumbered. Stock posts only when a CSR is finalized.</Text>
-          <Link href="/service-reports/new" asChild>
-            <Pressable accessibilityRole="button" style={styles.newButton}>
-              <Text selectable style={styles.newButtonText}>New CSR draft</Text>
-            </Pressable>
-          </Link>
-          <FormField
-            autoCapitalize="none"
-            autoCorrect={false}
-            label="Search"
-            onChangeText={(value) => update('query', value)}
-            placeholder="CSR code, customer, machine, serial, control no., BS number…"
-            returnKeyType="search"
-            value={criteria.query}
-          />
-          <View style={styles.filters}>
-            <Dropdown label="STATUS" value={criteria.state} options={STATE_OPTIONS} onChange={(value) => update('state', value)} />
-            <Dropdown label="OUTCOME" value={criteria.outcome} options={OUTCOME_OPTIONS} onChange={(value) => update('outcome', value)} />
-            <Dropdown label="BILLING" value={criteria.billing} options={BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
-            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
-            <Dropdown label="SORT BY" value={criteria.sort} options={SORT_OPTIONS} onChange={(value) => update('sort', value)} />
-          </View>
-          {criteria.period === 'custom' ? <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} /> : null}
-          <View style={styles.resultLine}>
-            <Text selectable style={styles.headerText}>{visible.length} of {reports.length} service report{reports.length === 1 ? '' : 's'}</Text>
-            <ActionButton compact variant="secondary" onPress={() => setShowTotals((current) => !current)}>{showTotals ? 'Hide totals' : 'Show totals'}</ActionButton>
-            {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
-          </View>
-          {filtered ? <SalesTotalCard totalCentavos={sales.totalCentavos} count={sales.count} noun="service report" hidden={!showTotals} /> : null}
-          {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-        </View>
-      }
-      ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandBlue} size="large" /> : reports.length && filtered ? (
-        <View style={styles.emptyState}>
-          <Text selectable style={styles.emptyTitle}>No matching service reports</Text>
-          <Text selectable style={styles.emptyBody}>Try a different search or clear the filters.</Text>
-        </View>
+      ListHeaderComponent={(
+        <ListPaneHeader
+          newLabel="New CSR draft"
+          onNew={() => router.push('/service-reports/new')}
+          query={criteria.query}
+          onQueryChange={(value) => update('query', value)}
+          searchPlaceholder="CSR, customer, machine, serial, control no., BS no."
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((open) => !open)}
+          activeFilterCount={activeFilterCount}
+          filters={(
+            <>
+              <Dropdown label="Status" value={criteria.state} options={STATE_OPTIONS} onChange={(value) => update('state', value)} />
+              <Dropdown label="Outcome" value={criteria.outcome} options={OUTCOME_OPTIONS} onChange={(value) => update('outcome', value)} />
+              <Dropdown label="Billing" value={criteria.billing} options={BILLING_OPTIONS} onChange={(value) => update('billing', value)} />
+              <Dropdown label="Date" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
+              <Dropdown label="Sort by" value={criteria.sort} options={SORT_OPTIONS} onChange={(value) => update('sort', value)} />
+              {criteria.period === 'custom' ? (
+                <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} />
+              ) : null}
+            </>
+          )}
+          countLine={`${visible.length} of ${reports.length} service report${reports.length === 1 ? '' : 's'}`}
+          showTotals={showTotals}
+          onToggleTotals={() => setShowTotals((current) => !current)}
+          onClearFilters={filtered ? () => setCriteria((current) => ({ ...DEFAULT_CRITERIA, sort: current.sort })) : undefined}
+          sales={filtered ? { totalCentavos: sales.totalCentavos, count: sales.count, noun: 'service report' } : undefined}
+          error={error}
+        />
+      )}
+      ListEmptyComponent={loading ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} /> : reports.length && filtered ? (
+        <ListEmpty title="No matching service reports" body="Try a different search or clear the filters." />
       ) : (
-        <View style={styles.emptyState}>
-          <Text selectable style={styles.emptyTitle}>No service reports yet</Text>
-          <Text selectable style={styles.emptyBody}>Create the first unnumbered draft for a registered customer and equipment record.</Text>
-        </View>
+        <ListEmpty title="No service reports yet" body="Create the first unnumbered draft for a registered customer and equipment record." />
       )}
     />
   );
-}
 
-function formatOutcome(value: string) {
-  return value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
-}
+  if (!split) return list;
 
-const styles = StyleSheet.create({
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  resultLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  billingChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  billingChipText: { color: colors.brandNavy, fontSize: 11, fontWeight: '800' },
-  content: { paddingHorizontal: 18, paddingBottom: 44 },
-  emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
-  header: { gap: 10, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
-  headerText: { color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 },
-  newButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandBlue, borderRadius: 14, borderCurve: 'continuous' },
-  newButtonText: { color: colors.onPrimary, fontSize: 15, fontWeight: '800' },
-  row: { minHeight: 96, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  rowCopy: { flex: 1, gap: 4 },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  number: { color: colors.label, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  draftBadge: { color: colors.warning, fontSize: 8, fontWeight: '900', letterSpacing: .7 },
-  finalBadge: { color: colors.success, fontSize: 8, fontWeight: '900', letterSpacing: .7 },
-  total: { color: colors.brandNavy, fontSize: 14, fontWeight: '900', textAlign: 'right', fontVariant: ['tabular-nums'] },
-  customer: { color: colors.label, fontSize: 15, fontWeight: '700' },
-  meta: { color: colors.secondaryLabel, fontSize: 12 },
-  stateCopy: { maxWidth: 150, alignItems: 'flex-end', gap: 5 },
-  outcome: { color: colors.brandNavy, fontSize: 11, fontWeight: '700', textAlign: 'right' },
-  pdfState: { color: colors.secondaryLabel, fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 28 },
-  emptyTitle: { color: colors.label, fontSize: 20, fontWeight: '900' },
-  emptyBody: { maxWidth: 330, color: colors.secondaryLabel, fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  errorText: { color: colors.error, fontSize: 13, lineHeight: 18 },
-  pressed: { opacity: .72 },
-});
+  return (
+    <SplitView
+      list={list}
+      detail={selectedId ? (
+        <ServiceReportDetailView
+          key={selectedId}
+          embedded
+          reportId={selectedId}
+          onDeleted={() => {
+            setSelectedId(null);
+            void loadReports();
+          }}
+          onChanged={() => void loadReports()}
+        />
+      ) : null}
+      emptyTitle="Select a service report"
+      emptyBody="Its details, items and actions open here. Use New CSR draft to start a visit."
+    />
+  );
+}
