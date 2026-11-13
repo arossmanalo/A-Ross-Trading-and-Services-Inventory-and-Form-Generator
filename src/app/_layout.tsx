@@ -175,7 +175,7 @@ export default function RootLayout() {
           <Stack.Screen name="payments/[payment-id]" options={{ title: 'Payment Acknowledgment' }} />
           <Stack.Screen name="payments/void" options={{ title: 'Void Payment', ...SHEET }} />
           <Stack.Screen name="signatures/manage" options={{ title: 'Document Signing' }} />
-          <Stack.Screen name="signatures/capture" options={{ title: 'Draw signature', ...SHEET }} />
+          <Stack.Screen name="signatures/capture" options={{ title: 'Draw signature', presentation: 'modal' }} />
           </Stack>
           </View>
         </View>
