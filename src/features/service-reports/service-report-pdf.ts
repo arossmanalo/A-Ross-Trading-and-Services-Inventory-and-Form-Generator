@@ -112,6 +112,7 @@ export async function getServiceReportPreview(
         quantity: usage.quantity,
         unitLabel: usage.unitLabel,
         billable: usage.billable,
+        controlNumber: usage.controlNumber,
       })),
       services: report.machineServices.map((service) => ({
         description: service.serviceName,

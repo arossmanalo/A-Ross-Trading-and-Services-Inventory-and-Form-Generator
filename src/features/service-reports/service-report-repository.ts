@@ -812,6 +812,7 @@ export async function finalizeServiceReport(
         quantity: usage.quantity_integer,
         unitLabel: usage.unit_label,
         billable: usage.billable === 1,
+        controlNumber: usage.control_number,
       })),
       services: machineServices.map((service) => ({
         description: service.serviceName,

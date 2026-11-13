@@ -70,6 +70,19 @@ describe('CSR template', () => {
     expect(html).toContain('Serial No.');
   });
 
+  it('prints an item control number under the item, and nothing for items without one', () => {
+    const html = buildCsrHtml({
+      ...SNAPSHOT,
+      usages: [
+        { description: 'Hose', quantity: 1, unitLabel: 'pc', billable: true, controlNumber: 'CN-<7>' },
+        { description: 'Seal', quantity: 2, unitLabel: 'pc', billable: false, controlNumber: null },
+      ],
+    });
+    expect(html).toContain('Control No. CN-&lt;7&gt;');
+    expect(html.match(/Control No\./g)).toHaveLength(1);
+    expect(buildCsrHtml(SNAPSHOT)).not.toContain('Control No.');
+  });
+
   it('escapes owner-entered content', () => {
     expect(escapeHtml('<script>"test" & more</script>')).toBe(
       '&lt;script&gt;&quot;test&quot; &amp; more&lt;/script&gt;',

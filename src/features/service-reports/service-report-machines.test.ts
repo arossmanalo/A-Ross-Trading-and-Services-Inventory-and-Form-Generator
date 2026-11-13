@@ -280,6 +280,9 @@ describe('CSRs with several machines', () => {
 
     await finalizeServiceReport(db, tagged);
     expect((await getServiceReport(db, tagged))?.usages[0]?.controlNumber).toBe('CN-00123');
+    const frozen = raw.prepare('SELECT content_snapshot_json AS json, render_template_snapshot AS html FROM service_reports WHERE id=?').get(tagged) as { json: string; html: string };
+    expect(JSON.parse(frozen.json).usages).toMatchObject([{ description: 'Detergent', controlNumber: 'CN-00123' }]);
+    expect(frozen.html).toContain('Control No. CN-00123');
 
     const list = await listServiceReports(db);
     const found = (query: string) => filterServiceReports(list, { ...DEFAULT_CRITERIA, query }, '2026-09-05').map((report) => report.id);

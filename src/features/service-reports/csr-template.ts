@@ -1,7 +1,7 @@
 import { buildDocumentHeader, DOCUMENT_HEADER_CSS } from '@/features/documents/document-header';
 import { applySignatureCapturesToDocument } from '@/features/signatures/signature-html';
 
-export const CSR_TEMPLATE_VERSION = 'csr-legal-v8';
+export const CSR_TEMPLATE_VERSION = 'csr-legal-v9';
 
 export type CsrRenderSnapshot = {
   preparerSignatureHtml?: string;
@@ -51,6 +51,8 @@ export type CsrRenderSnapshot = {
     quantity: number;
     unitLabel: string;
     billable: boolean;
+    /** Optional item control number. Absent on snapshots from before schema 13. */
+    controlNumber?: string | null;
   }>;
   /**
    * One entry per service per machine. Entries from earlier template versions
@@ -110,6 +112,7 @@ export function buildCsrHtml(snapshot: CsrRenderSnapshot): string {
     .usage-table th, .usage-table td { padding: 4px 6px; border-top: 1px solid #94a3b8; text-align: left; }
     .usage-table th { color: #475569; font-size: 7.5px; text-transform: uppercase; }
     .usage-table .qty { width: 22%; text-align: right; }
+    .usage-table .control-number { color: #475569; font-size: 7.5px; }
     .total-row { display: flex; justify-content: flex-end; padding: 10px 0; }
     .total-box { width: 240px; padding: 7px 10px; border: 1.5px solid #0b377f; display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; }
     .footer { margin-top: 18px; color: #64748b; font-size: 7px; text-align: center; }
@@ -193,7 +196,7 @@ function textSection(title: string, value: string): string {
 function usageSection(usages: CsrRenderSnapshot['usages']): string {
   if (!usages.length) return '';
   return `<section class="section"><div class="section-title">Items Used</div><table class="usage-table"><thead><tr><th>Description</th><th class="qty">Qty used</th></tr></thead><tbody>${usages
-    .map((usage) => `<tr><td>${escapeHtml(usage.description)}${usage.billable ? '' : ' (non-billable)'}</td><td class="qty">${usage.quantity} ${escapeHtml(usage.unitLabel)}</td></tr>`)
+    .map((usage) => `<tr><td>${escapeHtml(usage.description)}${usage.billable ? '' : ' (non-billable)'}${usage.controlNumber ? `<div class="control-number">Control No. ${escapeHtml(usage.controlNumber)}</div>` : ''}</td><td class="qty">${usage.quantity} ${escapeHtml(usage.unitLabel)}</td></tr>`)
     .join('')}</tbody></table></section>`;
 }
 

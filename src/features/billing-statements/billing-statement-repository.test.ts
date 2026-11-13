@@ -223,7 +223,7 @@ describe('billing statement repository',()=>{let raw:DatabaseSync;let db:SQLiteD
     expect(raw.prepare('SELECT document_state FROM service_reports WHERE id=?').get(reportId)).toEqual({document_state:'finalized'});
     expect((raw.prepare("SELECT SUM(quantity_delta_integer) AS stock FROM inventory_movements WHERE item_id='item'").get() as {stock:number}).stock).toBe(8);
     expect((await getBillingStatement(db,statementId))?.lines).toHaveLength(2);
-    expect(finalized.snapshot.usages).toEqual([{description:'Detergent',quantity:2,unitLabel:'carboy',billable:true}]);
+    expect(finalized.snapshot.usages).toEqual([{description:'Detergent',quantity:2,unitLabel:'carboy',billable:true,controlNumber:null}]);
     expect(finalized.snapshot.services).toEqual([{description:'Labor',rateCentavos:50000,machineLabel:'Washer',machineNumber:1}]);
     expect(finalized.snapshot.totalBillCentavos).toBe(290000);
     expect(finalized.html).toContain('Items Used');
