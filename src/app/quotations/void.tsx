@@ -45,9 +45,9 @@ export default function VoidQuotationScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 18, paddingBottom: 44 },
-  warning: { gap: 6, padding: 16, backgroundColor: '#fee2e2', borderRadius: 16, borderCurve: 'continuous' },
+  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 16, borderCurve: 'continuous' },
   warningTitle: { color: colors.error, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  warningText: { color: '#7f1d1d', fontSize: 14, lineHeight: 20 },
+  warningText: { color: colors.error, fontSize: 14, lineHeight: 20 },
   reason: { minHeight: 96 },
   error: { color: colors.error, fontSize: 13, fontWeight: '600' },
 });

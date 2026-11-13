@@ -203,12 +203,12 @@ const styles = StyleSheet.create({
     gap: 1,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#e8f2ff',
+    backgroundColor: colors.accentTint,
     borderRadius: 14,
     borderCurve: 'continuous',
   },
   stockPillLow: {
-    backgroundColor: '#ffebe9',
+    backgroundColor: colors.errorTint,
   },
   stockValue: {
     color: colors.brandNavy,
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   stockValueLow: {
-    color: '#a01818',
+    color: colors.error,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   emptyActionText: {
-    color: '#ffffff',
+    color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '800',
   },

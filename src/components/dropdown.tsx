@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/theme/colors';
+import { fontSize, radius } from '@/theme/typography';
 
 export type DropdownOption<T extends string> = { value: T; label: string };
 
@@ -68,39 +69,46 @@ export function Dropdown<T extends string>({ label, value, options, onChange, di
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, flexBasis: 150, minWidth: 140, gap: 5 },
-  label: { color: colors.secondaryLabel, fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  label: { color: colors.tertiaryLabel, fontSize: fontSize.meta, fontWeight: '600' },
   field: {
-    minHeight: 46,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: colors.separator,
-    borderCurve: 'continuous',
-    borderRadius: 12,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.control,
     backgroundColor: colors.surface,
   },
-  value: { flex: 1, color: colors.label, fontSize: 14, fontWeight: '700' },
-  chevron: { color: colors.secondaryLabel, fontSize: 14 },
-  pressed: { opacity: 0.72 },
+  value: { flex: 1, color: colors.label, fontSize: fontSize.body, fontWeight: '500' },
+  chevron: { color: colors.secondaryLabel, fontSize: fontSize.meta },
+  pressed: { opacity: 0.75 },
   disabled: { opacity: 0.45 },
-  backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.45)' },
+  backdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.scrim },
   sheet: {
     alignSelf: 'center',
     width: '100%',
     maxWidth: 420,
     maxHeight: '75%',
-    paddingVertical: 8,
-    borderCurve: 'continuous',
-    borderRadius: 18,
-    backgroundColor: colors.background,
+    paddingVertical: 6,
+    borderRadius: radius.panel,
+    backgroundColor: colors.surface,
+    boxShadow: '0 12px 32px rgba(11, 30, 64, 0.22)',
   },
-  sheetTitle: { paddingHorizontal: 18, paddingVertical: 12, color: colors.label, fontSize: 16, fontWeight: '800' },
-  option: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
-  optionSelected: { backgroundColor: '#eaf2ff' },
-  optionText: { color: colors.label, fontSize: 15 },
-  optionTextSelected: { color: colors.brandNavy, fontSize: 15, fontWeight: '800' },
-  check: { color: colors.brandBlue, fontSize: 16, fontWeight: '900' },
+  sheetTitle: { paddingHorizontal: 18, paddingVertical: 12, color: colors.label, fontSize: fontSize.subhead, fontWeight: '600' },
+  option: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
+  optionSelected: { backgroundColor: colors.accentTint },
+  optionText: { color: colors.label, fontSize: fontSize.body },
+  optionTextSelected: { color: colors.brandNavy, fontSize: fontSize.body, fontWeight: '600' },
+  check: { color: colors.primary, fontSize: fontSize.subhead, fontWeight: '700' },
 });

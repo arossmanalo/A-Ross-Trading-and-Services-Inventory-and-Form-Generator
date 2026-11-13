@@ -138,11 +138,11 @@ const styles = StyleSheet.create({
   summary: {
     gap: 5,
     padding: 17,
-    backgroundColor: '#eaf7ee',
+    backgroundColor: colors.successTint,
     borderRadius: 17,
     borderCurve: 'continuous',
   },
-  consumptionSummary: { backgroundColor: '#fff3e8' },
+  consumptionSummary: { backgroundColor: colors.warningTint },
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   itemName: { color: colors.label, fontSize: 20, fontWeight: '900' },
   available: { color: colors.secondaryLabel, fontSize: 14, fontVariant: ['tabular-nums'] },

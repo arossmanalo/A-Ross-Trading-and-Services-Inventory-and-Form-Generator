@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   intro: {
     gap: 6,
     padding: 16,
-    backgroundColor: '#eaf2ff',
+    backgroundColor: colors.accentTint,
     borderRadius: 16,
     borderCurve: 'continuous',
   },
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   typeLabel: { color: colors.label, fontSize: 13, fontWeight: '700' },
   typeRow: { flexDirection: 'row', gap: 10 },
   typeOption: { flex: 1, padding: 13, borderWidth: 1, borderColor: colors.separator, borderRadius: 12, alignItems: 'center' },
-  typeOptionSelected: { backgroundColor: '#eaf2ff', borderColor: colors.brandBlue },
+  typeOptionSelected: { backgroundColor: colors.accentTint, borderColor: colors.brandBlue },
   typeOptionText: { color: colors.label, fontWeight: '700' },
   typeOptionTextSelected: { color: colors.brandBlue, fontWeight: '900' },
   memberCard: { gap: 12, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 16, backgroundColor: colors.surface },

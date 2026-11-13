@@ -106,11 +106,11 @@ function Choice({ title, body, selected, disabled = false, onPress }: { title: s
 
 const styles = StyleSheet.create({
   content: { gap: 14, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: '#eaf2ff', borderRadius: 16, borderCurve: 'continuous' },
+  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
   choice: { gap: 4, padding: 15, borderWidth: 1, borderColor: colors.separator, borderRadius: 14, borderCurve: 'continuous', backgroundColor: colors.surface },
-  selected: { borderColor: colors.brandBlue, backgroundColor: '#eaf2ff' },
+  selected: { borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
   disabled: { opacity: 0.5 },
   choiceTitle: { color: colors.label, fontSize: 15, fontWeight: '800' },
   selectedText: { color: colors.brandNavy },

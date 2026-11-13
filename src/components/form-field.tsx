@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react';
 import { StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
 
 import { colors } from '@/theme/colors';
+import { fontSize, radius, text } from '@/theme/typography';
 
 type FormFieldProps = ComponentProps<typeof TextInput> & {
   label: string;
@@ -12,41 +13,31 @@ type FormFieldProps = ComponentProps<typeof TextInput> & {
 export function FormField({ containerStyle, label, hint, style, ...inputProps }: FormFieldProps) {
   return (
     <View style={[styles.container, containerStyle]}>
-      <Text selectable style={styles.label}>{label}</Text>
+      <Text selectable style={text.label}>{label}</Text>
       <TextInput
+        accessibilityLabel={label}
         {...inputProps}
         placeholderTextColor={colors.secondaryLabel}
         style={[styles.input, style]}
       />
-      {hint ? <Text selectable style={styles.hint}>{hint}</Text> : null}
+      {hint ? <Text selectable style={text.meta}>{hint}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: 7,
-  },
-  label: {
-    color: colors.label,
-    fontSize: 14,
-    fontWeight: '700',
+    gap: 5,
   },
   input: {
-    minHeight: 48,
+    minHeight: 46,
     borderWidth: 1,
-    borderColor: colors.separator,
-    borderCurve: 'continuous',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    borderColor: colors.inputBorder,
+    borderRadius: radius.control,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: colors.surface,
     color: colors.label,
-    fontSize: 16,
-  },
-  hint: {
-    color: colors.secondaryLabel,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: fontSize.body,
   },
 });

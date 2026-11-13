@@ -82,7 +82,7 @@ export default function VoidServiceReportScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 18, paddingBottom: 44 },
-  warning: { gap: 6, padding: 16, backgroundColor: '#ffebe9', borderRadius: 16, borderCurve: 'continuous' },
+  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 16, borderCurve: 'continuous' },
   warningTitle: { color: colors.error, fontSize: 18, fontWeight: '900' },
   warningText: { color: colors.label, fontSize: 13, lineHeight: 19 },
   multiline: { minHeight: 90 },

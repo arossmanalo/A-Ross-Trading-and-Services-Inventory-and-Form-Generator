@@ -1,50 +1,36 @@
-import { Color } from 'expo-router';
-import { Platform } from 'react-native';
-
+/**
+ * The app uses one fixed palette (the "service desk" look) instead of Android's
+ * wallpaper-based colours, so documents, badges and screens look the same on
+ * every tablet. Navy from the logo is the only action colour; red is kept for
+ * void, delete and errors.
+ */
 export const colors = {
-  background: Platform.select({
-    ios: Color.ios.systemGroupedBackground,
-    android: Color.android.dynamic.surface,
-    default: '#f4f7fb',
-  })!,
-  surface: Platform.select({
-    ios: Color.ios.secondarySystemGroupedBackground,
-    android: Color.android.dynamic.surfaceContainer,
-    default: '#ffffff',
-  })!,
-  label: Platform.select({
-    ios: Color.ios.label,
-    android: Color.android.dynamic.onSurface,
-    default: '#111827',
-  })!,
-  secondaryLabel: Platform.select({
-    ios: Color.ios.secondaryLabel,
-    android: Color.android.dynamic.onSurfaceVariant,
-    default: '#5f6877',
-  })!,
-  separator: Platform.select({
-    ios: Color.ios.separator,
-    android: Color.android.dynamic.outlineVariant,
-    default: '#d9dee7',
-  })!,
-  primary: Platform.select({
-    ios: Color.ios.systemBlue,
-    android: Color.android.dynamic.primary,
-    default: '#0757b8',
-  })!,
-  onPrimary: Platform.select({
-    ios: Color.ios.white,
-    android: Color.android.dynamic.onPrimary,
-    default: '#ffffff',
-  })!,
-  error: Platform.select({
-    ios: Color.ios.systemRed,
-    android: Color.android.dynamic.error,
-    default: '#ba1a1a',
-  })!,
-  success: '#137333',
-  warning: '#9a5b00',
-  brandNavy: '#0b377f',
-  brandBlue: '#0757b8',
-  brandRed: '#ee1c25',
+  background: '#F3F5F9',
+  surface: '#FFFFFF',
+  subtleSurface: '#F8FAFC',
+  label: '#14213D',
+  tertiaryLabel: '#3E4B63',
+  secondaryLabel: '#4D5B76',
+  separator: '#DDE3EE',
+  hairline: '#E8ECF3',
+  inputBorder: '#C9D2E1',
+  primary: '#0B377F',
+  onPrimary: '#FFFFFF',
+  accentTint: '#E7EEF9',
+  error: '#A3121A',
+  errorTint: '#FBE6E6',
+  success: '#13603F',
+  successTint: '#E3F3EA',
+  warning: '#6B4300',
+  warningTint: '#FDF4E3',
+  warningBorder: '#EBD3A6',
+  neutralTint: '#EEF1F6',
+  scrim: 'rgba(11, 30, 64, 0.48)',
+  sidebar: '#0B2A5E',
+  sidebarText: '#E6ECF7',
+  sidebarMuted: '#A9B8D6',
+  sidebarBadge: '#24457E',
+  brandNavy: '#0B2A5E',
+  brandBlue: '#0B377F',
+  brandRed: '#EE1C25',
 };

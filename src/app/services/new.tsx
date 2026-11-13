@@ -89,7 +89,7 @@ export default function NewServiceScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { gap: 18, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: '#eaf2ff', borderRadius: 16, borderCurve: 'continuous' },
+  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
   multiline: { minHeight: 104 },

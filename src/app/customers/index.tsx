@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     gap: 1,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: '#e8f2ff',
+    backgroundColor: colors.accentTint,
     borderRadius: 14,
     borderCurve: 'continuous',
   },
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   emptyActionText: {
-    color: '#ffffff',
+    color: colors.onPrimary,
     fontSize: 15,
     fontWeight: '800',
   },

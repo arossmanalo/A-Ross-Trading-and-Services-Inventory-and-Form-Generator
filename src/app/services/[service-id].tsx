@@ -151,7 +151,7 @@ export default function ServiceDetailScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { gap: 18, padding: 18, paddingBottom: 44 },
-  summary: { gap: 6, padding: 17, backgroundColor: '#eaf2ff', borderRadius: 17, borderCurve: 'continuous' },
+  summary: { gap: 6, padding: 17, backgroundColor: colors.accentTint, borderRadius: 17, borderCurve: 'continuous' },
   summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   currentRate: { color: colors.brandNavy, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },

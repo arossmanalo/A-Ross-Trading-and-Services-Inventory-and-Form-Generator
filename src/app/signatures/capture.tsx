@@ -11,6 +11,7 @@ import { isSignableOwnerType } from '@/features/signatures/signable-owners';
 import { getSignableDocument } from '@/features/signatures/signature-repository';
 import { SignaturePad } from '@/features/signatures/signature-pad';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
+import { colors } from '@/theme/colors';
 
 export default function CaptureScreen() {
   const {ownerType,ownerId,role} = useLocalSearchParams<{ownerType:string;ownerId:string;role:string}>();
@@ -65,6 +66,6 @@ export default function CaptureScreen() {
         .catch((e:unknown) => setError(e instanceof Error ? e.message : 'Could not save signature.'))
         .finally(() => {saving.current=false;setBusy(false);});
     }} /> : <Text selectable>{target ? 'Loading the finalized document…' : 'Loading document…'}</Text>}
-    {error ? <Text selectable style={{color:'#b91c1c'}}>{error}</Text> : null}
+    {error ? <Text selectable style={{color:colors.error}}>{error}</Text> : null}
   </KeyboardAvoidingView>;
 }

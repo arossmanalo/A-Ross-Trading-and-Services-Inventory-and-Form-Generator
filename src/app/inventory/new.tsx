@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   intro: {
     gap: 6,
     padding: 16,
-    backgroundColor: '#eaf2ff',
+    backgroundColor: colors.accentTint,
     borderRadius: 16,
     borderCurve: 'continuous',
   },

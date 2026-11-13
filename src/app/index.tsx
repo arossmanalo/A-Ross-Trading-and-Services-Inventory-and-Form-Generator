@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     height: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.onPrimary,
     borderRadius: 18,
     borderCurve: 'continuous',
   },
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   heroTitle: {
-    color: '#ffffff',
+    color: colors.onPrimary,
     fontSize: 23,
     lineHeight: 28,
     fontWeight: '800',
@@ -312,10 +312,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     borderCurve: 'continuous',
-    backgroundColor: '#dbeafe',
+    backgroundColor: colors.accentTint,
   },
   featureIconMuted: {
-    backgroundColor: '#e8ebf0',
+    backgroundColor: colors.neutralTint,
   },
   featureIconText: {
     color: colors.brandNavy,

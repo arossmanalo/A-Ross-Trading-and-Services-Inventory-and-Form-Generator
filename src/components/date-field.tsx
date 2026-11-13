@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   selectedCell: { backgroundColor: colors.brandBlue },
   dayText: { color: colors.label, fontSize: 15 },
   dayDisabled: { color: colors.separator },
-  daySelected: { color: '#ffffff', fontWeight: '800' },
+  daySelected: { color: colors.onPrimary, fontWeight: '800' },
   footer: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, paddingTop: 8 },
   footerButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14 },
   footerText: { color: colors.brandBlue, fontSize: 14, fontWeight: '800' },

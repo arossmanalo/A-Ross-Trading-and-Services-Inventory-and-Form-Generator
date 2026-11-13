@@ -115,8 +115,8 @@ export default function SettingsScreen() {
           <Switch
             accessibilityLabel="Low-stock notifications"
             onValueChange={setLowStockNotificationsEnabled}
-            trackColor={{ false: '#c8ced8', true: '#8ebcf2' }}
-            thumbColor={lowStockNotificationsEnabled ? colors.brandBlue : '#f4f4f4'}
+            trackColor={{ false: colors.inputBorder, true: colors.primary }}
+            thumbColor={colors.surface}
             value={lowStockNotificationsEnabled}
           />
         </View>
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { gap: 18, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: '#eaf2ff', borderRadius: 16, borderCurve: 'continuous' },
+  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
   multiline: { minHeight: 84 },

@@ -158,7 +158,7 @@ export default function QuotationsScreen() {
 const styles = StyleSheet.create({
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   resultLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  convertedChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.success, backgroundColor: '#e8f7ee' },
+  convertedChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successTint },
   convertedChipText: { color: colors.success, fontSize: 11, fontWeight: '800' },
   content: { paddingHorizontal: 18, paddingBottom: 44 },
   emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.brandBlue, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
   help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 19 },
   newButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandBlue, borderRadius: 14, borderCurve: 'continuous' },
-  newText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  newText: { color: colors.onPrimary, fontSize: 15, fontWeight: '800' },
   row: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   rowCopy: { flex: 1, gap: 4 },
   titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },

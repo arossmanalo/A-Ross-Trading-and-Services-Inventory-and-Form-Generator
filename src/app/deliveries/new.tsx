@@ -77,7 +77,7 @@ export default function NewDeliveryScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: '#eaf2ff', borderRadius: 16, borderCurve: 'continuous' },
+  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 16, borderCurve: 'continuous' },
   eyebrow: { color: colors.brandBlue, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   introText: { color: colors.brandNavy, fontSize: 14, lineHeight: 20 },
   title: { color: colors.label, fontSize: 16, fontWeight: '900' },

@@ -50,10 +50,10 @@ export default function ManageSignaturesScreen() {
     <Stack.Screen options={{title:importing?'Import Signed PDF':previewing?'Preview Signed Version':'Sign Document'}} />
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{padding:18,gap:18,paddingBottom:44}}>
     <View style={{backgroundColor:colors.brandNavy,padding:18,borderRadius:18,gap:8}}>
-      <Text selectable style={{color:'#fff',fontSize:22,fontWeight:'800'}}>{document.documentNumber}</Text>
-      <Text selectable style={{color:'#fff'}}>{document.customerName}</Text>
-      <Text selectable style={{color:'#fff'}}>Revision 1 · Fingerprint {document.fingerprint}</Text>
-      <Text selectable style={{color:'#fff'}}>Current: {document.signatureStatus.replaceAll('_',' ')} · {document.documentState}</Text>
+      <Text selectable style={{color:colors.onPrimary,fontSize:22,fontWeight:'800'}}>{document.documentNumber}</Text>
+      <Text selectable style={{color:colors.onPrimary}}>{document.customerName}</Text>
+      <Text selectable style={{color:colors.onPrimary}}>Revision 1 · Fingerprint {document.fingerprint}</Text>
+      <Text selectable style={{color:colors.onPrimary}}>Current: {document.signatureStatus.replaceAll('_',' ')} · {document.documentState}</Text>
     </View>
     {importing ? <>
       <Text selectable style={{fontWeight:'700'}}>Import the customer's signed copy</Text>
