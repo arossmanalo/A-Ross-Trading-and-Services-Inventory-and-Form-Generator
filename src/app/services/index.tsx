@@ -1,41 +1,46 @@
-import { Link, Stack, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ActionButton } from '@/components/action-button';
+import { ListEmpty, listRowStyles } from '@/components/list-pane';
+import { SplitView, useSplitLayout } from '@/components/split-view';
+import { StatusChip } from '@/components/status-chip';
 import { formatCentavos } from '@/domain/money';
+import { ServiceDetailView } from '@/features/services/service-detail-view';
 import { listServices } from '@/features/services/service-repository';
 import type { ServiceCatalogEntry } from '@/features/services/service-types';
 import { colors } from '@/theme/colors';
+import { spacing, text } from '@/theme/typography';
 
-const ServiceRow = memo(function ServiceRow({ service }: { service: ServiceCatalogEntry }) {
-  const openService = useCallback(() => {
-    router.push({ pathname: '/services/[service-id]', params: { 'service-id': service.id } });
-  }, [service.id]);
+type ServiceRowProps = { service: ServiceCatalogEntry; selected: boolean; onOpen: (serviceId: string) => void };
 
+const ServiceRow = memo(function ServiceRow({ service, selected, onOpen }: ServiceRowProps) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={openService}
-      style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(service.id)}
+      style={({ pressed }) => [listRowStyles.row, styles.row, selected ? listRowStyles.selected : null, pressed && !selected ? listRowStyles.pressed : null]}
     >
-      <View style={styles.rowCopy}>
-        <View style={styles.titleLine}>
-          <Text selectable numberOfLines={1} style={styles.serviceName}>{service.name}</Text>
-          {!service.active ? <Text selectable style={styles.inactiveBadge}>INACTIVE</Text> : null}
+      <View style={styles.copy}>
+        <View style={listRowStyles.titleLine}>
+          <Text numberOfLines={1} style={[text.bodyStrong, styles.copy]}>{service.name}</Text>
+          {!service.active ? <StatusChip label="Inactive" tone="neutral" /> : null}
         </View>
-        <Text selectable numberOfLines={2} style={styles.description}>
-          {service.description || 'No description'}
-        </Text>
+        <Text numberOfLines={2} style={text.meta}>{service.description || 'No description'}</Text>
       </View>
-      <Text selectable style={styles.rate}>{formatCentavos(service.baseRateCentavos)}</Text>
+      <Text style={text.amount}>{formatCentavos(service.baseRateCentavos)}</Text>
     </Pressable>
   );
 });
 
 export default function ServicesScreen() {
   const db = useSQLiteContext();
+  const split = useSplitLayout();
   const [services, setServices] = useState<ServiceCatalogEntry[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,94 +56,51 @@ export default function ServicesScreen() {
     }
   }, [db]);
 
-  useFocusEffect(useCallback(() => {
-    void loadServices();
-  }, [loadServices]));
+  useFocusEffect(useCallback(() => { void loadServices(); }, [loadServices]));
+
+  const openService = useCallback((serviceId: string) => {
+    if (split) setSelectedId(serviceId);
+    else router.push({ pathname: '/services/[service-id]', params: { 'service-id': serviceId } });
+  }, [split]);
+
+  const list = (
+    <FlatList
+      data={services}
+      extraData={`${selectedId}:${split}`}
+      keyExtractor={(service) => service.id}
+      renderItem={({ item }) => <ServiceRow service={item} selected={split && item.id === selectedId} onOpen={openService} />}
+      refreshing={loading && services.length > 0}
+      onRefresh={loadServices}
+      ListHeaderComponent={(
+        <View style={styles.header}>
+          <ActionButton onPress={() => router.push('/services/new')}>Add service</ActionButton>
+          <Text style={text.meta}>Labor and service rates. The rate can be changed per machine on each CSR.</Text>
+          {error ? <Text style={text.error}>{error}</Text> : null}
+        </View>
+      )}
+      ListEmptyComponent={loading
+        ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
+        : <ListEmpty title="No services yet" body="Add the labor and service fees you charge, with a default rate for each." />}
+    />
+  );
+
+  if (!split) return list;
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Link href="/services/new" asChild>
-              <Pressable accessibilityRole="button" hitSlop={10}>
-                <Text selectable style={styles.addButton}>Add</Text>
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <FlatList
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={services.length === 0 ? styles.emptyContent : styles.content}
-        data={services}
-        keyExtractor={getServiceKey}
-        renderItem={renderService}
-        ItemSeparatorComponent={RowSeparator}
-        refreshing={loading && services.length > 0}
-        onRefresh={loadServices}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text selectable style={styles.eyebrow}>SERVICE CATALOG</Text>
-            <Text selectable style={styles.headerText}>
-              Rates are owner-controlled. Future documents use the current rate; finalized documents keep their snapshot.
-            </Text>
-            {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-          </View>
-        }
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator color={colors.brandBlue} size="large" />
-          ) : (
-            <View style={styles.emptyState}>
-              <Text selectable style={styles.emptyTitle}>No services yet</Text>
-              <Text selectable style={styles.emptyBody}>
-                Add labor or service offerings with an editable default rate.
-              </Text>
-            </View>
-          )
-        }
-      />
-    </>
+    <SplitView
+      list={list}
+      listWidth={360}
+      detail={selectedId ? (
+        <ServiceDetailView key={selectedId} embedded serviceId={selectedId} onChanged={() => void loadServices()} />
+      ) : null}
+      emptyTitle="Select a service"
+      emptyBody="Its name, default rate and description open here for editing."
+    />
   );
 }
 
-function getServiceKey(service: ServiceCatalogEntry) {
-  return service.id;
-}
-
-function renderService({ item }: { item: ServiceCatalogEntry }) {
-  return <ServiceRow service={item} />;
-}
-
-function RowSeparator() {
-  return <View style={styles.separator} />;
-}
-
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 18, paddingBottom: 44 },
-  emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
-  header: { gap: 5, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  headerText: { color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 },
-  addButton: { color: colors.brandBlue, fontSize: 17, fontWeight: '600' },
-  row: {
-    minHeight: 78,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 13,
-  },
-  rowCopy: { flex: 1, gap: 5 },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  serviceName: { flexShrink: 1, color: colors.label, fontSize: 17, fontWeight: '600' },
-  inactiveBadge: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600', letterSpacing: 0.6 },
-  description: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  rate: { color: colors.brandNavy, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 28 },
-  emptyTitle: { color: colors.label, fontSize: 20, fontWeight: '600' },
-  emptyBody: { maxWidth: 320, color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, textAlign: 'center' },
-  errorText: { color: colors.error, fontSize: 13, lineHeight: 18 },
-  pressed: { opacity: 0.72 },
+  header: { gap: spacing.md, padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.separator, backgroundColor: colors.surface },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  copy: { flex: 1, minWidth: 0 },
 });
