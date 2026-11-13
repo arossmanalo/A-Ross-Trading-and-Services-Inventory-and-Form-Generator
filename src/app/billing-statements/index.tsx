@@ -1,15 +1,17 @@
-import { Link, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
 import { DateRangeFields } from '@/components/date-range-fields';
 import { Dropdown } from '@/components/dropdown';
-import { FormField } from '@/components/form-field';
-import { SalesTotalCard } from '@/components/sales-total-card';
+import { ListEmpty, ListPaneHeader, listRowStyles } from '@/components/list-pane';
+import { SplitView, useSplitLayout } from '@/components/split-view';
+import { StatusChip, documentStateTone, sentenceCase } from '@/components/status-chip';
 import { getLocalBusinessDate } from '@/domain/business-date';
+import { formatDisplayDate } from '@/domain/calendar';
 import { formatCentavos } from '@/domain/money';
+import { BillingStatementDetailView } from '@/features/billing-statements/billing-statement-detail-view';
 import { listBillingStatements } from '@/features/billing-statements/billing-statement-repository';
 import {
   DEFAULT_STATEMENT_CRITERIA,
@@ -26,64 +28,73 @@ import {
 } from '@/features/billing-statements/billing-statement-filter';
 import type { BillingStatementListItem } from '@/features/billing-statements/billing-statement-types';
 import { colors } from '@/theme/colors';
+import { spacing, text } from '@/theme/typography';
 
-const StatementRow = memo(function StatementRow({ statement, showTotal }: { statement: BillingStatementListItem; showTotal: boolean }) {
-  const open = useCallback(() => {
-    router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statement.id } });
-  }, [statement.id]);
+type StatementRowProps = {
+  statement: BillingStatementListItem;
+  showTotal: boolean;
+  selected: boolean;
+  onOpen: (statementId: string) => void;
+};
+
+const StatementRow = memo(function StatementRow({ statement, showTotal, selected, onOpen }: StatementRowProps) {
   const payments = activePayments(statement);
+  const serviceReportId = statement.serviceReportId;
+  const deliveryId = statement.deliveryId;
   return (
-    <Pressable accessibilityRole="button" onPress={open} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
-      <View style={styles.rowCopy}>
-        <View style={styles.titleLine}>
-          <Text selectable style={styles.number}>{statement.bsNumber ?? 'DRAFT'}</Text>
-          <Text selectable style={statement.documentState === 'draft' ? styles.draftBadge : statement.documentState === 'voided' ? styles.voidBadge : styles.finalBadge}>
-            {statement.documentState.toUpperCase()}
-          </Text>
-        </View>
-        <Text selectable style={styles.customer}>{statement.customerName}</Text>
-        <Text selectable style={styles.meta}>{statement.businessDate}</Text>
-        <View style={styles.chips}>
-          {statement.serviceReportId ? (
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`Open linked ${statement.serviceReportNumber ?? 'draft CSR'}`}
-              hitSlop={6}
-              onPress={() => router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': statement.serviceReportId! } })}
-              style={styles.csrChip}
-            >
-              <Text style={styles.csrChipText}>{statement.serviceReportNumber ?? 'Draft CSR'} ›</Text>
-            </Pressable>
-          ) : null}
-          {statement.deliveryId ? (
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`Open linked ${statement.deliveryNumber ?? 'draft delivery'}`}
-              hitSlop={6}
-              onPress={() => router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': statement.deliveryId! } })}
-              style={styles.csrChip}
-            >
-              <Text style={styles.csrChipText}>{statement.deliveryNumber ?? 'Draft delivery'} ›</Text>
-            </Pressable>
-          ) : null}
-          {payments.length ? (
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={payments.length === 1 ? `Open ${payments[0].paNumber}` : 'Open this statement to see its payment acknowledgments'}
-              hitSlop={6}
-              onPress={() => (payments.length === 1
-                ? router.push({ pathname: '/payments/[payment-id]', params: { 'payment-id': payments[0].id } })
-                : open())}
-              style={styles.paymentChip}
-            >
-              <Text style={styles.paymentChipText}>{payments[0].paNumber}{payments.length > 1 ? ` +${payments.length - 1} more` : ''} ›</Text>
-            </Pressable>
-          ) : null}
-        </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(statement.id)}
+      style={({ pressed }) => [listRowStyles.row, selected ? listRowStyles.selected : null, pressed && !selected ? listRowStyles.pressed : null]}
+    >
+      <View style={listRowStyles.titleLine}>
+        <Text style={listRowStyles.number}>{statement.bsNumber ?? 'Draft'}</Text>
+        <StatusChip label={sentenceCase(statement.documentState)} tone={documentStateTone(statement.documentState)} />
       </View>
-      <View style={styles.stateCopy}>
-        <Text selectable style={styles.total}>{showTotal ? formatCentavos(statement.discountedTotalCentavos) : '₱ ••••••'}</Text>
-        {statement.documentState === 'finalized' ? <Text selectable style={styles.pdf}>PDF {statement.pdfState}</Text> : null}
+      <Text numberOfLines={1} style={text.bodyStrong}>{statement.customerName}</Text>
+      <View style={listRowStyles.metaLine}>
+        <Text numberOfLines={1} style={[text.meta, { flex: 1 }]}>
+          {formatDisplayDate(statement.businessDate)}{statement.documentState === 'finalized' ? ` · PDF ${statement.pdfState.replaceAll('_', ' ')}` : ''}
+        </Text>
+        <Text style={text.amount}>{showTotal ? formatCentavos(statement.discountedTotalCentavos) : '₱ ••••••'}</Text>
+      </View>
+      <View style={styles.links}>
+        {serviceReportId ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open linked ${statement.serviceReportNumber ?? 'draft CSR'}`}
+            hitSlop={6}
+            onPress={() => router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': serviceReportId } })}
+            style={listRowStyles.linkChip}
+          >
+            <Text style={listRowStyles.linkChipText}>{statement.serviceReportNumber ?? 'Draft CSR'} ›</Text>
+          </Pressable>
+        ) : null}
+        {deliveryId ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open linked ${statement.deliveryNumber ?? 'draft delivery'}`}
+            hitSlop={6}
+            onPress={() => router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': deliveryId } })}
+            style={listRowStyles.linkChip}
+          >
+            <Text style={listRowStyles.linkChipText}>{statement.deliveryNumber ?? 'Draft delivery'} ›</Text>
+          </Pressable>
+        ) : null}
+        {payments.length ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={payments.length === 1 ? `Open ${payments[0].paNumber}` : 'Open this statement to see its payment acknowledgments'}
+            hitSlop={6}
+            onPress={() => (payments.length === 1
+              ? router.push({ pathname: '/payments/[payment-id]', params: { 'payment-id': payments[0].id } })
+              : onOpen(statement.id))}
+            style={listRowStyles.linkChip}
+          >
+            <Text style={listRowStyles.linkChipText}>{payments[0].paNumber}{payments.length > 1 ? ` +${payments.length - 1} more` : ''} ›</Text>
+          </Pressable>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -91,9 +102,12 @@ const StatementRow = memo(function StatementRow({ statement, showTotal }: { stat
 
 export default function BillingStatementsScreen() {
   const db = useSQLiteContext();
+  const split = useSplitLayout();
   const [rows, setRows] = useState<BillingStatementListItem[]>([]);
   const [criteria, setCriteria] = useState<BillingStatementCriteria>(DEFAULT_STATEMENT_CRITERIA);
   const [showTotals, setShowTotals] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,6 +130,12 @@ export default function BillingStatementsScreen() {
   const visible = useMemo(() => filterBillingStatements(rows, criteria, getLocalBusinessDate()), [criteria, rows]);
   const filtered = hasActiveStatementFilters(criteria);
   const sales = useMemo(() => sumStatementSales(visible), [visible]);
+  const activeFilterCount = [
+    criteria.state !== DEFAULT_STATEMENT_CRITERIA.state,
+    criteria.csr !== DEFAULT_STATEMENT_CRITERIA.csr,
+    criteria.payment !== DEFAULT_STATEMENT_CRITERIA.payment,
+    criteria.period !== DEFAULT_STATEMENT_CRITERIA.period,
+  ].filter(Boolean).length;
   const update = <K extends keyof BillingStatementCriteria>(key: K, value: BillingStatementCriteria[K]) => setCriteria((current) => ({ ...current, [key]: value }));
   const changePeriod = (period: BillingStatementCriteria['period']) => setCriteria((current) => {
     // Start a custom range on today so both calendars show a real date.
@@ -123,98 +143,82 @@ export default function BillingStatementsScreen() {
     return { ...current, period, from: period === 'custom' && !current.from ? today : current.from, to: period === 'custom' && !current.to ? today : current.to };
   });
 
-  return (
+  const openStatement = useCallback((statementId: string) => {
+    if (split) setSelectedId(statementId);
+    else router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statementId } });
+  }, [split]);
+
+  const list = (
     <FlatList
-      contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={visible.length ? styles.content : styles.emptyContent}
       data={visible}
-      extraData={showTotals}
+      extraData={`${showTotals}:${selectedId}:${split}`}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <StatementRow statement={item} showTotal={showTotals} />}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      renderItem={({ item }) => (
+        <StatementRow statement={item} showTotal={showTotals} selected={split && item.id === selectedId} onOpen={openStatement} />
+      )}
       refreshing={loading && rows.length > 0}
       onRefresh={load}
-      ListHeaderComponent={
-        <View style={styles.header}>
-          <Text selectable style={styles.eyebrow}>BILLING STATEMENTS</Text>
-          <Text selectable style={styles.help}>Drafts are unnumbered. Finalization freezes charges and deducts stock for direct item sales.</Text>
-          <Link href="/billing-statements/new" asChild>
-            <Pressable accessibilityRole="button" style={styles.newButton}>
-              <Text selectable style={styles.newText}>New statement draft</Text>
-            </Pressable>
-          </Link>
-          <FormField
-            autoCapitalize="none"
-            autoCorrect={false}
-            label="Search"
-            onChangeText={(value) => update('query', value)}
-            placeholder="BS number, customer, CSR, PA or control number, date…"
-            returnKeyType="search"
-            value={criteria.query}
-          />
-          <View style={styles.filters}>
-            <Dropdown label="STATUS" value={criteria.state} options={STATEMENT_STATE_OPTIONS} onChange={(value) => update('state', value)} />
-            <Dropdown label="CSR" value={criteria.csr} options={STATEMENT_CSR_OPTIONS} onChange={(value) => update('csr', value)} />
-            <Dropdown label="PAYMENT" value={criteria.payment} options={STATEMENT_PAYMENT_OPTIONS} onChange={(value) => update('payment', value)} />
-            <Dropdown label="DATE" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
-            <Dropdown label="SORT BY" value={criteria.sort} options={STATEMENT_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
-          </View>
-          {criteria.period === 'custom' ? <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} /> : null}
-          <View style={styles.resultLine}>
-            <Text selectable style={styles.help}>{visible.length} of {rows.length} billing statement{rows.length === 1 ? '' : 's'}</Text>
-            <ActionButton compact variant="secondary" onPress={() => setShowTotals((current) => !current)}>{showTotals ? 'Hide totals' : 'Show totals'}</ActionButton>
-            {filtered ? <ActionButton compact variant="secondary" onPress={() => setCriteria((current) => ({ ...DEFAULT_STATEMENT_CRITERIA, sort: current.sort }))}>Clear filters</ActionButton> : null}
-          </View>
-          {filtered ? <SalesTotalCard totalCentavos={sales.totalCentavos} count={sales.count} noun="billing statement" hidden={!showTotals} /> : null}
-          {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-        </View>
-      }
-      ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandBlue} size="large" /> : rows.length && filtered ? (
-        <View style={styles.empty}>
-          <Text selectable style={styles.emptyTitle}>No matching billing statements</Text>
-          <Text selectable style={styles.help}>Try a different search or clear the filters.</Text>
-        </View>
-      ) : (
-        <View style={styles.empty}>
-          <Text selectable style={styles.emptyTitle}>No billing statements yet</Text>
-          <Text selectable style={styles.help}>Create a draft for a registered customer.</Text>
-        </View>
+      ListHeaderComponent={(
+        <ListPaneHeader
+          newLabel="New statement draft"
+          onNew={() => router.push('/billing-statements/new')}
+          query={criteria.query}
+          onQueryChange={(value) => update('query', value)}
+          searchPlaceholder="BS number, customer, CSR, PA or control no."
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((open) => !open)}
+          activeFilterCount={activeFilterCount}
+          filters={(
+            <>
+              <Dropdown label="Status" value={criteria.state} options={STATEMENT_STATE_OPTIONS} onChange={(value) => update('state', value)} />
+              <Dropdown label="CSR" value={criteria.csr} options={STATEMENT_CSR_OPTIONS} onChange={(value) => update('csr', value)} />
+              <Dropdown label="Payment" value={criteria.payment} options={STATEMENT_PAYMENT_OPTIONS} onChange={(value) => update('payment', value)} />
+              <Dropdown label="Date" value={criteria.period} options={PERIOD_OPTIONS} onChange={changePeriod} />
+              <Dropdown label="Sort by" value={criteria.sort} options={STATEMENT_SORT_OPTIONS} onChange={(value) => update('sort', value)} />
+              {criteria.period === 'custom' ? (
+                <DateRangeFields from={criteria.from} to={criteria.to} onChange={(range) => setCriteria((current) => ({ ...current, ...range }))} />
+              ) : null}
+            </>
+          )}
+          countLine={`${visible.length} of ${rows.length} billing statement${rows.length === 1 ? '' : 's'}`}
+          showTotals={showTotals}
+          onToggleTotals={() => setShowTotals((current) => !current)}
+          onClearFilters={filtered ? () => setCriteria((current) => ({ ...DEFAULT_STATEMENT_CRITERIA, sort: current.sort })) : undefined}
+          sales={filtered ? { totalCentavos: sales.totalCentavos, count: sales.count, noun: 'billing statement' } : undefined}
+          error={error}
+        />
       )}
+      ListEmptyComponent={loading ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} /> : rows.length && filtered ? (
+        <ListEmpty title="No matching billing statements" body="Try a different search or clear the filters." />
+      ) : (
+        <ListEmpty title="No billing statements yet" body="Drafts are unnumbered. Finalizing freezes the charges and deducts stock for direct item sales. Create a draft for a registered customer." />
+      )}
+    />
+  );
+
+  if (!split) return list;
+
+  return (
+    <SplitView
+      list={list}
+      detail={selectedId ? (
+        <BillingStatementDetailView
+          key={selectedId}
+          embedded
+          statementId={selectedId}
+          onDeleted={() => {
+            setSelectedId(null);
+            void load();
+          }}
+        />
+      ) : null}
+      emptyTitle="Select a billing statement"
+      emptyBody="Its charges, payments and actions open here."
     />
   );
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  resultLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  csrChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  csrChipText: { color: colors.brandNavy, fontSize: 13, fontWeight: '600' },
-  paymentChip: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successTint },
-  paymentChipText: { color: colors.success, fontSize: 13, fontWeight: '600' },
-  content: { paddingHorizontal: 18, paddingBottom: 44 },
-  emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
-  header: { gap: 10, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 19 },
-  newButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandBlue, borderRadius: 10, borderCurve: 'continuous' },
-  newText: { color: colors.onPrimary, fontSize: 15, fontWeight: '600' },
-  row: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  rowCopy: { flex: 1, gap: 4 },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  number: { color: colors.label, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  total: { color: colors.brandNavy, fontSize: 15, fontWeight: '600', textAlign: 'right', fontVariant: ['tabular-nums'] },
-  customer: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  meta: { color: colors.secondaryLabel, fontSize: 13 },
-  draftBadge: { color: colors.warning, fontSize: 13, fontWeight: '600' },
-  finalBadge: { color: colors.success, fontSize: 13, fontWeight: '600' },
-  voidBadge: { color: colors.error, fontSize: 13, fontWeight: '600' },
-  stateCopy: { alignItems: 'flex-end', gap: 4 },
-  pdf: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
-  separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 28 },
-  emptyTitle: { color: colors.label, fontSize: 20, fontWeight: '600' },
-  error: { color: colors.error, fontSize: 13 },
-  pressed: { opacity: 0.72 },
+  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg },
 });
