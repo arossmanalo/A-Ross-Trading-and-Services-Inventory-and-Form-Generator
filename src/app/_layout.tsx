@@ -91,7 +91,7 @@ export default function RootLayout() {
               ) : children
             )}
           >
-          <Stack.Screen name="index" options={{ title: 'Overview' }} />
+          <Stack.Screen name="index" options={{ title: 'Overview', headerShown: false }} />
           <Stack.Screen name="backup" options={{ title: 'Backup' }} />
           <Stack.Screen name="search" options={{ title: 'Search' }} />
           <Stack.Screen name="reports/index" options={{ title: 'Financial reports' }} />

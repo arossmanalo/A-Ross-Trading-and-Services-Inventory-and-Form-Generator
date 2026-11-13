@@ -1,0 +1,82 @@
+import type { BillingStatementListItem } from '@/features/billing-statements/billing-statement-types';
+import type { DeliveryListItem } from '@/features/deliveries/delivery-types';
+import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
+import type { QuotationListItem } from '@/features/quotations/quotation-types';
+import type { ServiceReportListItem } from '@/features/service-reports/service-report-types';
+
+export type OpenDraftKind = 'service_report' | 'quotation' | 'delivery' | 'billing_statement';
+
+export type OpenDraft = {
+  kind: OpenDraftKind;
+  id: string;
+  customerName: string;
+  businessDate: string;
+  totalCentavos: number;
+};
+
+export type LowStockItem = Pick<InventoryItemSummary, 'id' | 'name' | 'unitLabel' | 'currentStock' | 'lowStockThreshold'>;
+
+export type StatementAwaitingPayment = {
+  id: string;
+  bsNumber: string;
+  customerName: string;
+  businessDate: string;
+  totalCentavos: number;
+};
+
+export type OverviewLists = {
+  drafts: OpenDraft[];
+  lowStock: LowStockItem[];
+  awaitingPayment: StatementAwaitingPayment[];
+};
+
+type OverviewSources = {
+  serviceReports: readonly ServiceReportListItem[];
+  quotations: readonly QuotationListItem[];
+  deliveries: readonly DeliveryListItem[];
+  statements: readonly BillingStatementListItem[];
+  items: readonly InventoryItemSummary[];
+};
+
+const byNewestDate = (a: { businessDate: string }, b: { businessDate: string }) => b.businessDate.localeCompare(a.businessDate);
+
+/**
+ * What the Overview lists: every unfinished draft, active items at or below
+ * their low-stock level (the same rule as the low-stock count), and finalized
+ * statements that have no active payment recorded yet.
+ */
+export function buildOverviewLists(sources: OverviewSources): OverviewLists {
+  const drafts: OpenDraft[] = [
+    ...sources.serviceReports
+      .filter((report) => report.documentState === 'draft')
+      .map((report) => ({ kind: 'service_report' as const, id: report.id, customerName: report.customerName, businessDate: report.businessDate, totalCentavos: report.totalBillCentavos })),
+    ...sources.quotations
+      .filter((quotation) => quotation.documentState === 'draft')
+      .map((quotation) => ({ kind: 'quotation' as const, id: quotation.id, customerName: quotation.customerName, businessDate: quotation.businessDate, totalCentavos: quotation.totalCentavos })),
+    ...sources.deliveries
+      .filter((delivery) => delivery.documentState === 'draft')
+      .map((delivery) => ({ kind: 'delivery' as const, id: delivery.id, customerName: delivery.customerName, businessDate: delivery.businessDate, totalCentavos: delivery.totalCentavos })),
+    ...sources.statements
+      .filter((statement) => statement.documentState === 'draft')
+      .map((statement) => ({ kind: 'billing_statement' as const, id: statement.id, customerName: statement.customerName, businessDate: statement.businessDate, totalCentavos: statement.discountedTotalCentavos })),
+  ].sort(byNewestDate);
+
+  const lowStock = sources.items
+    .filter((item) => item.active && item.currentStock <= item.lowStockThreshold)
+    .map(({ id, name, unitLabel, currentStock, lowStockThreshold }) => ({ id, name, unitLabel, currentStock, lowStockThreshold }))
+    .sort((a, b) => a.currentStock - b.currentStock || a.name.localeCompare(b.name));
+
+  const awaitingPayment = sources.statements
+    .filter((statement) => statement.documentState === 'finalized' && statement.bsNumber !== null)
+    .filter((statement) => !statement.payments.some((payment) => payment.state === 'active'))
+    .map((statement) => ({
+      id: statement.id,
+      bsNumber: statement.bsNumber ?? '',
+      customerName: statement.customerName,
+      businessDate: statement.businessDate,
+      totalCentavos: statement.discountedTotalCentavos,
+    }))
+    .sort((a, b) => a.businessDate.localeCompare(b.businessDate));
+
+  return { drafts, lowStock, awaitingPayment };
+}

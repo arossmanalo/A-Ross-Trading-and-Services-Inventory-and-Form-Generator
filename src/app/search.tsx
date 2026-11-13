@@ -1,65 +1,112 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
-import { FormField } from '@/components/form-field';
 import {
   searchAppRecords,
   searchResultKindLabel,
   type GlobalSearchResult,
 } from '@/features/reports/global-search';
 import { colors } from '@/theme/colors';
+import { fontSize, radius, spacing, text } from '@/theme/typography';
 
 export default function SearchScreen() {
   const db = useSQLiteContext();
-  const [query, setQuery] = useState('');
+  const params = useLocalSearchParams<{ q?: string }>();
+  const initialQuery = typeof params.q === 'string' ? params.q : '';
+  const [query, setQuery] = useState(initialQuery);
+  const [searched, setSearched] = useState('');
   const [results, setResults] = useState<GlobalSearchResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const latestSearch = useRef(0);
 
-  const runSearch = async () => {
+  const runSearch = useCallback(async (value: string) => {
+    const searchId = latestSearch.current + 1;
+    latestSearch.current = searchId;
     setBusy(true);
     setError(null);
     try {
-      setResults(await searchAppRecords(db, query));
+      const found = await searchAppRecords(db, value);
+      if (latestSearch.current !== searchId) return;
+      setResults(found);
+      setSearched(value.trim());
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Search failed.');
+      if (latestSearch.current === searchId) setError(caught instanceof Error ? caught.message : 'Search failed. Try again.');
     } finally {
-      setBusy(false);
+      if (latestSearch.current === searchId) setBusy(false);
     }
-  };
+  }, [db]);
+
+  useEffect(() => {
+    if (initialQuery.trim()) void runSearch(initialQuery);
+  }, [initialQuery, runSearch]);
+
+  const sections = useMemo(() => {
+    const groups = new Map<string, GlobalSearchResult[]>();
+    for (const result of results) {
+      const label = searchResultKindLabel(result.kind);
+      groups.set(label, [...(groups.get(label) ?? []), result]);
+    }
+    return [...groups.entries()].map(([title, data]) => ({ title, data }));
+  }, [results]);
 
   return (
-    <FlatList
-      contentInsetAdjustmentBehavior="automatic"
+    <SectionList
+      contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 18, gap: 12, paddingBottom: 44 }}
-      data={results}
-      keyExtractor={item => `${item.kind}:${item.id}`}
+      sections={sections}
+      keyExtractor={(item) => `${item.kind}:${item.id}`}
+      stickySectionHeadersEnabled={false}
       ListHeaderComponent={(
-        <View style={{ gap: 14, marginBottom: 16 }}>
-          <Text selectable>Search customers, equipment, inventory items, services, CSRs, billing statements, and payments.</Text>
-          <FormField label="Search records" value={query} onChangeText={setQuery} editable={!busy} />
-          <ActionButton disabled={busy} onPress={() => void runSearch()}>{busy ? 'Searching...' : 'Search'}</ActionButton>
-          <Text selectable>{results.length} matching records</Text>
-          {error ? <Text selectable style={{ color: colors.error }}>{error}</Text> : null}
+        <View style={styles.header}>
+          <View style={styles.searchRow}>
+            <TextInput
+              accessibilityLabel="Search records"
+              autoFocus={!initialQuery}
+              editable={!busy}
+              onChangeText={setQuery}
+              onSubmitEditing={() => void runSearch(query)}
+              placeholder="Name, number, SKU, date, serial number, or reference"
+              placeholderTextColor={colors.secondaryLabel}
+              returnKeyType="search"
+              style={styles.input}
+              value={query}
+            />
+            <ActionButton disabled={busy} onPress={() => void runSearch(query)}>{busy ? 'Searching…' : 'Search'}</ActionButton>
+          </View>
+          <Text style={text.meta}>
+            Searches customers, equipment, inventory items, services, CSRs, quotations, deliveries, billing statements and payments.
+          </Text>
+          {searched ? <Text style={text.meta}>{results.length} matching record{results.length === 1 ? '' : 's'} for “{searched}”</Text> : null}
+          {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}
-      ListEmptyComponent={<Text selectable>{query.trim() ? 'No matching records.' : 'Enter a name, number, SKU, date, serial number, or reference.'}</Text>}
-      renderItem={({ item }) => (
+      ListEmptyComponent={(
+        <Text style={[text.body, styles.empty]}>
+          {searched ? 'No matching records.' : 'Enter a name, number, SKU, date, serial number, or reference.'}
+        </Text>
+      )}
+      renderSectionHeader={({ section }) => <Text style={[text.label, styles.sectionTitle]}>{section.title.toUpperCase()}</Text>}
+      renderItem={({ item, index, section }) => (
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole="link"
           onPress={() => openResult(item)}
-          style={{ padding: 16, gap: 6, borderRadius: 12, backgroundColor: colors.surface }}
+          style={({ pressed }) => [
+            styles.row,
+            index === 0 ? styles.firstRow : null,
+            index === section.data.length - 1 ? styles.lastRow : null,
+            pressed ? styles.pressed : null,
+          ]}
         >
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: '800' }}>
-            {searchResultKindLabel(item.kind)}
-          </Text>
-          <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: '800' }}>{item.title}</Text>
-          {item.subtitle ? <Text selectable style={{ color: colors.secondaryLabel }}>{item.subtitle}</Text> : null}
-          <Text selectable style={{ color: colors.secondaryLabel }}>{item.detail}</Text>
+          <View style={styles.rowCopy}>
+            <Text style={text.bodyStrong}>{item.title}</Text>
+            {item.subtitle ? <Text style={text.meta}>{item.subtitle}</Text> : null}
+            <Text style={text.meta}>{item.detail}</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
         </Pressable>
       )}
     />
@@ -85,3 +132,40 @@ function openResult(result: GlobalSearchResult) {
     router.push({ pathname: '/payments/[payment-id]', params: { 'payment-id': result.routeId } });
   }
 }
+
+const styles = StyleSheet.create({
+  content: { padding: spacing.xxl, paddingBottom: 48, maxWidth: 900, width: '100%' },
+  header: { gap: spacing.sm, marginBottom: spacing.lg },
+  searchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, alignItems: 'center' },
+  input: {
+    flexGrow: 1,
+    flexBasis: 280,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: radius.control,
+    backgroundColor: colors.surface,
+    color: colors.label,
+    fontSize: fontSize.subhead,
+  },
+  empty: { color: colors.secondaryLabel },
+  sectionTitle: { marginTop: spacing.lg, marginBottom: 6, letterSpacing: 0.6, color: colors.secondaryLabel },
+  row: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: colors.separator,
+  },
+  firstRow: { borderTopWidth: 1, borderTopLeftRadius: radius.panel, borderTopRightRadius: radius.panel },
+  lastRow: { borderBottomLeftRadius: radius.panel, borderBottomRightRadius: radius.panel },
+  rowCopy: { flex: 1, gap: 2 },
+  chevron: { color: colors.secondaryLabel, fontSize: fontSize.section },
+  pressed: { backgroundColor: colors.subtleSurface },
+});
