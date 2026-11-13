@@ -131,6 +131,21 @@ export function ServiceReportDetailView({ reportId, embedded = false, onDeleted,
     return next;
   }, [db, form, report?.documentState, reportId]);
 
+  // Switching records or sections unmounts this view; keep what was typed since the last autosave.
+  const unsaved = useRef({ dirty: false, form: EMPTY_FORM, draft: false });
+  useEffect(() => {
+    unsaved.current = { dirty, form, draft: report?.documentState === 'draft' };
+  });
+  useEffect(() => () => {
+    const pending = unsaved.current;
+    if (!pending.dirty || !pending.draft) return;
+    void pendingSave.current
+      .catch(() => undefined)
+      .then(() => updateServiceReportDraft(db, reportId, toDraftInput(pending.form)))
+      // The view is gone, so there is nowhere to show a failure; the draft keeps its last saved values.
+      .catch(() => undefined);
+  }, [db, reportId]);
+
   useEffect(() => {
     if (!dirty || busy || report?.documentState !== 'draft') return;
     setStatus('Saving…');
