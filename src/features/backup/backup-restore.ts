@@ -388,6 +388,10 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
     const known = new Set(tables.sequences.map(row => String(row.name)));
     tables.sequences = [...tables.sequences, ...['QT', 'DF'].filter(name => !known.has(name)).map(name => ({ name, high_water_mark: 0 }))];
   }
+  if (parsed.manifest.schemaVersion < 13) {
+    // Schema 13 added the optional control number to CSR item usage.
+    tables.service_report_item_usage = tables.service_report_item_usage.map(row => ({ control_number: null, ...row }));
+  }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };
 }

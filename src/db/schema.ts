@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 12;
+export const DATABASE_VERSION = 13;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -695,4 +695,11 @@ ALTER TABLE billing_statement_lines ADD COLUMN source_delivery_line_id TEXT REFE
 CREATE UNIQUE INDEX billing_statement_lines_source_delivery_unique
   ON billing_statement_lines(source_delivery_line_id)
   WHERE source_delivery_line_id IS NOT NULL;
+`;
+
+export const SCHEMA_V13 = `
+ALTER TABLE service_report_item_usage ADD COLUMN control_number TEXT;
+CREATE INDEX IF NOT EXISTS service_report_usage_control_number
+  ON service_report_item_usage(control_number)
+  WHERE control_number IS NOT NULL;
 `;

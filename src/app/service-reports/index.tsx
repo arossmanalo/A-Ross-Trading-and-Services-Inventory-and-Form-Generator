@@ -126,7 +126,7 @@ export default function ServiceReportsScreen() {
             autoCorrect={false}
             label="Search"
             onChangeText={(value) => update('query', value)}
-            placeholder="CSR code, customer, machine, serial, BS number, problem…"
+            placeholder="CSR code, customer, machine, serial, control no., BS number…"
             returnKeyType="search"
             value={criteria.query}
           />

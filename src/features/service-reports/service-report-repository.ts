@@ -71,6 +71,7 @@ type UsageRow = {
   resolved_selling_price_centavos: number | null;
   price_source: ServiceReportUsage['priceSource'];
   override_reason: string | null;
+  control_number: string | null;
 };
 
 type FinalizationUsageRow = UsageRow & {
@@ -188,6 +189,13 @@ export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceRep
   for (const machine of machineRows) {
     machineText.set(machine.service_report_id, [...(machineText.get(machine.service_report_id) ?? []), machine.machine_type, machine.model, machine.serial_number, machine.nickname_or_location]);
   }
+  const controlRows = await db.getAllAsync<{ service_report_id: string; control_number: string }>(
+    'SELECT service_report_id, control_number FROM service_report_item_usage WHERE control_number IS NOT NULL',
+  );
+  const controlNumbers = new Map<string, string[]>();
+  for (const control of controlRows) {
+    controlNumbers.set(control.service_report_id, [...(controlNumbers.get(control.service_report_id) ?? []), control.control_number]);
+  }
   const linked = await loadLinkedStatements(db);
   return rows.map((row) => {
     const summary = mapSummaryRow(row);
@@ -205,6 +213,7 @@ export async function listServiceReports(db: SQLiteDatabase): Promise<ServiceRep
       row.primary_serial,
       row.primary_nickname,
       ...(machineText.get(row.id) ?? []),
+      ...(controlNumbers.get(row.id) ?? []),
       ...linkedStatements.map((statement) => statement.bsNumber ?? 'draft statement'),
       ...parseEntries(row.reported_problem_json),
       row.serviced_by_snapshot,
@@ -399,10 +408,17 @@ export async function updateServiceReportDraft(
   });
 }
 
-export async function addReportItemUsage(db: SQLiteDatabase, reportId: string, itemId: string, quantity: number, billable: boolean): Promise<string> {
+export async function addReportItemUsage(
+  db: SQLiteDatabase,
+  reportId: string,
+  itemId: string,
+  quantity: number,
+  billable: boolean,
+  controlNumber?: string | null,
+): Promise<string> {
   let usageId = '';
   await db.withExclusiveTransactionAsync(async (tx) => {
-    usageId = await insertCsrItemUsage(tx, reportId, itemId, quantity, billable);
+    usageId = await insertCsrItemUsage(tx, reportId, itemId, quantity, billable, undefined, undefined, controlNumber);
     await syncLinkedCsrDraftLines(tx, reportId);
   });
   return usageId;
@@ -1000,7 +1016,7 @@ async function listReportUsages(db: SQLiteDatabase, reportId: string): Promise<S
   const rows = await db.getAllAsync<UsageRow>(
     `SELECT u.id, u.item_id, u.description_snapshot AS item_name, i.sku AS item_sku, i.unit_label,
             u.quantity_integer, u.billable, u.resolved_selling_price_centavos,
-            u.price_source, u.override_reason,
+            u.price_source, u.override_reason, u.control_number,
             COALESCE((SELECT SUM(m.quantity_delta_integer) FROM inventory_movements m WHERE m.item_id = i.id), 0) AS current_stock
      FROM service_report_item_usage u
      JOIN items i ON i.id = u.item_id
@@ -1039,7 +1055,7 @@ async function listFinalizationUsages(
   return db.getAllAsync<FinalizationUsageRow>(
     `SELECT u.id, u.item_id, u.description_snapshot AS item_name, i.sku AS item_sku, i.unit_label,
             u.quantity_integer, u.billable, u.resolved_selling_price_centavos,
-            u.price_source, u.override_reason, i.base_selling_price_centavos,
+            u.price_source, u.override_reason, u.control_number, i.base_selling_price_centavos,
             p.selling_price_centavos AS customer_price_centavos,
             COALESCE((SELECT SUM(m.quantity_delta_integer) FROM inventory_movements m WHERE m.item_id = i.id), 0) AS current_stock
      FROM service_report_item_usage u
@@ -1109,6 +1125,7 @@ function mapUsageRow(row: UsageRow): ServiceReportUsage {
     resolvedSellingPriceCentavos: row.resolved_selling_price_centavos,
     priceSource: row.price_source,
     overrideReason: row.override_reason,
+    controlNumber: row.control_number,
   };
 }
 

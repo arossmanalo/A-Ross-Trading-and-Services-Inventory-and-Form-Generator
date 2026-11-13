@@ -5,7 +5,7 @@ import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13 } from '@/db/schema';
 
 const files = new Map<string, string>();
 let idCounter = 0;
@@ -76,7 +76,7 @@ describe('backup repository', () => {
     idCounter = 0;
     files.clear();
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}${SCHEMA_V12}`);
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}${SCHEMA_V12}${SCHEMA_V13}`);
     raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','3');");
     raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',1),('PA',1);");
     raw.exec("INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner','2026-09-01','2026-09-01');");
@@ -137,14 +137,14 @@ describe('backup repository', () => {
     const entries = new TextDecoder();
     const zip = readStoredZip(bytes);
     const manifest = JSON.parse(entries.decode(zip.get('manifest.json'))) as Record<string, unknown>;
-    manifest.schemaVersion = 13;
+    manifest.schemaVersion = 14;
     const data = entries.decode(zip.get('data/tables.json'));
     const future = createStoredZip([
       { path: 'manifest.json', data: JSON.stringify(manifest) },
       { path: 'data/tables.json', data },
       { path: 'assets/CSR-000001-signed.pdf', data: zip.get('assets/CSR-000001-signed.pdf') ?? new Uint8Array() },
     ]);
-    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 13/);
+    await expect(validateBackupPackage(future)).rejects.toThrow(/schema version 14/);
     expect(raw.prepare('SELECT COUNT(*) AS count FROM backup_manifests').get()).toEqual({ count: 1 });
   });
 
@@ -247,6 +247,18 @@ describe('backup repository', () => {
     raw.exec("INSERT INTO billing_statements(id,bs_number,customer_id,service_report_id,document_state,business_date,created_at) VALUES('bs','BS-000001','customer','csr','finalized','2026-09-01','2026-09-01');");
     raw.exec("INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_service_usage_id,service_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,created_at) VALUES('line','bs','service','usage','svc','Labor',1,50000,50000,'catalog','2026-09-01');");
   }
+
+  it('restores a schema 12 package whose CSR item usage has no control number column', async () => {
+    raw.exec("INSERT INTO items(id,name,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Detergent','carboy',120000,1,'2026-09-01','2026-09-01');");
+    raw.exec("INSERT INTO service_report_item_usage(id,service_report_id,item_id,quantity_integer,billable,description_snapshot,control_number,created_at) VALUES('use','csr','item',1,0,'Detergent','CN-1','2026-09-01');");
+    const exported = await createBackupPackage(db);
+    const legacy = await repackage(base64ToBytes(files.get(exported.fileUri) ?? ''), (payload, manifest) => {
+      for (const row of payload.tables.service_report_item_usage) delete row.control_number;
+      manifest.schemaVersion = 12;
+    });
+    await restoreBackupPackage(db, legacy, 'schema12.arossbackup');
+    expect(raw.prepare('SELECT id, control_number FROM service_report_item_usage').all()).toEqual([{ id: 'use', control_number: null }]);
+  });
 
   it('restores a schema 10 package, giving each machine its own service row and keeping the billed link', async () => {
     insertBilledService();

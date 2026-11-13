@@ -14,8 +14,10 @@ export async function insertCsrItemUsage(
   billable: boolean,
   overridePriceCentavos?: number,
   overrideReason?: string,
+  controlNumber?: string | null,
 ): Promise<string> {
   assertPositiveIntegerQuantity(quantity);
+  const control = normalizeControlNumber(controlNumber);
   const usageId = Crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -57,8 +59,8 @@ export async function insertCsrItemUsage(
     await tx.runAsync(
       `INSERT INTO service_report_item_usage
         (id, service_report_id, item_id, quantity_integer, billable,
-         resolved_selling_price_centavos, price_source, override_reason, description_snapshot, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         resolved_selling_price_centavos, price_source, override_reason, description_snapshot, control_number, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       usageId,
       reportId,
       itemId,
@@ -68,6 +70,7 @@ export async function insertCsrItemUsage(
       billable ? source : null,
       billable && overridden ? reason : null,
       item.name,
+      control,
       now,
     );
   } catch (error) {
@@ -79,7 +82,7 @@ export async function insertCsrItemUsage(
     eventType: 'csr.item_usage_added',
     entityType: 'service_report',
     entityId: reportId,
-    details: { itemId, quantity, billable },
+    details: { itemId, quantity, billable, controlNumber: control },
     createdAt: now,
   });
   await incrementDatabaseRevision(tx);
@@ -216,6 +219,13 @@ export async function recalculateServiceReportTotal(
     reportId,
   );
   return total;
+}
+
+/** Trims a control number; a blank one means the usage has none. */
+export function normalizeControlNumber(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (trimmed.length > 100) throw new Error('Control number must be 100 characters or fewer.');
+  return trimmed || null;
 }
 
 function assertNonNegativeMoney(value: number, label: string): void {

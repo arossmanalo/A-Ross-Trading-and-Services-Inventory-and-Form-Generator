@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12 } from '@/db/schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13 } from '@/db/schema';
 
 let idCounter = 0;
 vi.mock('expo-crypto', () => ({
@@ -72,7 +72,7 @@ describe('CSRs with several machines', () => {
     idCounter = 0;
     vi.useFakeTimers({ now: new Date('2026-09-05T12:00:00.000Z') });
     raw = new DatabaseSync(':memory:');
-    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}${SCHEMA_V12}`);
+    raw.exec(`PRAGMA foreign_keys=ON;${SCHEMA_V1}${SCHEMA_V2}${SCHEMA_V3}${SCHEMA_V4}${SCHEMA_V5}${SCHEMA_V6}${SCHEMA_V7}${SCHEMA_V8}${SCHEMA_V9}${SCHEMA_V10}${SCHEMA_V11}${SCHEMA_V12}${SCHEMA_V13}`);
     raw.exec("INSERT INTO app_meta(key,value) VALUES('database_revision','0')");
     raw.exec("INSERT INTO sequences(name,high_water_mark) VALUES('CSR',0),('BS',0),('PA',0)");
     raw.prepare("INSERT INTO settings(id,business_name,business_address,contact_details,owner_name,created_at,updated_at) VALUES('business','A.Ross','Quezon','0917','Owner',?,?)").run(NOW, NOW);
@@ -267,6 +267,26 @@ describe('CSRs with several machines', () => {
     expect(find('sn-d leaking')).toBe(1);
     expect(find('BS-000001')).toBe(1);
     expect(find('nothing here')).toBe(0);
+  });
+
+  it('stores an optional control number on item usage and finds the CSR by it from the list', async () => {
+    const tagged = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'washer' });
+    const plain = await createServiceReportDraft(db, { ...DRAFT, equipmentId: 'dryer' });
+    await addReportItemUsage(db, tagged, 'item', 1, true, '  CN-00123 ');
+    await addReportItemUsage(db, plain, 'item', 1, false, '   ');
+
+    expect((await getServiceReport(db, tagged))?.usages).toMatchObject([{ itemName: 'Detergent', controlNumber: 'CN-00123' }]);
+    expect((await getServiceReport(db, plain))?.usages).toMatchObject([{ itemName: 'Detergent', controlNumber: null }]);
+
+    await finalizeServiceReport(db, tagged);
+    expect((await getServiceReport(db, tagged))?.usages[0]?.controlNumber).toBe('CN-00123');
+
+    const list = await listServiceReports(db);
+    const found = (query: string) => filterServiceReports(list, { ...DEFAULT_CRITERIA, query }, '2026-09-05').map((report) => report.id);
+    expect(found('cn-00123')).toEqual([tagged]);
+    expect(found('CN-00123')).toEqual([tagged]);
+    expect(found('CN-99999')).toEqual([]);
+    await expect(addReportItemUsage(db, plain, 'item', 1, true, 'x'.repeat(101))).rejects.toThrow(/100 characters/);
   });
 
   it('labels multi-machine CSRs in the list', async () => {

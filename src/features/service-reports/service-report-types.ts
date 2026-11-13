@@ -53,6 +53,8 @@ export type ServiceReportUsage = {
   resolvedSellingPriceCentavos: number | null;
   priceSource: 'base' | 'customer' | 'override' | null;
   overrideReason: string | null;
+  /** Optional control number of the item used, searchable from the CSR list. */
+  controlNumber: string | null;
 };
 
 /** One service priced for one machine of a CSR. */

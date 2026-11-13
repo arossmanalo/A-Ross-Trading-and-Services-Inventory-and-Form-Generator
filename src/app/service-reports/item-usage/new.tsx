@@ -17,6 +17,7 @@ export default function NewReportItemUsageScreen() {
   const [items, setItems] = useState<InventoryItemSummary[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [controlNumber, setControlNumber] = useState('');
   const [billable, setBillable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -36,6 +37,7 @@ export default function NewReportItemUsageScreen() {
   const selectItem = useCallback((itemId: string) => {
     setSelectedItemId(itemId);
     setQuantity('');
+    setControlNumber('');
     setError(null);
   }, []);
 
@@ -57,14 +59,14 @@ export default function NewReportItemUsageScreen() {
     setSaving(true);
     setError(null);
     try {
-      await addReportItemUsage(db, reportId, selectedItemId, parsed, billable);
+      await addReportItemUsage(db, reportId, selectedItemId, parsed, billable, controlNumber);
       router.back();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not add item usage.');
     } finally {
       setSaving(false);
     }
-  }, [billable, db, quantity, reportId, selectedItemId]);
+  }, [billable, controlNumber, db, quantity, reportId, selectedItemId]);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -76,6 +78,7 @@ export default function NewReportItemUsageScreen() {
       {selectedItemId ? (
         <View style={styles.editor}>
           <FormField keyboardType="number-pad" label="Quantity used" hint="Enter the number of units used for this CSR." onChangeText={setQuantity} placeholder="Enter a whole number" value={quantity} />
+          <FormField autoCapitalize="characters" autoCorrect={false} label="Control number (optional)" hint="Leave blank if the item has no control number. You can search CSRs by it later." maxLength={100} onChangeText={setControlNumber} placeholder="e.g. CN-000123" value={controlNumber} />
           <View style={styles.switchRow}>
             <View style={styles.switchCopy}>
               <Text selectable style={styles.switchTitle}>Billable to customer</Text>

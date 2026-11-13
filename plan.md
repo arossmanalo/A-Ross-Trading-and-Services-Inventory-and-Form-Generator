@@ -98,6 +98,7 @@ Expo Go is not a production requirement. Phase 0 must verify release builds on t
 - Opening stock is a Restock movement.
 - Negative stock and overrides/backorders are prohibited.
 - CSR item usage can be billable or non-billable. Both deduct stock; only billable usage becomes a customer charge.
+- CSR item usage may carry an optional Control Number (schema 13). It shows beside the item on the CSR screen and is matched by the CSR list search.
 
 ### Exactly one deduction and charge
 
