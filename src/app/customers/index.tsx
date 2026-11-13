@@ -1,55 +1,47 @@
-import { Link, Stack, router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useColorScheme,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ActionButton } from '@/components/action-button';
+import { ListEmpty, listRowStyles } from '@/components/list-pane';
+import { SplitView, useSplitLayout } from '@/components/split-view';
+import { StatusChip } from '@/components/status-chip';
+import { CustomerDetailView } from '@/features/customers/customer-detail-view';
 import { listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerSummary } from '@/features/customers/customer-types';
 import { colors } from '@/theme/colors';
+import { spacing, text } from '@/theme/typography';
 
-const CustomerRow = memo(function CustomerRow({ customer }: { customer: CustomerSummary }) {
-  const openCustomer = useCallback(() => {
-    router.push({
-      pathname: '/customers/[customer-id]',
-      params: { 'customer-id': customer.id },
-    });
-  }, [customer.id]);
+type CustomerRowProps = { customer: CustomerSummary; selected: boolean; onOpen: (customerId: string) => void };
 
+const CustomerRow = memo(function CustomerRow({ customer, selected, onOpen }: CustomerRowProps) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={openCustomer}
-      style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
+      accessibilityState={{ selected }}
+      onPress={() => onOpen(customer.id)}
+      style={({ pressed }) => [listRowStyles.row, selected ? listRowStyles.selected : null, pressed && !selected ? listRowStyles.pressed : null]}
     >
-      <View style={styles.rowMain}>
-        <View style={styles.titleLine}>
-          <Text selectable numberOfLines={1} style={styles.customerName}>{customer.name}</Text>
-          {!customer.active ? <Text selectable style={styles.inactiveBadge}>INACTIVE</Text> : null}
-        </View>
-        <Text selectable numberOfLines={2} style={styles.customerMeta}>
+      <View style={listRowStyles.titleLine}>
+        <Text numberOfLines={1} style={[text.bodyStrong, styles.name]}>{customer.name}</Text>
+        {!customer.active ? <StatusChip label="Inactive" tone="neutral" /> : null}
+      </View>
+      <View style={listRowStyles.metaLine}>
+        <Text numberOfLines={1} style={[text.meta, styles.name]}>
           {customer.address || customer.email || customer.contactNumber || 'No contact details yet'}
         </Text>
-      </View>
-      <View style={styles.countPill}>
-        <Text selectable style={styles.countValue}>{customer.equipmentCount}</Text>
-        <Text selectable style={styles.countLabel}>machines</Text>
+        <Text style={text.meta}>{customer.equipmentCount} machine{customer.equipmentCount === 1 ? '' : 's'}</Text>
       </View>
     </Pressable>
   );
 });
 
 export default function CustomersScreen() {
-  useColorScheme();
   const db = useSQLiteContext();
+  const split = useSplitLayout();
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,204 +57,52 @@ export default function CustomersScreen() {
     }
   }, [db]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadCustomers();
-    }, [loadCustomers]),
+  useFocusEffect(useCallback(() => { void loadCustomers(); }, [loadCustomers]));
+
+  const openCustomer = useCallback((customerId: string) => {
+    if (split) setSelectedId(customerId);
+    else router.push({ pathname: '/customers/[customer-id]', params: { 'customer-id': customerId } });
+  }, [split]);
+
+  const list = (
+    <FlatList
+      data={customers}
+      extraData={`${selectedId}:${split}`}
+      keyExtractor={(customer) => customer.id}
+      renderItem={({ item }) => <CustomerRow customer={item} selected={split && item.id === selectedId} onOpen={openCustomer} />}
+      refreshing={loading && customers.length > 0}
+      onRefresh={loadCustomers}
+      ListHeaderComponent={(
+        <View style={styles.header}>
+          <ActionButton onPress={() => router.push('/customers/new')}>Add customer</ActionButton>
+          <Text style={text.meta}>
+            {customers.length} registered customer{customers.length === 1 ? '' : 's'}. Every service report and billing statement starts from a customer profile.
+          </Text>
+          {error ? <Text style={text.error}>{error}</Text> : null}
+        </View>
+      )}
+      ListEmptyComponent={loading
+        ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
+        : <ListEmpty title="No customers yet" body="Add the first customer before creating equipment or service work." />}
+    />
   );
+
+  if (!split) return list;
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Link href="/customers/new" asChild>
-              <Pressable accessibilityRole="button" hitSlop={10}>
-                <Text selectable style={styles.addButton}>Add</Text>
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <FlatList
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={customers.length === 0 ? styles.emptyContent : styles.content}
-        data={customers}
-        keyExtractor={getCustomerKey}
-        renderItem={renderCustomer}
-        ItemSeparatorComponent={RowSeparator}
-        refreshing={loading && customers.length > 0}
-        onRefresh={loadCustomers}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text selectable style={styles.headerEyebrow}>REGISTERED CUSTOMERS</Text>
-            <Text selectable style={styles.headerText}>
-              Every service report and billing statement starts from a customer profile.
-            </Text>
-            {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-          </View>
-        }
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator color={colors.brandBlue} size="large" />
-          ) : (
-            <View style={styles.emptyState}>
-              <Text selectable style={styles.emptyTitle}>No customers yet</Text>
-              <Text selectable style={styles.emptyBody}>
-                Add the first customer before creating equipment or service work.
-              </Text>
-              <Link href="/customers/new" asChild>
-                <Pressable accessibilityRole="button" style={styles.emptyAction}>
-                  <Text selectable style={styles.emptyActionText}>Add first customer</Text>
-                </Pressable>
-              </Link>
-            </View>
-          )
-        }
-      />
-    </>
+    <SplitView
+      list={list}
+      listWidth={340}
+      detail={selectedId ? (
+        <CustomerDetailView key={selectedId} embedded customerId={selectedId} onChanged={() => void loadCustomers()} />
+      ) : null}
+      emptyTitle="Select a customer"
+      emptyBody="Their contact details, equipment, members and prices open here."
+    />
   );
-}
-
-function getCustomerKey(customer: CustomerSummary) {
-  return customer.id;
-}
-
-function renderCustomer({ item }: { item: CustomerSummary }) {
-  return <CustomerRow customer={item} />;
-}
-
-function RowSeparator() {
-  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 18,
-    paddingBottom: 44,
-  },
-  emptyContent: {
-    flexGrow: 1,
-    paddingHorizontal: 18,
-    paddingBottom: 44,
-  },
-  header: {
-    gap: 5,
-    paddingVertical: 18,
-  },
-  headerEyebrow: {
-    color: colors.brandBlue,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-  },
-  headerText: {
-    color: colors.secondaryLabel,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  addButton: {
-    color: colors.brandBlue,
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  row: {
-    minHeight: 82,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 13,
-  },
-  rowMain: {
-    flex: 1,
-    gap: 5,
-  },
-  titleLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  customerName: {
-    flexShrink: 1,
-    color: colors.label,
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  customerMeta: {
-    color: colors.secondaryLabel,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  inactiveBadge: {
-    color: colors.secondaryLabel,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-  },
-  countPill: {
-    minWidth: 67,
-    alignItems: 'center',
-    gap: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: colors.accentTint,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  countValue: {
-    color: colors.brandNavy,
-    fontSize: 17,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-  },
-  countLabel: {
-    color: colors.brandNavy,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.separator,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: 28,
-  },
-  emptyTitle: {
-    color: colors.label,
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  emptyBody: {
-    maxWidth: 320,
-    color: colors.secondaryLabel,
-    fontSize: 15,
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  emptyAction: {
-    minHeight: 48,
-    justifyContent: 'center',
-    marginTop: 8,
-    paddingHorizontal: 20,
-    backgroundColor: colors.brandBlue,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  emptyActionText: {
-    color: colors.onPrimary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  pressed: {
-    opacity: 0.72,
-  },
+  header: { gap: spacing.md, padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.separator, backgroundColor: colors.surface },
+  name: { flex: 1 },
 });
