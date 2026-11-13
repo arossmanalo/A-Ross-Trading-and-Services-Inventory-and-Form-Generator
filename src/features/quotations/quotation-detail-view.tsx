@@ -178,7 +178,7 @@ export function QuotationDetailView({ quotationId, embedded = false, onDeleted, 
               <ActionButton compact disabled={busy} variant="secondary" onPress={previewDraft}>Preview PDF</ActionButton>
               <ActionButton compact disabled={busy || !quotation.lines.length} onPress={finalize}>Finalize quotation</ActionButton>
             </>
-          ) : (
+          ) : finalized ? (
             <>
               <ActionButton compact disabled={busy} variant="secondary" onPress={openPreview}>
                 {quotation.hasSignedVersion ? 'Preview signed quotation' : 'Preview quotation'}
@@ -205,7 +205,7 @@ export function QuotationDetailView({ quotationId, embedded = false, onDeleted, 
                 />
               ) : null}
             </>
-          )}
+          ) : null}
         />
 
         {error ? <Text accessibilityLiveRegion="polite" selectable style={text.error}>{error}</Text> : null}

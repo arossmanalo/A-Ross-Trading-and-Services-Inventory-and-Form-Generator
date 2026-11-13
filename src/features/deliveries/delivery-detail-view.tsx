@@ -158,7 +158,7 @@ export function DeliveryDetailView({ deliveryId, embedded = false, onDeleted, on
               <ActionButton compact disabled={busy} variant="secondary" onPress={previewDraft}>Preview form</ActionButton>
               <ActionButton compact disabled={busy || !delivery.lines.length} onPress={finalize}>Finalize delivery</ActionButton>
             </>
-          ) : (
+          ) : finalized ? (
             <>
               <ActionButton compact disabled={busy} variant="secondary" onPress={openPreview}>
                 {delivery.hasSignedVersion ? 'Preview signed form' : 'Preview delivery form'}
@@ -183,7 +183,7 @@ export function DeliveryDetailView({ deliveryId, embedded = false, onDeleted, on
                 />
               ) : null}
             </>
-          )}
+          ) : null}
         />
 
         {error ? <Text accessibilityLiveRegion="polite" selectable style={text.error}>{error}</Text> : null}
