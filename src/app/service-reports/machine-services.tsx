@@ -5,6 +5,10 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { OptionRow } from '@/components/option-row';
+import { Panel } from '@/components/record-layout';
+import { useSplitLayout } from '@/components/split-view';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
 import {
   addMachineService,
@@ -17,6 +21,7 @@ import { ServicePicker } from '@/features/services/service-picker';
 import { listServices } from '@/features/services/service-repository';
 import type { ServiceCatalogEntry } from '@/features/services/service-types';
 import { colors } from '@/theme/colors';
+import { fontSize, radius, spacing, text } from '@/theme/typography';
 
 /** A service picked from the list below, waiting for its price on the active machine. */
 type PendingService = { service: ServiceCatalogEntry };
@@ -60,6 +65,7 @@ export default function MachineServicesScreen() {
   }, [report?.machineServices]);
 
   const activeMachine = report?.machines.find((machine) => machine.equipmentId === activeMachineId) ?? null;
+  const wide = useSplitLayout();
   const machineLabel = (machine: { machineType: string; nicknameOrLocation: string; serialNumber: string }) =>
     [machine.machineType, machine.nicknameOrLocation || (machine.serialNumber ? `SN ${machine.serialNumber}` : '')].filter(Boolean).join(' · ');
 
@@ -153,117 +159,153 @@ export default function MachineServicesScreen() {
   }, []);
 
   if (!report) {
-    return <View style={styles.centered}>{error ? <Text selectable style={styles.error}>{error}</Text> : <ActivityIndicator color={colors.brandBlue} size="large" />}</View>;
+    return <View style={styles.centered}>{error ? <Text selectable style={text.error}>{error}</Text> : <ActivityIndicator color={colors.brandBlue} size="large" />}</View>;
   }
   if (report.documentState !== 'draft') {
-    return <View style={styles.centered}><Text selectable style={styles.help}>Service prices can only be changed while the CSR is a draft.</Text></View>;
+    return <View style={styles.centered}><Text selectable style={text.meta}>Service prices can only be changed while the CSR is a draft.</Text></View>;
   }
 
-  return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: 'Services by machine' }} />
-      <View style={styles.summary}>
-        <Text selectable style={styles.eyebrow}>CSR TOTAL (DRAFT)</Text>
-        <Text selectable style={styles.total}>{formatCentavos(report.totalBillCentavos)}</Text>
-        <Text selectable style={styles.help}>Each service is priced for the machine it was done on. Prices can differ per machine; the total and any linked billing statement use exactly what you enter.</Text>
-      </View>
-      {error ? <Text selectable accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
+  const machinePanels = report.machines.map((machine, index) => {
+    const rows = servicesByMachine.get(machine.equipmentId) ?? [];
+    const subtotal = rows.reduce((sum, row) => sum + row.rateCentavos, 0);
+    const active = machine.equipmentId === activeMachineId;
+    return (
+      <Panel key={machine.equipmentId} style={active ? styles.panelActive : undefined}>
+        <View style={styles.panelHeader}>
+          <View style={styles.flex}>
+            <Text selectable style={text.bodyStrong}>Machine {index + 1}: {machineLabel(machine)}</Text>
+            {machine.model ? <Text selectable style={text.meta}>Model {machine.model}</Text> : null}
+          </View>
+          <Text selectable style={text.amount}>{formatCentavos(subtotal)}</Text>
+        </View>
 
-      {report.machines.map((machine, index) => {
-        const rows = servicesByMachine.get(machine.equipmentId) ?? [];
-        const subtotal = rows.reduce((sum, row) => sum + row.rateCentavos, 0);
-        const active = machine.equipmentId === activeMachineId;
-        return (
-          <View key={machine.equipmentId} style={[styles.panel, active ? styles.panelActive : null]}>
-            <View style={styles.panelHeader}>
+        {rows.map((row) => (
+          <View key={row.id} style={styles.row}>
+            <View style={styles.rowTop}>
               <View style={styles.flex}>
-                <Text selectable style={styles.panelTitle}>Machine {index + 1}: {machineLabel(machine)}</Text>
-                {machine.model ? <Text selectable style={styles.help}>Model {machine.model}</Text> : null}
+                <Text selectable style={text.body}>{row.serviceName}</Text>
+                {row.note ? <Text selectable style={text.meta}>{row.note}</Text> : null}
               </View>
-              <Text selectable style={styles.subtotal}>{formatCentavos(subtotal)}</Text>
+              <Text selectable style={text.amount}>{formatCentavos(row.rateCentavos)}</Text>
             </View>
-
-            {rows.map((row) => (
-              <View key={row.id} style={styles.row}>
-                <View style={styles.rowTop}>
-                  <View style={styles.flex}>
-                    <Text selectable style={styles.rowName}>{row.serviceName}</Text>
-                    {row.note ? <Text selectable style={styles.help}>{row.note}</Text> : null}
-                  </View>
-                  <Text selectable style={styles.rowPrice}>{formatCentavos(row.rateCentavos)}</Text>
-                </View>
-                {editingId === row.id ? (
-                  <View style={styles.editor}>
-                    <FormField keyboardType="decimal-pad" label="Price for this machine" onChangeText={setPrice} value={price} />
-                    <FormField label="Note (optional)" onChangeText={setNote} value={note} />
-                    <ActionButton disabled={busy} onPress={saveEdit}>{busy ? 'Saving…' : 'Save price'}</ActionButton>
-                    <ActionButton disabled={busy} variant="secondary" onPress={resetEditor}>Cancel</ActionButton>
-                  </View>
-                ) : (
-                  <View style={styles.rowActions}>
-                    <Pressable accessibilityRole="button" disabled={busy} onPress={() => startEdit(row)}><Text style={styles.link}>Edit price</Text></Pressable>
-                    <Pressable accessibilityRole="button" disabled={busy} onPress={() => confirmRemove(row)}><Text style={styles.remove}>Remove</Text></Pressable>
-                  </View>
-                )}
-              </View>
-            ))}
-            {rows.length === 0 ? <Text selectable style={styles.empty}>No services on this machine yet.</Text> : null}
-
-            {active && pending ? (
+            {editingId === row.id ? (
               <View style={styles.editor}>
-                <Text selectable style={styles.editorTitle}>{pending.service.name}</Text>
-                <FormField
-                  hint={pending.service.baseRateCentavos > 0 ? `Catalog price ${formatCentavos(pending.service.baseRateCentavos)}. Change it for this machine if needed.` : 'This service has no fixed price. Enter the price for this machine.'}
-                  keyboardType="decimal-pad"
-                  label="Price for this machine"
-                  onChangeText={setPrice}
-                  placeholder="0.00"
-                  value={price}
-                />
-                <FormField label="Note (optional)" onChangeText={setNote} placeholder="For example: heavy duty, return visit" value={note} />
-                {report.machines.length > 1 ? (
-                  <View style={styles.alsoBox}>
-                    <Text selectable style={styles.alsoTitle}>Also add at this price to:</Text>
-                    <View style={styles.chips}>
-                      {report.machines.filter((other) => other.equipmentId !== machine.equipmentId).map((other) => {
-                        const selected = alsoIds.includes(other.equipmentId);
-                        return (
-                          <Pressable
-                            key={other.equipmentId}
-                            accessibilityRole="checkbox"
-                            accessibilityState={{ checked: selected }}
-                            onPress={() => toggleAlso(other.equipmentId)}
-                            style={[styles.chip, selected ? styles.chipSelected : null]}
-                          >
-                            <Text style={selected ? styles.chipTextSelected : styles.chipText}>{selected ? '✓ ' : ''}{machineLabel(other)}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                ) : null}
-                <ActionButton disabled={busy} onPress={savePending}>
-                  {busy ? 'Saving…' : alsoIds.length ? `Add to ${alsoIds.length + 1} machines` : 'Add to this machine'}
-                </ActionButton>
-                <ActionButton disabled={busy} variant="secondary" onPress={resetEditor}>Cancel</ActionButton>
+                <FormField keyboardType="decimal-pad" label="Price for this machine" onChangeText={setPrice} value={price} />
+                <FormField label="Note (optional)" onChangeText={setNote} value={note} />
+                <View style={styles.editorActions}>
+                  <ActionButton compact disabled={busy} onPress={saveEdit}>{busy ? 'Saving…' : 'Save price'}</ActionButton>
+                  <ActionButton compact disabled={busy} variant="secondary" onPress={resetEditor}>Cancel</ActionButton>
+                </View>
               </View>
             ) : (
-              <ActionButton compact variant={active ? 'primary' : 'secondary'} disabled={busy} onPress={() => chooseMachine(machine.equipmentId)}>
-                {active ? 'Adding here — pick a service below' : 'Add service to this machine'}
-              </ActionButton>
+              <View style={styles.rowActions}>
+                <Pressable accessibilityRole="button" disabled={busy} hitSlop={8} onPress={() => startEdit(row)}>
+                  <Text style={styles.link}>Edit price</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={busy} hitSlop={8} onPress={() => confirmRemove(row)}>
+                  <Text style={styles.remove}>Remove</Text>
+                </Pressable>
+              </View>
             )}
           </View>
-        );
-      })}
+        ))}
+        {rows.length === 0 ? <Text selectable style={[text.meta, styles.inset]}>No services on this machine yet.</Text> : null}
 
-      <ServicePicker
-        services={catalog}
-        onSelect={pickService}
-        onCreated={handleServiceCreated}
-        disabled={busy}
-        heading={activeMachine ? `Adding to: ${machineLabel(activeMachine)}` : 'Pick a machine above, then choose a service'}
-      />
-    </ScrollView>
+        <View style={styles.panelFooter}>
+          {active && pending ? (
+            <View style={styles.editor}>
+              <Text selectable style={text.subhead}>{pending.service.name}</Text>
+              <FormField
+                hint={pending.service.baseRateCentavos > 0 ? `Catalog price ${formatCentavos(pending.service.baseRateCentavos)}. Change it for this machine if needed.` : 'This service has no fixed price. Enter the price for this machine.'}
+                keyboardType="decimal-pad"
+                label="Price for this machine"
+                onChangeText={setPrice}
+                placeholder="0.00"
+                value={price}
+              />
+              <FormField label="Note (optional)" onChangeText={setNote} placeholder="For example: heavy duty, return visit" value={note} />
+              {report.machines.length > 1 ? (
+                <View style={styles.also}>
+                  <Text style={text.label}>Also add at this price to</Text>
+                  {report.machines.filter((other) => other.equipmentId !== machine.equipmentId).map((other) => (
+                    <OptionRow
+                      key={other.equipmentId}
+                      kind="checkbox"
+                      label={machineLabel(other)}
+                      selected={alsoIds.includes(other.equipmentId)}
+                      onPress={() => toggleAlso(other.equipmentId)}
+                    />
+                  ))}
+                </View>
+              ) : null}
+              <View style={styles.editorActions}>
+                <ActionButton compact disabled={busy} onPress={savePending}>
+                  {busy ? 'Saving…' : alsoIds.length ? `Add to ${alsoIds.length + 1} machines` : 'Add to this machine'}
+                </ActionButton>
+                <ActionButton compact disabled={busy} variant="secondary" onPress={resetEditor}>Cancel</ActionButton>
+              </View>
+            </View>
+          ) : (
+            <ActionButton
+              compact
+              variant={active ? 'primary' : 'secondary'}
+              disabled={busy}
+              style={styles.addButton}
+              onPress={() => chooseMachine(machine.equipmentId)}
+            >
+              {active ? (wide ? 'Adding here — pick a service on the right' : 'Adding here — pick a service below') : 'Add service to this machine'}
+            </ActionButton>
+          )}
+        </View>
+      </Panel>
+    );
+  });
+
+  const picker = (
+    <ServicePicker
+      services={catalog}
+      onSelect={pickService}
+      onCreated={handleServiceCreated}
+      disabled={busy}
+      heading={activeMachine
+        ? `Adding to: ${machineLabel(activeMachine)}`
+        : wide ? 'Pick a machine on the left, then choose a service' : 'Pick a machine above, then choose a service'}
+    />
+  );
+
+  const summary = (
+    <Notice label="CSR total (draft)" amount={formatCentavos(report.totalBillCentavos)}>
+      Each service is priced for the machine it was done on. Prices can differ per machine; the total and any
+      linked billing statement use exactly what you enter.
+    </Notice>
+  );
+  const errorText = error
+    ? <Text selectable accessibilityLiveRegion="polite" style={text.error}>{error}</Text>
+    : null;
+
+  return (
+    <>
+      <Stack.Screen options={{ title: 'Services by machine' }} />
+      {wide ? (
+        <View style={styles.columns}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" style={styles.machines}>
+            {summary}
+            {errorText}
+            {machinePanels}
+          </ScrollView>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" style={styles.pickerColumn}>
+            {picker}
+          </ScrollView>
+        </View>
+      ) : (
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {summary}
+          {errorText}
+          {machinePanels}
+          {picker}
+        </ScrollView>
+      )}
+    </>
   );
 }
 
@@ -279,32 +321,35 @@ function parsePrice(value: string, catalogRateCentavos: number | null): number {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.background },
-  content: { gap: 14, padding: 18, paddingBottom: 44 },
-  summary: { gap: 4, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  total: { color: colors.brandNavy, fontSize: 28, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
-  error: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  panel: { gap: 10, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.surface },
-  panelActive: { borderColor: colors.brandBlue, borderWidth: 2 },
-  panelHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  panelTitle: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  subtotal: { color: colors.brandNavy, fontSize: 15, fontWeight: '600' },
-  row: { gap: 8, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-  rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  rowName: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  rowPrice: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  rowActions: { flexDirection: 'row', gap: 20 },
-  link: { color: colors.brandBlue, fontSize: 13, fontWeight: '600' },
-  remove: { color: colors.error, fontSize: 13, fontWeight: '600' },
-  empty: { color: colors.secondaryLabel, fontSize: 13, fontStyle: 'italic' },
-  editor: { gap: 10, padding: 12, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.accentTint },
-  editorTitle: { color: colors.brandNavy, fontSize: 15, fontWeight: '600' },
-  alsoBox: { gap: 6 },
-  alsoTitle: { color: colors.label, fontSize: 13, fontWeight: '600' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 12, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, backgroundColor: colors.surface },
-  chipSelected: { borderColor: colors.brandBlue, backgroundColor: colors.onPrimary },
-  chipText: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600' },
-  chipTextSelected: { color: colors.brandNavy, fontSize: 13, fontWeight: '600' },
+  columns: { flex: 1, flexDirection: 'row' },
+  machines: { flex: 3 },
+  pickerColumn: { flex: 2, borderLeftWidth: 1, borderLeftColor: colors.separator, backgroundColor: colors.surface },
+  content: { gap: spacing.lg, padding: spacing.xl, paddingBottom: spacing.xxl * 2 },
+  panelActive: { borderColor: colors.primary, borderWidth: 2 },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: colors.subtleSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+  },
+  row: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
+  rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  rowActions: { flexDirection: 'row', gap: spacing.xl },
+  link: { color: colors.primary, fontSize: fontSize.meta, fontWeight: '600' },
+  remove: { color: colors.error, fontSize: fontSize.meta, fontWeight: '600' },
+  inset: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  panelFooter: { padding: spacing.lg },
+  addButton: { alignSelf: 'flex-start' },
+  editor: { gap: spacing.md, padding: spacing.md, borderRadius: radius.control, backgroundColor: colors.accentTint },
+  editorActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  also: { gap: spacing.sm },
 });
