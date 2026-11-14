@@ -1,3 +1,63 @@
-import { router,useLocalSearchParams } from 'expo-router';import { useSQLiteContext } from 'expo-sqlite';import { useCallback,useState } from 'react';import { ScrollView,StyleSheet,Text,View } from 'react-native';import { ActionButton } from '@/components/action-button';import { FormField } from '@/components/form-field';import { voidPayment } from '@/features/payments/payment-repository';import { colors } from '@/theme/colors';
-export default function VoidPaymentScreen(){const{paymentId}=useLocalSearchParams<{paymentId:string}>();const db=useSQLiteContext();const[reason,setReason]=useState('');const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);const submit=useCallback(async()=>{setBusy(true);setError(null);try{await voidPayment(db,paymentId,reason);router.back();}catch(e){setError(e instanceof Error?e.message:'Could not void payment.');}finally{setBusy(false);}},[db,paymentId,reason]);return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}><View style={styles.warning}><Text selectable style={styles.title}>Void payment correction</Text><Text selectable style={styles.help}>The PA number and original acknowledgment remain in history. Voided amounts stop counting toward the statement balance.</Text></View><FormField label="Required reason" value={reason} onChangeText={setReason} multiline placeholder="Why is this payment being voided?"/>{error?<Text selectable style={styles.error}>{error}</Text>:null}<ActionButton disabled={busy||!reason.trim()} variant="danger" onPress={()=>void submit()}>{busy?'Voiding…':'Void payment'}</ActionButton></ScrollView>}
-const styles=StyleSheet.create({content:{gap:16,padding:18,paddingBottom:44},warning:{gap:6,padding:16,backgroundColor:colors.errorTint,borderRadius:10,borderCurve:'continuous'},title:{color:colors.error,fontSize:17,fontWeight:'600'},help:{color:colors.error,fontSize:13,lineHeight:19},error:{color:colors.error,fontSize:13,fontWeight:'600'}});
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useCallback, useState } from 'react';
+import { StyleSheet } from 'react-native';
+
+import { ActionButton } from '@/components/action-button';
+import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody } from '@/components/sheet-body';
+import { voidPayment } from '@/features/payments/payment-repository';
+
+export default function VoidPaymentScreen() {
+  const { paymentId } = useLocalSearchParams<{ paymentId: string }>();
+  const db = useSQLiteContext();
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await voidPayment(db, paymentId, reason);
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not void payment.');
+    } finally {
+      setBusy(false);
+    }
+  }, [db, paymentId, reason]);
+
+  return (
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={busy || !reason.trim()} variant="danger" onPress={() => void submit()}>
+            {busy ? 'Voiding…' : 'Void payment'}
+          </ActionButton>
+          <ActionButton disabled={busy} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice tone="danger" label="Void payment">
+        The PA number and original acknowledgment remain in history. Voided amounts stop counting toward the
+        statement balance.
+      </Notice>
+      <FormField
+        label="Reason"
+        multiline
+        onChangeText={setReason}
+        placeholder="Why is this payment being voided?"
+        style={styles.reason}
+        textAlignVertical="top"
+        value={reason}
+      />
+    </SheetBody>
+  );
+}
+
+const styles = StyleSheet.create({
+  reason: { minHeight: 96 },
+});

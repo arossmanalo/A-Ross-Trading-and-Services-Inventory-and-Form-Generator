@@ -1,13 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
+import { ToggleRow } from '@/components/toggle-row';
 import { getServiceReport, voidServiceReport } from '@/features/service-reports/service-report-repository';
 import type { ServiceReportDetail } from '@/features/service-reports/service-report-types';
-import { colors } from '@/theme/colors';
 
 export default function VoidServiceReportScreen() {
   const { reportId } = useLocalSearchParams<{ reportId: string }>();
@@ -55,40 +57,51 @@ export default function VoidServiceReportScreen() {
   }, [createReissue, db, reason, report, reportId, returned]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <View style={styles.warning}>
-        <Text selectable style={styles.warningTitle}>Void {report?.csrNumber ?? 'CSR'}</Text>
-        <Text selectable style={styles.warningText}>The original record and number remain in history. Stock corrections are appended, never silently edited.</Text>
-      </View>
-      <FormField label="Void reason" multiline onChangeText={setReason} style={styles.multiline} textAlignVertical="top" value={reason} />
-      {report?.usages.map((usage) => (
-        <View key={usage.id} style={styles.disposition}>
-          <View style={styles.copy}>
-            <Text selectable style={styles.itemName}>{usage.itemName} · {usage.quantity} {usage.unitLabel}</Text>
-            <Text selectable style={styles.help}>{returned[usage.itemId] ? 'Unused / physically returned to stock' : 'Installed / consumed / not returned'}</Text>
-          </View>
-          <Switch accessibilityLabel={`${usage.itemName} returned to stock`} onValueChange={(value) => setReturned((current) => ({ ...current, [usage.itemId]: value }))} value={returned[usage.itemId] ?? false} />
-        </View>
-      ))}
-      <View style={styles.disposition}>
-        <View style={styles.copy}><Text selectable style={styles.itemName}>Create replacement draft</Text><Text selectable style={styles.help}>Links a new unnumbered CSR to this voided record.</Text></View>
-        <Switch accessibilityLabel="Create replacement draft" onValueChange={setCreateReissue} value={createReissue} />
-      </View>
-      {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-      <ActionButton disabled={busy} onPress={() => void submit()} variant="danger">{busy ? 'Voiding…' : 'Void CSR'}</ActionButton>
-    </ScrollView>
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={busy} onPress={() => void submit()} variant="danger">
+            {busy ? 'Voiding…' : 'Void CSR'}
+          </ActionButton>
+          <ActionButton disabled={busy} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice tone="danger" label={`Void ${report?.csrNumber ?? 'CSR'}`}>
+        The original record and number remain in history. Stock corrections are appended, never silently edited.
+      </Notice>
+      <FormField
+        label="Void reason"
+        multiline
+        onChangeText={setReason}
+        style={styles.reason}
+        textAlignVertical="top"
+        value={reason}
+      />
+      {report?.usages.length ? (
+        <SheetSection title="Items used" hint="Switch on each item that was not used and went back to stock.">
+          {report.usages.map((usage) => (
+            <ToggleRow
+              key={usage.id}
+              title={`${usage.itemName} · ${usage.quantity} ${usage.unitLabel}`}
+              detail={returned[usage.itemId] ? 'Unused / physically returned to stock' : 'Installed / consumed / not returned'}
+              value={returned[usage.itemId] ?? false}
+              onValueChange={(value) => setReturned((current) => ({ ...current, [usage.itemId]: value }))}
+            />
+          ))}
+        </SheetSection>
+      ) : null}
+      <ToggleRow
+        title="Create replacement draft"
+        detail="Links a new unnumbered CSR to this voided record."
+        value={createReissue}
+        onValueChange={setCreateReissue}
+      />
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 16, padding: 18, paddingBottom: 44 },
-  warning: { gap: 6, padding: 16, backgroundColor: colors.errorTint, borderRadius: 10, borderCurve: 'continuous' },
-  warningTitle: { color: colors.error, fontSize: 20, fontWeight: '600' },
-  warningText: { color: colors.label, fontSize: 13, lineHeight: 19 },
-  multiline: { minHeight: 90 },
-  disposition: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.surface },
-  copy: { flex: 1, gap: 4 },
-  itemName: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
-  errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  reason: { minHeight: 96 },
 });
