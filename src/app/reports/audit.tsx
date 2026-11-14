@@ -1,11 +1,22 @@
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { ChoiceChips } from '@/components/choice-chips';
 import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
+import {
+  ReportControls,
+  ReportEmpty,
+  ReportField,
+  ReportFieldRow,
+  ReportFigure,
+  ReportRow,
+  ReportSummary,
+  reportListStyles,
+} from '@/components/report-layout';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import {
   AUDIT_ENTITY_FILTERS,
@@ -18,7 +29,7 @@ import {
 } from '@/features/reports/audit-report';
 import { shareCsvReport } from '@/features/reports/report-export';
 import { ReportFrame } from '@/components/report-frame';
-import { colors } from '@/theme/colors';
+import { spacing } from '@/theme/typography';
 
 export default function AuditReportScreen() {
   const db = useSQLiteContext();
@@ -52,66 +63,74 @@ export default function AuditReportScreen() {
 
   return (
     <ReportFrame>
-    <FlatList
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 18, gap: 12, paddingBottom: 44 }}
-      data={visibleRows}
-      keyExtractor={row => row.id}
-      refreshing={busy}
-      onRefresh={() => void generate()}
-      ListHeaderComponent={(
-        <View style={{ gap: 14, marginBottom: 16 }}>
-          <Text selectable>
-            Audit reports show app actions by actual timestamp, including overrides, voids,
-            backdated records, PDF/share events, and settings changes.
-          </Text>
-          <DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture />
-          <DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {AUDIT_ENTITY_FILTERS.map(value => (
-              <ActionButton
-                key={value}
-                compact
-                variant={entityType === value ? 'primary' : 'secondary'}
+      <FlatList
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={reportListStyles.content}
+        data={visibleRows}
+        keyExtractor={row => row.id}
+        refreshing={busy}
+        onRefresh={() => void generate()}
+        ListHeaderComponent={(
+          <>
+            <ReportControls
+              intro="Audit reports show app actions by actual timestamp, including overrides, voids, backdated records, PDF/share events, and settings changes."
+              error={error}
+              actions={(
+                <>
+                  <ActionButton disabled={busy} onPress={() => void generate()}>{busy ? 'Working…' : 'Generate audit report'}</ActionButton>
+                  <ActionButton
+                    variant="secondary"
+                    disabled={busy || exporting || visibleRows.length === 0}
+                    onPress={() => {
+                      setExporting(true);
+                      setError(null);
+                      void shareCsvReport(auditReportCsv(visibleRows), 'audit-report')
+                        .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Export failed.'))
+                        .finally(() => setExporting(false));
+                    }}
+                  >
+                    {exporting ? 'Exporting…' : 'Share filtered audit as CSV'}
+                  </ActionButton>
+                </>
+              )}
+            >
+              <ReportFieldRow>
+                <ReportField><DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture /></ReportField>
+                <ReportField><DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture /></ReportField>
+              </ReportFieldRow>
+              <ChoiceChips
+                label="Record type"
+                options={AUDIT_ENTITY_FILTERS.map(value => ({ value, label: auditEntityLabel(value) }))}
+                value={entityType}
+                onChange={setEntityType}
                 disabled={busy}
-                onPress={() => setEntityType(value)}
-              >
-                {auditEntityLabel(value)}
-              </ActionButton>
-            ))}
-          </View>
-          <ActionButton disabled={busy} onPress={() => void generate()}>{busy ? 'Working...' : 'Generate audit report'}</ActionButton>
-          <FormField label="Search loaded audit rows" value={query} onChangeText={setQuery} editable={!busy} />
-          <Text selectable>{visibleRows.length} matching audit rows</Text>
-          <ActionButton
-            variant="secondary"
-            disabled={busy || exporting || visibleRows.length === 0}
-            onPress={() => {
-              setExporting(true);
-              setError(null);
-              void shareCsvReport(auditReportCsv(visibleRows), 'audit-report')
-                .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Export failed.'))
-                .finally(() => setExporting(false));
-            }}
-          >
-            {exporting ? 'Exporting...' : 'Share filtered audit as CSV'}
-          </ActionButton>
-          {error ? <Text selectable style={{ color: colors.error }}>{error}</Text> : null}
-        </View>
-      )}
-      ListEmptyComponent={<Text selectable>{busy ? 'Loading...' : 'No audit rows match these filters.'}</Text>}
-      renderItem={({ item }) => (
-        <View style={{ padding: 16, gap: 6, borderRadius: 10, backgroundColor: colors.surface }}>
-          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.eventType}</Text>
-          <Text selectable style={{ color: colors.secondaryLabel }}>
-            {auditEntityLabel(item.entityType)} - {item.entityId}
-          </Text>
-          {item.detailsText ? <Text selectable style={{ color: colors.secondaryLabel }}>{item.detailsText}</Text> : null}
-          <Text selectable style={{ color: colors.secondaryLabel }}>{item.createdAt}</Text>
-        </View>
-      )}
-    />
+              />
+            </ReportControls>
+            <ReportSummary>
+              <ReportFigure label="Matching audit rows" value={String(visibleRows.length)} />
+            </ReportSummary>
+            <View style={styles.search}>
+              <FormField label="Search loaded audit rows" value={query} onChangeText={setQuery} editable={!busy} />
+            </View>
+          </>
+        )}
+        ListEmptyComponent={<ReportEmpty>{busy ? 'Loading…' : 'No audit rows match these filters.'}</ReportEmpty>}
+        renderItem={({ item }) => (
+          <ReportRow
+            title={item.eventType}
+            meta={[
+              `${auditEntityLabel(item.entityType)} · ${item.entityId}`,
+              ...(item.detailsText ? [item.detailsText] : []),
+              item.createdAt,
+            ]}
+          />
+        )}
+      />
     </ReportFrame>
   );
 }
+
+const styles = StyleSheet.create({
+  search: { padding: spacing.xl, paddingBottom: spacing.md },
+});

@@ -1,11 +1,23 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { ChoiceChips } from '@/components/choice-chips';
 import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
+import {
+  ReportControls,
+  ReportEmpty,
+  ReportField,
+  ReportFieldRow,
+  ReportFigure,
+  ReportRow,
+  ReportScope,
+  ReportSummary,
+  reportListStyles,
+} from '@/components/report-layout';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerSummary } from '@/features/customers/customer-types';
@@ -20,7 +32,7 @@ import {
 } from '@/features/reports/sales-report';
 import { shareCsvReport } from '@/features/reports/report-export';
 import { ReportFrame } from '@/components/report-frame';
-import { colors } from '@/theme/colors';
+import { spacing } from '@/theme/typography';
 
 const PHP = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
 
@@ -75,80 +87,94 @@ export default function SalesReportScreen() {
 
   return (
     <ReportFrame>
-    <FlatList
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 18, gap: 12, paddingBottom: 44 }}
-      data={visibleRows}
-      keyExtractor={row => row.id}
-      refreshing={busy}
-      onRefresh={() => void generate()}
-      ListHeaderComponent={(
-        <View style={{ gap: 14, marginBottom: 16 }}>
-          <Text selectable>
-            Sales rows use finalized Billing Statement business dates. Discounts remain statement-level and are not allocated to individual lines.
-          </Text>
-          <DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture />
-          <DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture />
-          <FormField label="Find customer" value={customerQuery} onChangeText={setCustomerQuery} editable={!busy} />
-          <ActionButton variant={customerId ? 'secondary' : 'primary'} disabled={busy} onPress={() => setCustomerId('')}>All customers</ActionButton>
-          <Text selectable>Selected customer: {selectedCustomer?.name ?? 'All customers'}</Text>
-          {matchingCustomers.map(customer => (
-            <Pressable
-              key={customer.id}
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={() => {
-                setCustomerId(customer.id);
-                setCustomerQuery('');
-              }}
-              style={{ padding: 14, backgroundColor: colors.surface, borderRadius: 10 }}
+      <FlatList
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={reportListStyles.content}
+        data={visibleRows}
+        keyExtractor={row => row.id}
+        refreshing={busy}
+        onRefresh={() => void generate()}
+        ListHeaderComponent={(
+          <>
+            <ReportControls
+              intro="Sales rows use finalized Billing Statement business dates. Discounts remain statement-level and are not allocated to individual lines."
+              error={error}
+              actions={(
+                <>
+                  <ActionButton disabled={busy} onPress={() => void generate()}>{busy ? 'Working…' : 'Generate sales report'}</ActionButton>
+                  <ActionButton
+                    variant="secondary"
+                    disabled={busy || exporting || visibleRows.length === 0}
+                    onPress={() => {
+                      setExporting(true);
+                      setError(null);
+                      void shareCsvReport(salesReportCsv(visibleRows), 'sales-lines-report')
+                        .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Export failed.'))
+                        .finally(() => setExporting(false));
+                    }}
+                  >
+                    {exporting ? 'Exporting…' : 'Share filtered sales as CSV'}
+                  </ActionButton>
+                </>
+              )}
             >
-              <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{customer.name}{customer.active ? '' : ' (inactive)'}</Text>
-            </Pressable>
-          ))}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {SALES_LINE_TYPE_FILTERS.map(value => (
-              <ActionButton key={value} compact variant={lineType === value ? 'primary' : 'secondary'} disabled={busy} onPress={() => setLineType(value)}>
-                {lineTypeLabel(value)}
-              </ActionButton>
-            ))}
-          </View>
-          <ActionButton disabled={busy} onPress={() => void generate()}>{busy ? 'Working...' : 'Generate sales report'}</ActionButton>
-          <FormField label="Search loaded rows" value={query} onChangeText={setQuery} editable={!busy} />
-          <Text selectable>{visibleRows.length} matching lines - {PHP.format(lineSubtotal / 100)} line subtotal before statement discounts</Text>
-          <ActionButton
-            variant="secondary"
-            disabled={busy || exporting || visibleRows.length === 0}
-            onPress={() => {
-              setExporting(true);
-              setError(null);
-              void shareCsvReport(salesReportCsv(visibleRows), 'sales-lines-report')
-                .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Export failed.'))
-                .finally(() => setExporting(false));
-            }}
-          >
-            {exporting ? 'Exporting...' : 'Share filtered sales as CSV'}
-          </ActionButton>
-          {error ? <Text selectable style={{ color: colors.error }}>{error}</Text> : null}
-        </View>
-      )}
-      ListEmptyComponent={<Text selectable>{busy ? 'Loading...' : 'No sales lines match these filters.'}</Text>}
-      renderItem={({ item }) => (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': item.billingStatementId } })}
-          style={{ padding: 16, gap: 6, borderRadius: 10, backgroundColor: colors.surface }}
-        >
-          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>{item.description}</Text>
-          <Text selectable style={{ color: colors.secondaryLabel }}>{item.customerName} - {item.billingStatementNumber ?? 'Billing Statement'}{item.serviceReportNumber ? ` - ${item.serviceReportNumber}` : ''}{item.controlNumber ? ` - Control No. ${item.controlNumber}` : ''}</Text>
-          <Text selectable style={{ color: colors.secondaryLabel }}>
-            {lineTypeLabel(item.lineType)} - {item.quantity} x {PHP.format(item.unitPriceCentavos / 100)} = {PHP.format(item.amountCentavos / 100)}
-          </Text>
-          {item.overrideReason ? <Text selectable style={{ color: colors.warning }}>Override: {item.overrideReason}</Text> : null}
-        </Pressable>
-      )}
-    />
+              <ReportFieldRow>
+                <ReportField><DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture /></ReportField>
+                <ReportField><DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture /></ReportField>
+              </ReportFieldRow>
+              <ReportScope
+                label="Find customer"
+                allLabel="All customers"
+                query={customerQuery}
+                onQueryChange={setCustomerQuery}
+                selectedTitle={selectedCustomer?.name ?? null}
+                onClear={() => setCustomerId('')}
+                matches={matchingCustomers.map(customer => ({
+                  id: customer.id,
+                  title: `${customer.name}${customer.active ? '' : ' (inactive)'}`,
+                }))}
+                onPick={(id) => {
+                  setCustomerId(id);
+                  setCustomerQuery('');
+                }}
+                disabled={busy}
+              />
+              <ChoiceChips
+                label="Line type"
+                options={SALES_LINE_TYPE_FILTERS.map(value => ({ value, label: lineTypeLabel(value) }))}
+                value={lineType}
+                onChange={setLineType}
+                disabled={busy}
+              />
+            </ReportControls>
+            <ReportSummary>
+              <ReportFigure label="Matching lines" value={String(visibleRows.length)} />
+              <ReportFigure label="Line subtotal before statement discounts" value={PHP.format(lineSubtotal / 100)} />
+            </ReportSummary>
+            <View style={styles.search}>
+              <FormField label="Search loaded rows" value={query} onChangeText={setQuery} editable={!busy} />
+            </View>
+          </>
+        )}
+        ListEmptyComponent={<ReportEmpty>{busy ? 'Loading…' : 'No sales lines match these filters.'}</ReportEmpty>}
+        renderItem={({ item }) => (
+          <ReportRow
+            title={item.description}
+            figure={PHP.format(item.amountCentavos / 100)}
+            meta={[
+              `${item.customerName} · ${item.billingStatementNumber ?? 'Billing Statement'}${item.serviceReportNumber ? ` · ${item.serviceReportNumber}` : ''}${item.controlNumber ? ` · Control No. ${item.controlNumber}` : ''}`,
+              `${lineTypeLabel(item.lineType)} · ${item.quantity} × ${PHP.format(item.unitPriceCentavos / 100)}`,
+            ]}
+            note={item.overrideReason ? { text: `Override: ${item.overrideReason}`, tone: 'warning' } : null}
+            onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': item.billingStatementId } })}
+          />
+        )}
+      />
     </ReportFrame>
   );
 }
+
+const styles = StyleSheet.create({
+  search: { padding: spacing.xl, paddingBottom: spacing.md },
+});

@@ -10,10 +10,11 @@ type ChoiceChipsProps<T extends string> = {
   options: readonly ChoiceOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  disabled?: boolean;
 };
 
 /** A single-choice row of chips, such as payment method or charge type. */
-export function ChoiceChips<T extends string>({ label, options, value, onChange }: ChoiceChipsProps<T>) {
+export function ChoiceChips<T extends string>({ label, options, value, onChange, disabled = false }: ChoiceChipsProps<T>) {
   return (
     <View style={styles.container}>
       {label ? <Text style={text.label}>{label}</Text> : null}
@@ -24,7 +25,8 @@ export function ChoiceChips<T extends string>({ label, options, value, onChange 
             <Pressable
               key={option.value}
               accessibilityRole="radio"
-              accessibilityState={{ selected, checked: selected }}
+              accessibilityState={{ selected, checked: selected, disabled }}
+              disabled={disabled}
               onPress={() => onChange(option.value)}
               style={({ pressed }) => [
                 styles.chip,
