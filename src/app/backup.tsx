@@ -2,12 +2,16 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { PageBody, PageNote, PageSection } from '@/components/page-section';
+import { Fact, Panel } from '@/components/record-layout';
+import { StatusChip } from '@/components/status-chip';
 import { readBackupFile, restoreBackupPackage, type BackupRestoreResult } from '@/features/backup/backup-restore';
 import { getBackupStatus, shareBackupPackage, type BackupStatus } from '@/features/backup/backup-repository';
 import { colors } from '@/theme/colors';
+import { fontSize, spacing, text } from '@/theme/typography';
 
 export default function BackupScreen() {
   const db = useSQLiteContext();
@@ -78,51 +82,65 @@ export default function BackupScreen() {
   };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 28, gap: 16, paddingBottom: 48, width: '100%', maxWidth: 760 }}>
-      <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface }}>
-        <Text selectable style={{ color: colors.label, fontSize: 20, fontWeight: '600' }}>Backup status</Text>
-        <Text selectable style={{ color: colors.secondaryLabel }}>
-          The app creates one .arossbackup file, then opens Android sharing so you can manually upload it to private Google Drive.
-        </Text>
-      </View>
-
-      <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.warning }}>
-        <Text selectable style={{ color: colors.warning, fontWeight: '600' }}>Unencrypted backup</Text>
-        <Text selectable style={{ color: colors.secondaryLabel }}>
+    <PageBody>
+      <PageSection
+        title="Backup status"
+        description="The app creates one .arossbackup file, then opens Android sharing so you can manually upload it to private Google Drive."
+      >
+        {status ? (
+          <Panel>
+            <View style={styles.statusHead}>
+              <Text selectable style={[text.subhead, styles.tabular]}>Revision {status.currentRevision}</Text>
+              {status.noticeDue ? <StatusChip tone="draft" label="Backup due" /> : <StatusChip tone="final" label="Up to date" />}
+            </View>
+            <View style={styles.facts}>
+              <Fact label="Latest export">
+                {status.revisionsNotExported === 0
+                  ? 'All recorded revisions are included in the latest export.'
+                  : `${status.revisionsNotExported} revision(s) are not included in the latest export.`}
+              </Fact>
+              <Fact label="Seven-day notice">
+                {status.noticeDue ? 'Seven-day backup notice: export and upload a new backup.' : 'No seven-day backup notice is due.'}
+              </Fact>
+              <Fact label="Finalized records">{String(status.finalizedRecordCount)}</Fact>
+              <Fact label="Last export">
+                {status.lastExport
+                  ? `${status.lastExport.filename} at revision ${status.lastExport.highestRevision}`
+                  : 'No backup has been exported yet.'}
+              </Fact>
+            </View>
+          </Panel>
+        ) : null}
+        <PageNote tone="warning" title="Unencrypted backup">
           Backup files may contain customer information, signatures, and returned signed PDFs. Store them only in a private Drive location.
-        </Text>
-      </View>
-
-      {status ? (
-        <View style={{ padding: 16, gap: 8, borderRadius: 10, backgroundColor: colors.surface }}>
-          <Text selectable style={{ color: colors.label, fontWeight: '600' }}>Revision {status.currentRevision}</Text>
-          <Text selectable style={{ color: colors.secondaryLabel }}>
-            {status.revisionsNotExported === 0 ? 'All recorded revisions are included in the latest export.' : `${status.revisionsNotExported} revision(s) are not included in the latest export.`}
-          </Text>
-          <Text selectable style={{ color: status.noticeDue ? colors.warning : colors.secondaryLabel }}>
-            {status.noticeDue ? 'Seven-day backup notice: export and upload a new backup.' : 'No seven-day backup notice is due.'}
-          </Text>
-          <Text selectable style={{ color: colors.secondaryLabel }}>
-            Finalized records: {status.finalizedRecordCount}
-          </Text>
-          {status.lastExport ? (
-            <Text selectable style={{ color: colors.secondaryLabel }}>
-              Last export: {status.lastExport.filename} at revision {status.lastExport.highestRevision}
-            </Text>
-          ) : (
-            <Text selectable style={{ color: colors.secondaryLabel }}>No backup has been exported yet.</Text>
-          )}
+        </PageNote>
+        <View style={styles.actions}>
+          <ActionButton disabled={busy} onPress={() => void exportBackup()}>
+            {busy ? 'Creating backup…' : 'Create and share backup'}
+          </ActionButton>
+          <ActionButton disabled={busy} variant="secondary" onPress={() => void restoreBackup()}>
+            {busy ? 'Working…' : 'Validate and restore backup'}
+          </ActionButton>
         </View>
-      ) : null}
-
-      <ActionButton disabled={busy} onPress={() => void exportBackup()}>
-        {busy ? 'Creating backup...' : 'Create and share backup'}
-      </ActionButton>
-      <ActionButton disabled={busy} variant="secondary" onPress={() => void restoreBackup()}>
-        {busy ? 'Working...' : 'Validate and restore backup'}
-      </ActionButton>
-      {message ? <Text selectable style={{ color: colors.success }}>{message}</Text> : null}
-      {error ? <Text selectable style={{ color: colors.error }}>{error}</Text> : null}
-    </ScrollView>
+        {message ? <Text selectable style={styles.message}>{message}</Text> : null}
+        {error ? <Text selectable style={text.error}>{error}</Text> : null}
+      </PageSection>
+    </PageBody>
   );
 }
+
+const styles = StyleSheet.create({
+  statusHead: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+  },
+  tabular: { fontVariant: ['tabular-nums'] },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, padding: spacing.lg },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  message: { color: colors.success, fontSize: fontSize.meta, lineHeight: 18, fontWeight: '600' },
+});

@@ -36,6 +36,7 @@ import { getQuotationPreview } from '@/features/quotations/quotation-pdf';
 import type { PreviewKind } from '@/features/signatures/signable-owners';
 import type { SignableOwnerType } from '@/features/signatures/signature-types';
 import { colors } from '@/theme/colors';
+import { spacing } from '@/theme/typography';
 
 type DocumentKind = PreviewKind;
 type PagePreview = { html: string; kind: DocumentKind };
@@ -302,17 +303,23 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
       {preview ? (
         <>
           <View style={styles.actions}>
-            <ActionButton disabled={busy} onPress={() => void openPdfPreview()}>
-              {busy ? 'Preparing…' : reviewingSignature ? 'Open print preview' : 'Print (opens print dialog)'}
-            </ActionButton>
-            {reviewingSignature ? <Button title={busy ? 'Finalizing…' : 'Finalize signature'} color={colors.brandBlue} disabled={busy} onPress={() => setConfirmSignature(true)} /> : <View style={styles.secondaryActions}>
-              <ActionButton compact disabled={busy} variant="secondary" onPress={() => void sharePdf()}>
-                Save / share PDF
+            <View style={styles.actionRow}>
+              {reviewingSignature ? (
+                <Button title={busy ? 'Finalizing…' : 'Finalize signature'} color={colors.brandBlue} disabled={busy} onPress={() => setConfirmSignature(true)} />
+              ) : (
+                <ActionButton compact disabled={busy} onPress={() => void sharePdf()}>
+                  Save / share PDF
+                </ActionButton>
+              )}
+              <ActionButton compact disabled={busy} variant="secondary" onPress={() => void openPdfPreview()}>
+                {busy ? 'Preparing…' : reviewingSignature ? 'Open print preview' : 'Print (opens print dialog)'}
               </ActionButton>
-              <ActionButton compact disabled={busy || !documentHeight || imageTooLong} variant="secondary" onPress={() => void saveImage()}>
-                Save image to Photos
-              </ActionButton>
-            </View>}
+              {reviewingSignature ? null : (
+                <ActionButton compact disabled={busy || !documentHeight || imageTooLong} variant="secondary" onPress={() => void saveImage()}>
+                  Save image to Photos
+                </ActionButton>
+              )}
+            </View>
             <Text selectable style={styles.help}>
               {reviewingSignature ? 'Signature review only. Return to Sign Document to redraw it before finalizing.' : preview.isDraft ? 'Draft preview only — no number, stock movement, or payment is created.' : activeCaptureId ? 'Finalized signed document preview.' : 'Finalized document preview.'}
               {' '}Image export saves the full preview as one PNG; PDF keeps normal page breaks. To send a PDF use Save / share PDF; the print dialog follows the tablet's rotation and is meant for printing.
@@ -365,11 +372,18 @@ export function DocumentPreviewScreen({ documentId, kind, signedCaptureId, signa
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  actions: { gap: 9, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, backgroundColor: colors.background },
-  secondaryActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 16 },
+  actions: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.separator,
+  },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
   previewScroll: { flex: 1 },
-  previewContent: { alignItems: 'center', paddingHorizontal: 12, paddingBottom: 20 },
+  previewContent: { alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 20 },
   capture: { overflow: 'hidden', backgroundColor: colors.onPrimary },
   webview: { width: '100%', flex: 1, backgroundColor: colors.onPrimary },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

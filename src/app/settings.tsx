@@ -1,9 +1,11 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { PageBody, PageSection } from '@/components/page-section';
+import { ToggleRow } from '@/components/toggle-row';
 import { SavedSignatureSettings } from '@/features/signatures/saved-signature-settings';
 import { BusinessLogoSettings } from '@/features/settings/business-logo-settings';
 import {
@@ -11,6 +13,7 @@ import {
   updateBusinessSettings,
 } from '@/features/settings/settings-repository';
 import { colors } from '@/theme/colors';
+import { fontSize, spacing, text } from '@/theme/typography';
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
@@ -68,19 +71,11 @@ export default function SettingsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
+    <PageBody>
+      <PageSection
+        title="Business identity"
+        description="These values will be snapshotted into future finalized documents. Existing documents will not change."
       >
-        <View style={styles.intro}>
-          <Text selectable style={styles.eyebrow}>BUSINESS IDENTITY</Text>
-          <Text selectable style={styles.introText}>
-            These values will be snapshotted into future finalized documents. Existing documents will not change.
-          </Text>
-        </View>
-
         <FormField autoCapitalize="words" label="Business name" onChangeText={setBusinessName} value={businessName} />
         <FormField
           autoCapitalize="words"
@@ -102,58 +97,37 @@ export default function SettingsScreen() {
           value={contactDetails}
         />
         <FormField autoCapitalize="words" label="Owner / serviced by" onChangeText={setOwnerName} value={ownerName} />
+      </PageSection>
+
+      <PageSection title="Document signature and logo" description="Used on documents you finalize from now on.">
         <SavedSignatureSettings />
         <BusinessLogoSettings />
+      </PageSection>
 
-        <View style={styles.settingCard}>
-          <View style={styles.settingCopy}>
-            <Text selectable style={styles.settingTitle}>Low-stock notifications</Text>
-            <Text selectable style={styles.settingDescription}>
-              Disable notices without removing thresholds or dashboard low-stock information. Inactive items never notify.
-            </Text>
-          </View>
-          <Switch
-            accessibilityLabel="Low-stock notifications"
-            onValueChange={setLowStockNotificationsEnabled}
-            trackColor={{ false: colors.inputBorder, true: colors.primary }}
-            thumbColor={colors.surface}
-            value={lowStockNotificationsEnabled}
-          />
-        </View>
+      <PageSection title="Notifications">
+        <ToggleRow
+          title="Low-stock notifications"
+          detail="Disable notices without removing thresholds or dashboard low-stock information. Inactive items never notify."
+          value={lowStockNotificationsEnabled}
+          onValueChange={setLowStockNotificationsEnabled}
+        />
+      </PageSection>
 
-        {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
+      <View style={styles.footer}>
+        {error ? <Text selectable style={text.error}>{error}</Text> : null}
         {notice ? <Text selectable style={styles.noticeText}>{notice}</Text> : null}
-        <ActionButton disabled={saving} onPress={() => void save()}>
+        <ActionButton disabled={saving} style={styles.save} onPress={() => void save()}>
           {saving ? 'Saving…' : 'Save settings'}
         </ActionButton>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </PageBody>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  content: { gap: 18, padding: 28, paddingBottom: 48, width: '100%', maxWidth: 760 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
   multiline: { minHeight: 84 },
-  settingCard: {
-    minHeight: 80,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    padding: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.separator,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  settingCopy: { flex: 1, gap: 4 },
-  settingTitle: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  settingDescription: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
-  errorText: { color: colors.error, fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  noticeText: { color: colors.success, fontSize: 13, lineHeight: 19, fontWeight: '600' },
+  footer: { gap: spacing.md },
+  save: { alignSelf: 'flex-start', paddingHorizontal: spacing.xxl },
+  noticeText: { color: colors.success, fontSize: fontSize.meta, lineHeight: 18, fontWeight: '600' },
 });
