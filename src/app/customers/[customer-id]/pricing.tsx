@@ -9,6 +9,7 @@ import { getCustomerDetail } from '@/features/customers/customer-repository';
 import { listActiveCustomerPrices } from '@/features/pricing/pricing-repository';
 import type { CustomerItemPriceSummary } from '@/features/pricing/pricing-types';
 import { colors } from '@/theme/colors';
+import { text } from '@/theme/typography';
 
 const PriceRow = memo(function PriceRow({ price }: { price: CustomerItemPriceSummary }) {
   return (
@@ -76,11 +77,11 @@ export default function CustomerPricingScreen() {
         onRefresh={loadPrices}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text selectable style={styles.eyebrow}>CUSTOMER-SPECIFIC PRICING</Text>
+            <Text accessibilityRole="header" style={text.subhead}>Customer-specific pricing</Text>
             <Text selectable style={styles.headerText}>
               These prices override base item prices on future document finalizations.
             </Text>
-            <ActionButton onPress={addPrice}>Set item price</ActionButton>
+            <ActionButton compact style={styles.add} onPress={addPrice}>Set item price</ActionButton>
             {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
           </View>
         }
@@ -115,8 +116,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 18, paddingBottom: 44 },
   emptyContent: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 44 },
   header: { gap: 12, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  headerText: { color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 },
+  add: { alignSelf: 'flex-start' },
+    headerText: { color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 },
   row: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12 },
   rowCopy: { flex: 1, gap: 4 },
   itemName: { color: colors.label, fontSize: 15, fontWeight: '600' },

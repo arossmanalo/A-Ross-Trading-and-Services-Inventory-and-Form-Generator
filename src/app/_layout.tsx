@@ -133,6 +133,10 @@ export default function RootLayout() {
             options={{ title: 'New equipment', ...SHEET }}
           />
           <Stack.Screen
+            name="customers/member/new"
+            options={{ title: 'Add company member', ...SHEET }}
+          />
+          <Stack.Screen
             name="customers/pricing/new"
             options={{ title: 'Set customer price', ...SHEET }}
           />

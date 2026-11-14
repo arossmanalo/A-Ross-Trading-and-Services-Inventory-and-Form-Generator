@@ -1,15 +1,17 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { ChoiceChips } from '@/components/choice-chips';
 import { FormField } from '@/components/form-field';
 import {
   createCustomer,
   DuplicateCustomerNameError,
 } from '@/features/customers/customer-repository';
-import { colors } from '@/theme/colors';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 
 export default function NewCustomerScreen() {
   const db = useSQLiteContext();
@@ -53,19 +55,29 @@ export default function NewCustomerScreen() {
   }, [address, contactNumber, customerType, db, email, memberContact, memberEmail, memberName, name]);
 
   return (
-    <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.intro}>
-          <Text selectable style={styles.eyebrow}>CUSTOMER PROFILE</Text>
-          <Text selectable style={styles.introText}>
-            Name is required. Address and contact details can be completed later.
-          </Text>
-        </View>
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving} onPress={() => void save(false)}>
+            {saving ? 'Saving…' : 'Save customer'}
+          </ActionButton>
+          {duplicateName ? (
+            <ActionButton disabled={saving} onPress={() => void save(true)} variant="danger">
+              Save duplicate name anyway
+            </ActionButton>
+          ) : null}
+          <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">
+            Cancel
+          </ActionButton>
+        </>
+      }
+    >
+      <Notice label="Customer profile">
+        Name is required. Address and contact details can be completed later.
+      </Notice>
 
+      <SheetSection title="Details">
         <FormField
           autoCapitalize="words"
           label="Customer name"
@@ -75,6 +87,12 @@ export default function NewCustomerScreen() {
           }}
           placeholder="Customer or business name"
           value={name}
+        />
+        <ChoiceChips
+          label="Customer type"
+          options={CUSTOMER_TYPE_OPTIONS}
+          value={customerType}
+          onChange={setCustomerType}
         />
         <FormField
           autoCapitalize="words"
@@ -86,6 +104,9 @@ export default function NewCustomerScreen() {
           textAlignVertical="top"
           value={address}
         />
+      </SheetSection>
+
+      <SheetSection title="Contact">
         <FormField
           keyboardType="phone-pad"
           label="Contact number (optional)"
@@ -102,83 +123,30 @@ export default function NewCustomerScreen() {
           placeholder="customer@example.com"
           value={email}
         />
-        <View style={styles.typePicker}>
-          <Text selectable style={styles.typeLabel}>Customer type</Text>
-          <View style={styles.typeRow}>
-            {(['individual', 'company'] as const).map((type) => (
-              <Pressable key={type} accessibilityRole="radio" accessibilityState={{ selected: customerType === type }} onPress={() => setCustomerType(type)} style={[styles.typeOption, customerType === type ? styles.typeOptionSelected : null]}>
-                <Text style={customerType === type ? styles.typeOptionTextSelected : styles.typeOptionText}>{type === 'individual' ? 'Individual' : 'Company'}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-        {customerType === 'company' ? <View style={styles.memberCard}>
-          <Text selectable style={styles.memberTitle}>First company member (optional)</Text>
+      </SheetSection>
+
+      {customerType === 'company' ? (
+        <SheetSection title="First company member (optional)">
           <FormField label="Member name" onChangeText={setMemberName} placeholder="Contact person" value={memberName} />
           <FormField keyboardType="phone-pad" label="Member phone (optional)" onChangeText={setMemberContact} value={memberContact} />
-          <FormField autoCapitalize="none" keyboardType="email-address" label="Member email (optional)" onChangeText={setMemberEmail} value={memberEmail} />
-        </View> : null}
-
-        {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-
-        <View style={styles.actions}>
-          {duplicateName ? (
-            <ActionButton disabled={saving} onPress={() => void save(true)} variant="danger">
-              Save duplicate name anyway
-            </ActionButton>
-          ) : null}
-          <ActionButton disabled={saving} onPress={() => void save(false)}>
-            {saving ? 'Saving…' : 'Save customer'}
-          </ActionButton>
-          <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">
-            Cancel
-          </ActionButton>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <FormField
+            autoCapitalize="none"
+            keyboardType="email-address"
+            label="Member email (optional)"
+            onChangeText={setMemberEmail}
+            value={memberEmail}
+          />
+        </SheetSection>
+      ) : null}
+    </SheetBody>
   );
 }
 
+const CUSTOMER_TYPE_OPTIONS = [
+  { value: 'individual', label: 'Individual' },
+  { value: 'company', label: 'Company' },
+] as const;
+
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  content: {
-    gap: 18,
-    padding: 18,
-    paddingBottom: 44,
-  },
-  intro: {
-    gap: 6,
-    padding: 16,
-    backgroundColor: colors.accentTint,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  eyebrow: {
-    color: colors.brandBlue,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  introText: {
-    color: colors.brandNavy,
-    fontSize: 15,
-    lineHeight: 20,
-  },
   multiline: { minHeight: 84 },
-  typePicker: { gap: 8 },
-  typeLabel: { color: colors.label, fontSize: 13, fontWeight: '600' },
-  typeRow: { flexDirection: 'row', gap: 10 },
-  typeOption: { flex: 1, padding: 13, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, alignItems: 'center' },
-  typeOptionSelected: { backgroundColor: colors.accentTint, borderColor: colors.brandBlue },
-  typeOptionText: { color: colors.label, fontWeight: '600' },
-  typeOptionTextSelected: { color: colors.brandBlue, fontWeight: '600' },
-  memberCard: { gap: 12, padding: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, backgroundColor: colors.surface },
-  memberTitle: { color: colors.label, fontWeight: '600' },
-  actions: { gap: 10, paddingTop: 4 },
-  errorText: {
-    color: colors.error,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '600',
-  },
 });

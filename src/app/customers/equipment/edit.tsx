@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { getCustomerDetail, updateEquipment } from '@/features/customers/customer-repository';
-import { colors } from '@/theme/colors';
 
 export default function EditEquipmentScreen() {
   const { customerId, equipmentId } = useLocalSearchParams<{ customerId: string; equipmentId: string }>();
@@ -54,36 +55,55 @@ export default function EditEquipmentScreen() {
   }, [db, equipmentId, machineType, model, nicknameOrLocation, notes, serialNumber]);
 
   return (
-    <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.intro}>
-          <Text selectable style={styles.eyebrow}>EDIT EQUIPMENT</Text>
-          <Text selectable style={styles.introText}>
-            Changes apply to new documents. Finalized documents keep the details they were issued with.
-          </Text>
-        </View>
-        <FormField autoCapitalize="words" label="Machine or equipment type" onChangeText={setMachineType} placeholder="Industrial washing machine" value={machineType} />
-        <FormField label="Model (optional)" onChangeText={setModel} placeholder="Model name or number" value={model} />
-        <FormField autoCapitalize="characters" label="Serial number (optional)" onChangeText={setSerialNumber} placeholder="Recorded exactly as shown" value={serialNumber} />
-        <FormField autoCapitalize="words" label="Nickname or location (optional)" onChangeText={setNicknameOrLocation} placeholder="Laundry area · Unit 2" value={nicknameOrLocation} />
-        <FormField label="Notes (optional)" multiline onChangeText={setNotes} placeholder="Access details, specifications, or service notes" style={styles.multiline} textAlignVertical="top" value={notes} />
-        {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-        <View style={styles.actions}>
+    <SheetBody
+      error={error}
+      actions={
+        <>
           <ActionButton disabled={saving || !loaded} onPress={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</ActionButton>
           <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">Cancel</ActionButton>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </>
+      }
+    >
+      <Notice label="Edit equipment">
+        Changes apply to new documents. Finalized documents keep the details they were issued with.
+      </Notice>
+      <SheetSection title="Machine">
+        <FormField
+          autoCapitalize="words"
+          label="Machine or equipment type"
+          onChangeText={setMachineType}
+          placeholder="Industrial washing machine"
+          value={machineType}
+        />
+        <FormField label="Model (optional)" onChangeText={setModel} placeholder="Model name or number" value={model} />
+        <FormField
+          autoCapitalize="characters"
+          label="Serial number (optional)"
+          onChangeText={setSerialNumber}
+          placeholder="Recorded exactly as shown"
+          value={serialNumber}
+        />
+        <FormField
+          autoCapitalize="words"
+          label="Nickname or location (optional)"
+          onChangeText={setNicknameOrLocation}
+          placeholder="Laundry area · Unit 2"
+          value={nicknameOrLocation}
+        />
+      </SheetSection>
+      <FormField
+        label="Notes (optional)"
+        multiline
+        onChangeText={setNotes}
+        placeholder="Access details, specifications, or service notes"
+        style={styles.multiline}
+        textAlignVertical="top"
+        value={notes}
+      />
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  content: { gap: 18, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
   multiline: { minHeight: 104 },
-  actions: { gap: 10, paddingTop: 4 },
-  errorText: { color: colors.error, fontSize: 15, lineHeight: 20, fontWeight: '600' },
 });

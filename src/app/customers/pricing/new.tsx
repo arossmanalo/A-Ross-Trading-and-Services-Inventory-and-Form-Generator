@@ -14,6 +14,7 @@ import {
 } from '@/features/pricing/pricing-repository';
 import type { CustomerItemPriceSummary } from '@/features/pricing/pricing-types';
 import { colors } from '@/theme/colors';
+import { radius, spacing, text } from '@/theme/typography';
 
 export default function SetCustomerPriceScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
@@ -97,7 +98,7 @@ export default function SetCustomerPriceScreen() {
           ItemSeparatorComponent={ItemSeparator}
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text selectable style={styles.eyebrow}>SELECT ITEM</Text>
+              <Text accessibilityRole="header" style={text.subhead}>Pick an item</Text>
               <Text selectable style={styles.headerText}>
                 Existing special prices are shown beside their base price.
               </Text>
@@ -158,7 +159,7 @@ function PriceItemRow({
           Base {formatCentavos(item.baseSellingPriceCentavos)}{currentPrice === undefined ? '' : ` · Current ${formatCentavos(currentPrice)}`}
         </Text>
       </View>
-      <Text selectable style={styles.selectLabel}>{selected ? 'SELECTED' : 'SELECT'}</Text>
+      <Text style={styles.selectLabel}>{selected ? 'Selected' : 'Select'}</Text>
     </Pressable>
   );
 }
@@ -173,17 +174,16 @@ function ItemSeparator() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingHorizontal: 18, paddingBottom: 44 },
-  header: { gap: 12, paddingVertical: 18 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  headerText: { color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl * 2 },
+  header: { gap: spacing.md, paddingVertical: spacing.xl },
+    headerText: { color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 },
+  editor: { gap: spacing.md, padding: spacing.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.separator, borderRadius: radius.panel },
   itemRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  selectedRow: { paddingHorizontal: 12, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
+  selectedRow: { paddingHorizontal: spacing.md, backgroundColor: colors.accentTint, borderRadius: radius.control },
   itemCopy: { flex: 1, gap: 4 },
   itemName: { color: colors.label, fontSize: 15, fontWeight: '600' },
   itemMeta: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
-  selectLabel: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 0.7 },
+  selectLabel: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   emptyState: { alignItems: 'center', padding: 30 },
   emptyTitle: { color: colors.secondaryLabel, fontSize: 15, fontWeight: '600' },

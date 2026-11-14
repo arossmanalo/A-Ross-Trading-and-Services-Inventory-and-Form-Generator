@@ -1,16 +1,18 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { parseCurrencyToCentavos } from '@/domain/money';
 import {
   createInventoryItemWithOpeningStock,
   DuplicateSkuError,
 } from '@/features/inventory/inventory-repository';
-import { colors } from '@/theme/colors';
+import { spacing } from '@/theme/typography';
 
 export default function NewInventoryItemScreen() {
   const db = useSQLiteContext();
@@ -56,19 +58,29 @@ export default function NewInventoryItemScreen() {
   }, [db, description, lowStockThreshold, name, openingDescription, openingStock, sellingPrice, sku, unitLabel]);
 
   return (
-    <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
-      >
-        <View style={styles.intro}>
-          <Text selectable style={styles.eyebrow}>CATALOG + OPENING MOVEMENT</Text>
-          <Text selectable style={styles.introText}>
-            Opening stock is saved as a Restock movement, so inventory never starts with an unexplained quantity.
-          </Text>
-        </View>
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving} onPress={() => void save(false)}>
+            {saving ? 'Saving…' : 'Save item'}
+          </ActionButton>
+          {duplicateSku ? (
+            <ActionButton disabled={saving} onPress={() => void save(true)} variant="danger">
+              Save duplicate SKU anyway
+            </ActionButton>
+          ) : null}
+          <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">
+            Cancel
+          </ActionButton>
+        </>
+      }
+    >
+      <Notice label="Catalog and opening stock">
+        Opening stock is saved as a Restock movement, so inventory never starts with an unexplained quantity.
+      </Notice>
 
+      <SheetSection title="Item">
         <FormField
           autoCapitalize="words"
           label="Item name"
@@ -105,6 +117,9 @@ export default function NewInventoryItemScreen() {
             value={sellingPrice}
           />
         </View>
+      </SheetSection>
+
+      <SheetSection title="Stock">
         <View style={styles.twoColumns}>
           <FormField
             containerStyle={styles.column}
@@ -131,37 +146,18 @@ export default function NewInventoryItemScreen() {
             value={openingDescription}
           />
         ) : null}
-        <FormField
-          label="Description (optional)"
-          multiline
-          onChangeText={setDescription}
-          placeholder="Compatibility, size, or workshop notes"
-          style={styles.multiline}
-          textAlignVertical="top"
-          value={description}
-        />
+      </SheetSection>
 
-        {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-
-        <View style={styles.actions}>
-          {duplicateSku ? (
-            <ActionButton
-              disabled={saving}
-              onPress={() => void save(true)}
-              variant="danger"
-            >
-              Save duplicate SKU anyway
-            </ActionButton>
-          ) : null}
-          <ActionButton disabled={saving} onPress={() => void save(false)}>
-            {saving ? 'Saving…' : 'Save item'}
-          </ActionButton>
-          <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">
-            Cancel
-          </ActionButton>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <FormField
+        label="Description (optional)"
+        multiline
+        onChangeText={setDescription}
+        placeholder="Compatibility, size, or workshop notes"
+        style={styles.multiline}
+        textAlignVertical="top"
+        value={description}
+      />
+    </SheetBody>
   );
 }
 
@@ -177,51 +173,7 @@ function parseWholeNumber(value: string, label: string): number {
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  content: {
-    gap: 18,
-    padding: 18,
-    paddingBottom: 44,
-  },
-  intro: {
-    gap: 6,
-    padding: 16,
-    backgroundColor: colors.accentTint,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  eyebrow: {
-    color: colors.brandBlue,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  introText: {
-    color: colors.brandNavy,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  twoColumns: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  column: {
-    flex: 1,
-    minWidth: 0,
-  },
-  multiline: {
-    minHeight: 104,
-  },
-  actions: {
-    gap: 10,
-    paddingTop: 4,
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '600',
-  },
+  twoColumns: { flexDirection: 'row', gap: spacing.md },
+  column: { flex: 1, minWidth: 0 },
+  multiline: { minHeight: 104 },
 });

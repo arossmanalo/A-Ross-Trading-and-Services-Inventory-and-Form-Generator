@@ -1,7 +1,7 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
@@ -10,8 +10,10 @@ import {
   getInventoryItemDetail,
   restockInventoryItem,
 } from '@/features/inventory/inventory-repository';
+import { Notice } from '@/components/notice';
+import { SheetBody } from '@/components/sheet-body';
 import type { InventoryItemDetail } from '@/features/inventory/inventory-types';
-import { colors } from '@/theme/colors';
+import { text } from '@/theme/typography';
 
 export default function InventoryMovementScreen() {
   const { 'item-id': itemId, movementType: rawMovementType } = useLocalSearchParams<{
@@ -70,55 +72,48 @@ export default function InventoryMovementScreen() {
   return (
     <>
       <Stack.Screen options={{ title }} />
-      <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={[styles.summary, movementType === 'consumption' ? styles.consumptionSummary : null]}>
-            <Text selectable style={styles.eyebrow}>{title.toUpperCase()}</Text>
-            <Text selectable style={styles.itemName}>{item?.name ?? 'Loading item…'}</Text>
-            <Text selectable style={styles.available}>
-              Current stock: {item?.currentStock ?? '—'} {item?.unitLabel ?? ''}
-            </Text>
-            {!item?.active && item ? (
-              <Text selectable style={styles.inactiveNote}>
-                This item is inactive. Corrective Restock and Consumption remain allowed.
-              </Text>
-            ) : null}
-          </View>
-
-          <FormField
-            keyboardType="number-pad"
-            label={movementType === 'restock' ? 'Quantity to add' : 'Quantity to consume'}
-            hint={movementType === 'restock' ? 'Enter the number of units being added to stock.' : 'Enter the number of units being consumed.'}
-            onChangeText={setQuantity}
-            placeholder="Enter a whole number"
-            value={quantity}
-          />
-          <FormField
-            label="Description"
-            multiline
-            onChangeText={setDescription}
-            placeholder={movementType === 'restock' ? 'Supplier delivery or stock count' : 'Workshop use or correction'}
-            style={styles.multiline}
-            textAlignVertical="top"
-            value={description}
-          />
-
-          {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-
-          <View style={styles.actions}>
+      <SheetBody
+        error={error}
+        actions={
+          <>
             <ActionButton disabled={saving || !item} onPress={() => void save()}>
               {saving ? 'Recording…' : `Record ${title}`}
             </ActionButton>
             <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">
               Cancel
             </ActionButton>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </>
+        }
+      >
+        <Notice label={item?.name ?? 'Loading item…'}>
+          <Text selectable style={[text.subhead, styles.stock]}>
+            Current stock: {item?.currentStock ?? '—'} {item?.unitLabel ?? ''}
+          </Text>
+          {!item?.active && item ? (
+            <Text selectable style={text.meta}>
+              This item is inactive. Corrective Restock and Consumption remain allowed.
+            </Text>
+          ) : null}
+        </Notice>
+
+        <FormField
+          keyboardType="number-pad"
+          label={movementType === 'restock' ? 'Quantity to add' : 'Quantity to consume'}
+          hint={movementType === 'restock' ? 'Enter the number of units being added to stock.' : 'Enter the number of units being consumed.'}
+          onChangeText={setQuantity}
+          placeholder="Enter a whole number"
+          value={quantity}
+        />
+        <FormField
+          label="Description"
+          multiline
+          onChangeText={setDescription}
+          placeholder={movementType === 'restock' ? 'Supplier delivery or stock count' : 'Workshop use or correction'}
+          style={styles.multiline}
+          textAlignVertical="top"
+          value={description}
+        />
+      </SheetBody>
     </>
   );
 }
@@ -133,21 +128,6 @@ function parsePositiveWholeNumber(value: string): number {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  content: { gap: 18, padding: 18, paddingBottom: 44 },
-  summary: {
-    gap: 5,
-    padding: 17,
-    backgroundColor: colors.successTint,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  consumptionSummary: { backgroundColor: colors.warningTint },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  itemName: { color: colors.label, fontSize: 20, fontWeight: '600' },
-  available: { color: colors.secondaryLabel, fontSize: 15, fontVariant: ['tabular-nums'] },
-  inactiveNote: { color: colors.warning, fontSize: 13, lineHeight: 17, fontWeight: '600' },
+  stock: { fontVariant: ['tabular-nums'] },
   multiline: { minHeight: 96 },
-  actions: { gap: 10, paddingTop: 4 },
-  errorText: { color: colors.error, fontSize: 15, lineHeight: 20, fontWeight: '600' },
 });

@@ -1,13 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody } from '@/components/sheet-body';
 import { parseCurrencyToCentavos } from '@/domain/money';
 import { createService } from '@/features/services/service-repository';
-import { colors } from '@/theme/colors';
 
 export default function NewServiceScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
@@ -37,62 +38,37 @@ export default function NewServiceScreen() {
   }, [db, description, name, rate, returnTo]);
 
   return (
-    <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.intro}>
-          <Text selectable style={styles.eyebrow}>SERVICE CATALOG</Text>
-          <Text selectable style={styles.introText}>
-            Services use quantity one. The rate can still be customized on a future draft.
-          </Text>
-        </View>
-        <FormField
-          autoCapitalize="words"
-          label="Service name"
-          onChangeText={setName}
-          placeholder="Labor / service fee"
-          value={name}
-        />
-        <FormField
-          keyboardType="decimal-pad"
-          label="Default rate"
-          onChangeText={setRate}
-          placeholder="0.00"
-          value={rate}
-        />
-        <FormField
-          label="Description (optional)"
-          multiline
-          onChangeText={setDescription}
-          placeholder="What this service covers"
-          style={styles.multiline}
-          textAlignVertical="top"
-          value={description}
-        />
-        {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-        <View style={styles.actions}>
+    <SheetBody
+      error={error}
+      actions={
+        <>
           <ActionButton disabled={saving} onPress={() => void save()}>
             {saving ? 'Saving…' : 'Save service'}
           </ActionButton>
           <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">
             Cancel
           </ActionButton>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </>
+      }
+    >
+      <Notice label="Service catalog">
+        Services use quantity one. The rate can still be customized on a future draft.
+      </Notice>
+      <FormField autoCapitalize="words" label="Service name" onChangeText={setName} placeholder="Labor / service fee" value={name} />
+      <FormField keyboardType="decimal-pad" label="Default rate" onChangeText={setRate} placeholder="0.00" value={rate} />
+      <FormField
+        label="Description (optional)"
+        multiline
+        onChangeText={setDescription}
+        placeholder="What this service covers"
+        style={styles.multiline}
+        textAlignVertical="top"
+        value={description}
+      />
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  content: { gap: 18, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
   multiline: { minHeight: 104 },
-  actions: { gap: 10, paddingTop: 4 },
-  errorText: { color: colors.error, fontSize: 15, lineHeight: 20, fontWeight: '600' },
 });

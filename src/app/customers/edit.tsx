@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
@@ -10,7 +10,8 @@ import {
   getCustomerDetail,
   updateCustomer,
 } from '@/features/customers/customer-repository';
-import { colors } from '@/theme/colors';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 
 export default function EditCustomerScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
@@ -57,36 +58,62 @@ export default function EditCustomerScreen() {
   }, [address, contactNumber, customerId, db, email, name]);
 
   return (
-    <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.intro}>
-          <Text selectable style={styles.eyebrow}>EDIT CUSTOMER</Text>
-          <Text selectable style={styles.introText}>
-            Changes apply to new documents. Finalized documents keep the details they were issued with.
-          </Text>
-        </View>
-        <FormField autoCapitalize="words" label="Customer name" onChangeText={(value) => { setName(value); setDuplicateName(null); }} placeholder="Customer or business name" value={name} />
-        <FormField autoCapitalize="words" label="Address (optional)" multiline onChangeText={setAddress} placeholder="Street, barangay, city or municipality" style={styles.multiline} textAlignVertical="top" value={address} />
-        <FormField keyboardType="phone-pad" label="Contact number (optional)" onChangeText={setContactNumber} placeholder="09xx xxx xxxx" value={contactNumber} />
-        <FormField autoCapitalize="none" autoCorrect={false} keyboardType="email-address" label="Email (optional)" onChangeText={setEmail} placeholder="customer@example.com" value={email} />
-        {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-        <View style={styles.actions}>
-          {duplicateName ? <ActionButton disabled={saving} onPress={() => void save(true)} variant="danger">Save duplicate name anyway</ActionButton> : null}
+    <SheetBody
+      error={error}
+      actions={
+        <>
           <ActionButton disabled={saving || !loaded} onPress={() => void save(false)}>{saving ? 'Saving…' : 'Save changes'}</ActionButton>
+          {duplicateName ? (
+            <ActionButton disabled={saving} onPress={() => void save(true)} variant="danger">Save duplicate name anyway</ActionButton>
+          ) : null}
           <ActionButton disabled={saving} onPress={() => router.back()} variant="secondary">Cancel</ActionButton>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </>
+      }
+    >
+      <Notice label="Edit customer">
+        Changes apply to new documents. Finalized documents keep the details they were issued with.
+      </Notice>
+      <SheetSection title="Details">
+        <FormField
+          autoCapitalize="words"
+          label="Customer name"
+          onChangeText={(value) => { setName(value); setDuplicateName(null); }}
+          placeholder="Customer or business name"
+          value={name}
+        />
+        <FormField
+          autoCapitalize="words"
+          label="Address (optional)"
+          multiline
+          onChangeText={setAddress}
+          placeholder="Street, barangay, city or municipality"
+          style={styles.multiline}
+          textAlignVertical="top"
+          value={address}
+        />
+      </SheetSection>
+      <SheetSection title="Contact">
+        <FormField
+          keyboardType="phone-pad"
+          label="Contact number (optional)"
+          onChangeText={setContactNumber}
+          placeholder="09xx xxx xxxx"
+          value={contactNumber}
+        />
+        <FormField
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          label="Email (optional)"
+          onChangeText={setEmail}
+          placeholder="customer@example.com"
+          value={email}
+        />
+      </SheetSection>
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  content: { gap: 18, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
   multiline: { minHeight: 84 },
-  actions: { gap: 10, paddingTop: 4 },
-  errorText: { color: colors.error, fontSize: 15, lineHeight: 20, fontWeight: '600' },
 });
