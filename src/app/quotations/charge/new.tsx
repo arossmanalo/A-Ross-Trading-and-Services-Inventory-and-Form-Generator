@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { ChoiceChips } from '@/components/choice-chips';
 import { FormField } from '@/components/form-field';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import { ItemPicker } from '@/features/inventory/item-picker';
@@ -13,7 +14,6 @@ import { addQuotationItemLine, addQuotationServiceLine } from '@/features/quotat
 import { ServicePicker } from '@/features/services/service-picker';
 import { listServices } from '@/features/services/service-repository';
 import type { ServiceCatalogEntry } from '@/features/services/service-types';
-import { colors } from '@/theme/colors';
 
 type Mode = 'item' | 'service';
 
@@ -79,60 +79,61 @@ export default function NewQuotationChargeScreen() {
   }, [db, itemId, mode, price, quantity, quotationId, reason, service]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text selectable style={styles.eyebrow}>ADD TO QUOTATION</Text>
-      <View style={styles.tabs}>
-        {(['item', 'service'] as const).map((value) => (
-          <Pressable key={value} accessibilityRole="button" onPress={() => switchMode(value)} style={[styles.tab, mode === value ? styles.activeTab : null]}>
-            <Text style={[styles.tabText, mode === value ? styles.activeTabText : null]}>{value === 'item' ? 'Inventory item' : 'Service'}</Text>
-          </Pressable>
-        ))}
-      </View>
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving || (mode === 'item' ? !itemId : !service)} onPress={() => void save()}>
+            {saving ? 'Adding…' : 'Add to quotation'}
+          </ActionButton>
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <ChoiceChips
+        label="Add"
+        options={[{ value: 'item', label: 'Inventory item' }, { value: 'service', label: 'Service' }]}
+        value={mode}
+        onChange={switchMode}
+      />
 
       {mode === 'item' ? (
         <>
           <ItemPicker items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
           {selectedItem ? (
-            <View style={styles.editor}>
-              <Text selectable style={styles.selectedTitle}>{selectedItem.name}</Text>
-              <Text selectable style={styles.help}>List price {formatCentavos(selectedItem.baseSellingPriceCentavos)} per {selectedItem.unitLabel}. A customer-specific price is used automatically.</Text>
+            <SheetSection
+              title={selectedItem.name}
+              hint={`List price ${formatCentavos(selectedItem.baseSellingPriceCentavos)} per ${selectedItem.unitLabel}. A customer-specific price is used automatically.`}
+            >
               <FormField keyboardType="number-pad" label="Quantity" onChangeText={setQuantity} value={quantity} />
-              <FormField keyboardType="decimal-pad" label="Quoted unit price (optional)" onChangeText={setPrice} placeholder="Leave blank to use the resolved price" value={price} />
+              <FormField
+                keyboardType="decimal-pad"
+                label="Quoted unit price (optional)"
+                onChangeText={setPrice}
+                placeholder="Leave blank to use the resolved price"
+                value={price}
+              />
               {price.trim() ? <FormField label="Reason for the different price" onChangeText={setReason} value={reason} /> : null}
-            </View>
+            </SheetSection>
           ) : null}
         </>
       ) : (
         <>
           <ServicePicker services={services} onSelect={setService} onCreated={async () => { await load(); }} />
           {service ? (
-            <View style={styles.editor}>
-              <Text selectable style={styles.selectedTitle}>{service.name}</Text>
-              <Text selectable style={styles.help}>Catalog rate {formatCentavos(service.baseRateCentavos)}.</Text>
-              <FormField keyboardType="decimal-pad" label="Quoted rate (optional)" onChangeText={setPrice} placeholder="Leave blank to use the catalog rate" value={price} />
+            <SheetSection title={service.name} hint={`Catalog rate ${formatCentavos(service.baseRateCentavos)}.`}>
+              <FormField
+                keyboardType="decimal-pad"
+                label="Quoted rate (optional)"
+                onChangeText={setPrice}
+                placeholder="Leave blank to use the catalog rate"
+                value={price}
+              />
               {price.trim() ? <FormField label="Reason for the different rate" onChangeText={setReason} value={reason} /> : null}
-            </View>
+            </SheetSection>
           ) : null}
         </>
       )}
-
-      {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-      <ActionButton disabled={saving || (mode === 'item' ? !itemId : !service)} onPress={() => void save()}>{saving ? 'Adding…' : 'Add to quotation'}</ActionButton>
-      <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
-    </ScrollView>
+    </SheetBody>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { gap: 14, padding: 18, paddingBottom: 44 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  tab: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, backgroundColor: colors.surface },
-  activeTab: { borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  tabText: { color: colors.secondaryLabel, fontSize: 13, fontWeight: '600' },
-  activeTabText: { color: colors.brandNavy },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  selectedTitle: { color: colors.brandNavy, fontSize: 17, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  error: { color: colors.error, fontSize: 13, fontWeight: '600' },
-});

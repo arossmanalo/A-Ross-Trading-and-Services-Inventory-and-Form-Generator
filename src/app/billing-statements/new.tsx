@@ -1,16 +1,19 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { DateField } from '@/components/date-field';
+import { Notice } from '@/components/notice';
+import { OptionRow } from '@/components/option-row';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { createBillingStatementDraft, listCsrsForBilling, listDeliveriesForBilling } from '@/features/billing-statements/billing-statement-repository';
 import { CustomerPicker } from '@/features/customers/customer-picker';
 import { listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerSummary } from '@/features/customers/customer-types';
-import { colors } from '@/theme/colors';
+import { spacing } from '@/theme/typography';
 
 type CsrChoice = {
   id: string;
@@ -93,78 +96,66 @@ export default function NewBillingStatementScreen() {
   }, [businessDate, csrId, customerId, db, deliveryId]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.intro}>
-        <Text selectable style={styles.eyebrow}>UNNUMBERED DRAFT</Text>
-        <Text selectable style={styles.introText}>
-          Link a CSR to include its available billable items and services. A linked CSR draft can be prepared now, but must be finalized before its Billing Statement.
-        </Text>
-      </View>
-      <Text selectable style={styles.title}>Customer</Text>
-      <CustomerPicker customers={customers} selectedId={customerId} onSelect={setCustomerId} onCreated={handleCustomerCreated} />
-      {customerId ? (
+    <SheetBody
+      error={error}
+      actions={
         <>
-          <Text selectable style={styles.title}>Optional CSR</Text>
-          <Choice label="No linked CSR" selected={!csrId} onPress={() => setCsrId('')} />
-          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.csrList} contentContainerStyle={styles.choices}>
+          <ActionButton disabled={saving || !customerId} onPress={() => void create()}>
+            {saving ? 'Creating…' : 'Create draft'}
+          </ActionButton>
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice label="Unnumbered draft">
+        Link a CSR to include its available billable items and services. A linked CSR draft can be prepared now, but
+        must be finalized before its Billing Statement.
+      </Notice>
+      <SheetSection title="Customer">
+        <CustomerPicker customers={customers} selectedId={customerId} onSelect={setCustomerId} onCreated={handleCustomerCreated} />
+      </SheetSection>
+      {customerId ? (
+        <SheetSection title="Link a CSR (optional)">
+          <OptionRow label="No linked CSR" selected={!csrId} onPress={() => setCsrId('')} />
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.list} contentContainerStyle={styles.choices}>
             {csrs.map((csr) => (
-              <Choice
+              <OptionRow
                 key={csr.id}
-                label={csr.documentState === 'draft'
-                  ? `Draft CSR · ${csr.businessDate} · ${csr.availableLineCount} item/service charge(s) will be included`
-                  : `${csr.csrNumber} · ${csr.businessDate} · ${csr.availableLineCount} unbilled item/service charge(s) will be included`}
+                label={csr.documentState === 'draft' ? `Draft CSR · ${csr.businessDate}` : `${csr.csrNumber} · ${csr.businessDate}`}
+                detail={csr.documentState === 'draft'
+                  ? `${csr.availableLineCount} item/service charge(s) will be included`
+                  : `${csr.availableLineCount} unbilled item/service charge(s) will be included`}
                 selected={csr.id === csrId}
                 onPress={() => { setCsrId(csr.id); setDeliveryId(''); }}
               />
             ))}
           </ScrollView>
-          {deliveries.length ? (
-            <>
-              <Text selectable style={styles.title}>Or a delivery</Text>
-              <Text selectable style={styles.help}>A statement bills a CSR or a delivery, not both. Delivered items are billed as delivered and are not deducted from stock again.</Text>
-              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.csrList} contentContainerStyle={styles.choices}>
-                {deliveries.map((delivery) => (
-                  <Choice
-                    key={delivery.id}
-                    label={`${delivery.documentState === 'draft' ? 'Draft delivery' : delivery.dfNumber} · ${delivery.businessDate} · ${delivery.lineCount} item(s) will be billed`}
-                    selected={delivery.id === deliveryId}
-                    onPress={() => { setDeliveryId(delivery.id === deliveryId ? '' : delivery.id); setCsrId(''); }}
-                  />
-                ))}
-              </ScrollView>
-            </>
-          ) : null}
-        </>
+        </SheetSection>
+      ) : null}
+      {customerId && deliveries.length ? (
+        <SheetSection
+          title="Or a delivery"
+          hint="A statement bills a CSR or a delivery, not both. Delivered items are billed as delivered and are not deducted from stock again."
+        >
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.list} contentContainerStyle={styles.choices}>
+            {deliveries.map((delivery) => (
+              <OptionRow
+                key={delivery.id}
+                label={`${delivery.documentState === 'draft' ? 'Draft delivery' : delivery.dfNumber} · ${delivery.businessDate}`}
+                detail={`${delivery.lineCount} item(s) will be billed`}
+                selected={delivery.id === deliveryId}
+                onPress={() => { setDeliveryId(delivery.id === deliveryId ? '' : delivery.id); setCsrId(''); }}
+              />
+            ))}
+          </ScrollView>
+        </SheetSection>
       ) : null}
       <DateField label="Business date" value={businessDate} onChange={setBusinessDate} />
-      {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-      <ActionButton disabled={saving || !customerId} onPress={() => void create()}>
-        {saving ? 'Creating…' : 'Create draft'}
-      </ActionButton>
-    </ScrollView>
-  );
-}
-
-function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.choice, selected && styles.selected]}>
-      <Text selectable style={[styles.choiceText, selected && styles.selectedText]}>{label}</Text>
-    </Pressable>
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 16, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
-  title: { color: colors.label, fontSize: 17, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  csrList: { maxHeight: 260 },
-  choices: { gap: 8 },
-  choice: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 15, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.surface },
-  selected: { borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  choiceText: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  selectedText: { color: colors.brandNavy },
-  error: { color: colors.error, fontSize: 13, fontWeight: '600' },
+  list: { maxHeight: 260 },
+  choices: { gap: spacing.sm },
 });

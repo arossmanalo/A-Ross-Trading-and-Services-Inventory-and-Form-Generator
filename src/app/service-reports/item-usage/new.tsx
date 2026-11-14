@@ -1,15 +1,16 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
+import { ToggleRow } from '@/components/toggle-row';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import { ItemPicker } from '@/features/inventory/item-picker';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import { addReportItemUsage } from '@/features/service-reports/service-report-repository';
-import { colors } from '@/theme/colors';
 
 export default function NewReportItemUsageScreen() {
   const { reportId } = useLocalSearchParams<{ reportId: string }>();
@@ -69,39 +70,51 @@ export default function NewReportItemUsageScreen() {
   }, [billable, controlNumber, db, quantity, reportId, selectedItemId]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text selectable style={styles.eyebrow}>ITEM USED</Text>
-      <Text selectable style={styles.help}>Draft selection does not deduct stock. Availability is checked again at finalization.</Text>
-
-      <ItemPicker items={items} selectedId={selectedItemId} onSelect={selectItem} onCreated={handleItemCreated} />
-
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          {selectedItemId ? (
+            <ActionButton disabled={saving} onPress={() => void save()}>{saving ? 'Adding…' : 'Add item usage'}</ActionButton>
+          ) : null}
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice label="Item used">
+        Draft selection does not deduct stock. Availability is checked again at finalization.
+      </Notice>
+      <SheetSection title="Item">
+        <ItemPicker items={items} selectedId={selectedItemId} onSelect={selectItem} onCreated={handleItemCreated} />
+      </SheetSection>
       {selectedItemId ? (
-        <View style={styles.editor}>
-          <FormField keyboardType="number-pad" label="Quantity used" hint="Enter the number of units used for this CSR." onChangeText={setQuantity} placeholder="Enter a whole number" value={quantity} />
-          <FormField autoCapitalize="characters" autoCorrect={false} label="Control number (optional)" hint="Leave blank if the item has no control number. You can search CSRs by it later." maxLength={100} onChangeText={setControlNumber} placeholder="e.g. CN-000123" value={controlNumber} />
-          <View style={styles.switchRow}>
-            <View style={styles.switchCopy}>
-              <Text selectable style={styles.switchTitle}>Billable to customer</Text>
-              <Text selectable style={styles.itemMeta}>Non-billable usage still deducts inventory.</Text>
-            </View>
-            <Switch accessibilityLabel="Billable to customer" onValueChange={setBillable} value={billable} />
-          </View>
-          <ActionButton disabled={saving} onPress={() => void save()}>{saving ? 'Adding…' : 'Add item usage'}</ActionButton>
-        </View>
+        <SheetSection title="Usage">
+          <FormField
+            keyboardType="number-pad"
+            label="Quantity used"
+            hint="Enter the number of units used for this CSR."
+            onChangeText={setQuantity}
+            placeholder="Enter a whole number"
+            value={quantity}
+          />
+          <FormField
+            autoCapitalize="characters"
+            autoCorrect={false}
+            label="Control number (optional)"
+            hint="Leave blank if the item has no control number. You can search CSRs by it later."
+            maxLength={100}
+            onChangeText={setControlNumber}
+            placeholder="e.g. CN-000123"
+            value={controlNumber}
+          />
+          <ToggleRow
+            title="Billable to customer"
+            detail="Non-billable usage still deducts inventory."
+            value={billable}
+            onValueChange={setBillable}
+          />
+        </SheetSection>
       ) : null}
-      {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-    </ScrollView>
+    </SheetBody>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { gap: 14, padding: 18, paddingBottom: 44 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  switchRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  switchCopy: { flex: 1, gap: 4 },
-  switchTitle: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  itemMeta: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 17 },
-  errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-});

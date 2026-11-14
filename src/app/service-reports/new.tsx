@@ -1,16 +1,20 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { DateField } from '@/components/date-field';
+import { Notice } from '@/components/notice';
+import { OptionRow } from '@/components/option-row';
+import { Fact } from '@/components/record-layout';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { CustomerPicker } from '@/features/customers/customer-picker';
 import { getCustomerDetail, listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerEquipment, CustomerSummary } from '@/features/customers/customer-types';
 import { createServiceReportDraft } from '@/features/service-reports/service-report-repository';
-import { colors } from '@/theme/colors';
+import { spacing, text } from '@/theme/typography';
 
 export default function NewServiceReportScreen() {
   const {
@@ -104,96 +108,79 @@ export default function NewServiceReportScreen() {
   const followUpCustomer = customers.find((customer) => customer.id === customerId);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.intro}>
-        <Text selectable style={styles.eyebrow}>{followsCsrId ? 'FOLLOW-UP VISIT' : 'UNNUMBERED DRAFT'}</Text>
-        <Text selectable style={styles.introText}>Choose one registered customer and the machine or machines serviced during this visit.</Text>
-      </View>
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving || !customerId || machineIds.length === 0} onPress={() => void createDraft()}>
+            {saving ? 'Creating…' : machineIds.length > 1 ? `Create draft for ${machineIds.length} machines` : 'Create draft'}
+          </ActionButton>
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice label={followsCsrId ? 'Follow-up visit' : 'Unnumbered draft'}>
+        Choose one registered customer and the machine or machines serviced during this visit.
+      </Notice>
 
-      <Text selectable style={styles.sectionTitle}>Customer</Text>
-      {followsCsrId ? (
-        <View style={styles.lockedCustomer}>
-          <Text selectable style={styles.choiceTextSelected}>{followUpCustomer?.name ?? 'Loading customer…'}</Text>
-          <Text selectable style={styles.help}>A follow-up stays with the original customer.</Text>
-        </View>
-      ) : (
-        <CustomerPicker
-          customers={customers}
-          selectedId={customerId}
-          onSelect={selectCustomer}
-          onCreated={handleCustomerCreated}
-        />
-      )}
+      <SheetSection title="Customer">
+        {followsCsrId ? (
+          <Fact label="A follow-up stays with the original customer.">
+            {followUpCustomer?.name ?? 'Loading customer…'}
+          </Fact>
+        ) : (
+          <CustomerPicker
+            customers={customers}
+            selectedId={customerId}
+            onSelect={selectCustomer}
+            onCreated={handleCustomerCreated}
+          />
+        )}
+      </SheetSection>
 
       {customerId ? (
-        <>
-          <Text selectable style={styles.sectionTitle}>Machines</Text>
-          <Text selectable style={styles.help}>
-            Tap every machine serviced on this visit. Each service is billed once per machine; item charges are not multiplied.
-          </Text>
+        <SheetSection
+          title="Machines"
+          hint="Tap every machine serviced on this visit. Each service is billed once per machine; item charges are not multiplied."
+        >
           <View style={styles.choices}>
             {equipment.map((entry) => {
               const selected = machineIds.includes(entry.id);
               const order = machineIds.indexOf(entry.id) + 1;
               return (
-                <Choice
+                <OptionRow
                   key={entry.id}
+                  kind="checkbox"
                   label={`${selected ? `${order}. ` : ''}${[entry.machineType, entry.model, entry.nicknameOrLocation].filter(Boolean).join(' · ')}`}
                   selected={selected}
                   onPress={() => toggleMachine(entry.id)}
                 />
               );
             })}
-            {!equipment.length ? <Text selectable style={styles.help}>This customer has no active equipment yet.</Text> : null}
-            <ActionButton variant="secondary" onPress={() => router.push({ pathname: '/customers/equipment/new', params: { customerId } })}>
-              {equipment.length ? 'Add another machine for this customer' : 'Add equipment for this customer'}
-            </ActionButton>
+            {!equipment.length ? <Text selectable style={text.meta}>This customer has no active equipment yet.</Text> : null}
           </View>
           {machineIds.length > 1 ? (
-            <Text selectable style={styles.multiNotice}>
+            <Text selectable style={text.bodyStrong}>
               {machineIds.length} machines selected — services on this CSR will be billed × {machineIds.length}.
             </Text>
           ) : null}
-        </>
+          <ActionButton
+            compact
+            variant="secondary"
+            style={styles.addMachine}
+            onPress={() => router.push({ pathname: '/customers/equipment/new', params: { customerId } })}
+          >
+            {equipment.length ? 'Add another machine for this customer' : 'Add equipment for this customer'}
+          </ActionButton>
+        </SheetSection>
       ) : null}
 
       <DateField label="Business date" value={businessDate} onChange={setBusinessDate} />
-      {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
-      <ActionButton disabled={saving || !customerId || machineIds.length === 0} onPress={() => void createDraft()}>
-        {saving ? 'Creating…' : machineIds.length > 1 ? `Create draft for ${machineIds.length} machines` : 'Create draft'}
-      </ActionButton>
-    </ScrollView>
-  );
-}
-
-function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      onPress={onPress}
-      style={[styles.choice, selected ? styles.choiceSelected : null]}
-    >
-      <Text selectable style={[styles.choiceText, selected ? styles.choiceTextSelected : null]}>
-        {selected ? '✓ ' : ''}{label}
-      </Text>
-    </Pressable>
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 16, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
-  sectionTitle: { color: colors.label, fontSize: 17, fontWeight: '600' },
-  choices: { gap: 8 },
-  choice: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 15, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.surface },
-  choiceSelected: { borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  choiceText: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  choiceTextSelected: { color: colors.brandNavy, fontWeight: '600' },
-  lockedCustomer: { gap: 4, padding: 14, borderWidth: 1, borderColor: colors.brandBlue, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.accentTint },
-  multiNotice: { color: colors.brandNavy, fontSize: 13, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  errorText: { color: colors.error, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  choices: { gap: spacing.sm },
+  addMachine: { alignSelf: 'flex-start' },
 });

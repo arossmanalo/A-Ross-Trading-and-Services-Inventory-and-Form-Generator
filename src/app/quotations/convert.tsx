@@ -1,16 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { Notice } from '@/components/notice';
+import { OptionRow } from '@/components/option-row';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { formatCentavos } from '@/domain/money';
 import { getCustomerDetail } from '@/features/customers/customer-repository';
 import type { CustomerEquipment } from '@/features/customers/customer-types';
 import { convertQuotation } from '@/features/quotations/quotation-conversion';
 import { getQuotation } from '@/features/quotations/quotation-repository';
 import type { QuotationDetail } from '@/features/quotations/quotation-types';
-import { colors } from '@/theme/colors';
+import { text } from '@/theme/typography';
 
 type Target = 'repair' | 'delivery';
 
@@ -60,62 +63,60 @@ export default function ConvertQuotationScreen() {
   const ready = target === 'delivery' ? hasItems : target === 'repair' ? equipmentIds.length > 0 : false;
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.intro}>
-        <Text selectable style={styles.eyebrow}>CONVERT {quotation?.qtNumber ?? 'QUOTATION'}</Text>
-        <Text selectable style={styles.introText}>
-          Is this quotation for a repair or a delivery? Either way a linked Billing Statement draft is created automatically with the quoted prices, and the quotation is marked converted.
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving || !ready} onPress={() => void convert()}>{saving ? 'Converting…' : 'Convert quotation'}</ActionButton>
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice
+        label={`Convert ${quotation?.qtNumber ?? 'quotation'}`}
+        amount={quotation ? formatCentavos(quotation.totalCentavos) : undefined}
+      >
+        <Text selectable style={text.body}>
+          {quotation ? `${quotation.customerName}. ` : ''}Is this quotation for a repair or a delivery? Either way a
+          linked Billing Statement draft is created automatically with the quoted prices, and the quotation is marked
+          converted.
         </Text>
-        {quotation ? <Text selectable style={styles.introText}>{quotation.customerName} · {formatCentavos(quotation.totalCentavos)}</Text> : null}
-      </View>
+      </Notice>
 
-      <Choice title="For repair" body="Creates a CSR draft for the machines you pick, with the quoted items and services, and its Billing Statement." selected={target === 'repair'} onPress={() => setTarget('repair')} />
-      <Choice title="For delivery" body={hasItems ? 'Creates a Delivery form with the quoted items, and its Billing Statement. Quoted services go on the statement.' : 'A delivery needs at least one inventory item, and this quotation lists only services.'} selected={target === 'delivery'} disabled={!hasItems} onPress={() => setTarget('delivery')} />
+      <SheetSection title="Convert to">
+        <OptionRow
+          label="For repair"
+          detail="Creates a CSR draft for the machines you pick, with the quoted items and services, and its Billing Statement."
+          selected={target === 'repair'}
+          onPress={() => setTarget('repair')}
+        />
+        <OptionRow
+          label="For delivery"
+          detail={hasItems
+            ? 'Creates a Delivery form with the quoted items, and its Billing Statement. Quoted services go on the statement.'
+            : 'A delivery needs at least one inventory item, and this quotation lists only services.'}
+          selected={target === 'delivery'}
+          disabled={!hasItems}
+          onPress={() => setTarget('delivery')}
+        />
+      </SheetSection>
 
       {target === 'repair' ? (
-        <View style={styles.machines}>
-          <Text selectable style={styles.sectionTitle}>Machines for the repair</Text>
-          <Text selectable style={styles.help}>Quoted services are priced on the first machine you pick.</Text>
+        <SheetSection title="Machines for the repair" hint="Quoted services are priced on the first machine you pick.">
           {machines.length ? machines.map((machine) => (
-            <Choice
+            <OptionRow
               key={machine.id}
-              title={[machine.machineType, machine.model, machine.nicknameOrLocation].filter(Boolean).join(' · ')}
-              body={machine.serialNumber ? `Serial ${machine.serialNumber}` : 'No serial number'}
+              kind="checkbox"
+              label={[machine.machineType, machine.model, machine.nicknameOrLocation].filter(Boolean).join(' · ')}
+              detail={machine.serialNumber ? `Serial ${machine.serialNumber}` : 'No serial number'}
               selected={equipmentIds.includes(machine.id)}
               onPress={() => toggleMachine(machine.id)}
             />
-          )) : <Text selectable style={styles.help}>This customer has no active machines. Add one on the customer screen first.</Text>}
-        </View>
+          )) : (
+            <Text selectable style={text.meta}>This customer has no active machines. Add one on the customer screen first.</Text>
+          )}
+        </SheetSection>
       ) : null}
-
-      {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-      <ActionButton disabled={saving || !ready} onPress={() => void convert()}>{saving ? 'Converting…' : 'Convert quotation'}</ActionButton>
-      <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
-    </ScrollView>
+    </SheetBody>
   );
 }
-
-function Choice({ title, body, selected, disabled = false, onPress }: { title: string; body: string; selected: boolean; disabled?: boolean; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected, disabled }} disabled={disabled} onPress={onPress} style={[styles.choice, selected ? styles.selected : null, disabled ? styles.disabled : null]}>
-      <Text selectable style={[styles.choiceTitle, selected ? styles.selectedText : null]}>{title}</Text>
-      <Text selectable style={styles.help}>{body}</Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  content: { gap: 14, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
-  choice: { gap: 4, padding: 15, borderWidth: 1, borderColor: colors.separator, borderRadius: 10, borderCurve: 'continuous', backgroundColor: colors.surface },
-  selected: { borderColor: colors.brandBlue, backgroundColor: colors.accentTint },
-  disabled: { opacity: 0.5 },
-  choiceTitle: { color: colors.label, fontSize: 15, fontWeight: '600' },
-  selectedText: { color: colors.brandNavy },
-  machines: { gap: 10 },
-  sectionTitle: { color: colors.label, fontSize: 17, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  error: { color: colors.error, fontSize: 13, fontWeight: '600' },
-});

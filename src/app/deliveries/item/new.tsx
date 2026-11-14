@@ -1,16 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
 import { addDeliveryItemLine } from '@/features/deliveries/delivery-repository';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import { ItemPicker } from '@/features/inventory/item-picker';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import { colors } from '@/theme/colors';
+import { fontSize, radius, spacing } from '@/theme/typography';
 
 export default function NewDeliveryItemScreen() {
   const { deliveryId } = useLocalSearchParams<{ deliveryId: string }>();
@@ -58,32 +60,52 @@ export default function NewDeliveryItemScreen() {
   }, [db, deliveryId, itemId, price, quantity, reason]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text selectable style={styles.eyebrow}>ADD AN INVENTORY ITEM</Text>
-      <ItemPicker items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving || !itemId} onPress={() => void save()}>{saving ? 'Adding…' : 'Add to delivery'}</ActionButton>
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <SheetSection title="Item">
+        <ItemPicker items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
+      </SheetSection>
       {selected ? (
-        <View style={styles.editor}>
-          <Text selectable style={styles.selectedTitle}>{selected.name}</Text>
-          <Text selectable style={styles.help}>{selected.currentStock} {selected.unitLabel} in stock · list price {formatCentavos(selected.baseSellingPriceCentavos)}. A customer-specific price is used automatically.</Text>
+        <SheetSection
+          title={selected.name}
+          hint={`${selected.currentStock} ${selected.unitLabel} in stock · list price ${formatCentavos(selected.baseSellingPriceCentavos)}. A customer-specific price is used automatically.`}
+        >
           <FormField keyboardType="number-pad" label="Quantity to deliver" onChangeText={setQuantity} value={quantity} />
-          {short ? <Text selectable style={styles.warning}>Only {selected.currentStock} in stock. You can keep this on the draft, but the delivery cannot be finalized until stock is enough.</Text> : null}
-          <FormField keyboardType="decimal-pad" label="Unit price (optional)" onChangeText={setPrice} placeholder="Leave blank to use the resolved price" value={price} />
+          {short ? (
+            <Text selectable style={styles.warning}>
+              Only {selected.currentStock} in stock. You can keep this on the draft, but the delivery cannot be finalized
+              until stock is enough.
+            </Text>
+          ) : null}
+          <FormField
+            keyboardType="decimal-pad"
+            label="Unit price (optional)"
+            onChangeText={setPrice}
+            placeholder="Leave blank to use the resolved price"
+            value={price}
+          />
           {price.trim() ? <FormField label="Reason for the different price" onChangeText={setReason} value={reason} /> : null}
-        </View>
+        </SheetSection>
       ) : null}
-      {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-      <ActionButton disabled={saving || !itemId} onPress={() => void save()}>{saving ? 'Adding…' : 'Add to delivery'}</ActionButton>
-      <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
-    </ScrollView>
+    </SheetBody>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 14, padding: 18, paddingBottom: 44 },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1.2 },
-  editor: { gap: 12, padding: 15, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  selectedTitle: { color: colors.brandNavy, fontSize: 17, fontWeight: '600' },
-  help: { color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 },
-  warning: { color: colors.warning, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  error: { color: colors.error, fontSize: 13, fontWeight: '600' },
+  warning: {
+    color: colors.warning,
+    fontSize: fontSize.meta,
+    lineHeight: 18,
+    fontWeight: '600',
+    padding: spacing.md,
+    backgroundColor: colors.warningTint,
+    borderRadius: radius.control,
+  },
 });

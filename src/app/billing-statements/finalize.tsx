@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { ChoiceChips } from '@/components/choice-chips';
@@ -9,6 +9,7 @@ import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
 import { Fact } from '@/components/record-layout';
 import { Notice } from '@/components/notice';
+import { OptionRow } from '@/components/option-row';
 import { SheetBody, SheetMessage, SheetSection } from '@/components/sheet-body';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
@@ -17,8 +18,7 @@ import { BillingDraftPriceChangedError, getBillingStatement } from '@/features/b
 import type { BillingStatementDetail } from '@/features/billing-statements/billing-statement-types';
 import { PAYMENT_METHOD_OPTIONS } from '@/features/payments/payment-methods';
 import type { InitialPaymentSelection, PaymentMethod } from '@/features/payments/payment-types';
-import { colors } from '@/theme/colors';
-import { radius, spacing, text } from '@/theme/typography';
+import { spacing, text } from '@/theme/typography';
 
 type Choice = InitialPaymentSelection['choice'];
 
@@ -110,19 +110,19 @@ export default function FinalizeBillingStatementScreen() {
       </Notice>
       <SheetSection title="Payment choice">
         <View accessibilityRole="radiogroup" style={styles.choices}>
-          <ChoiceButton
+          <OptionRow
             label="Pay Later"
             detail="No initial payment"
             selected={choice === 'pay_later'}
             onPress={() => setChoice('pay_later')}
           />
-          <ChoiceButton
+          <OptionRow
             label="Paid in Full"
             detail={formatCentavos(statement.discountedTotalCentavos)}
             selected={choice === 'paid_in_full'}
             onPress={() => setChoice('paid_in_full')}
           />
-          <ChoiceButton
+          <OptionRow
             label="Down Payment"
             detail="One deposit, then the full balance"
             selected={choice === 'down_payment'}
@@ -164,58 +164,7 @@ export default function FinalizeBillingStatementScreen() {
   );
 }
 
-type ChoiceButtonProps = { label: string; detail: string; selected: boolean; onPress: () => void };
-
-function ChoiceButton({ label, detail, selected, onPress }: ChoiceButtonProps) {
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected, checked: selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.choice,
-        selected ? styles.choiceSelected : null,
-        pressed && !selected ? styles.choicePressed : null,
-      ]}
-    >
-      <View style={[styles.radio, selected ? styles.radioSelected : null]}>
-        {selected ? <View style={styles.radioDot} /> : null}
-      </View>
-      <View style={styles.choiceCopy}>
-        <Text style={text.bodyStrong}>{label}</Text>
-        <Text style={text.meta}>{detail}</Text>
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   choices: { gap: spacing.sm },
-  choice: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: radius.control,
-    backgroundColor: colors.surface,
-  },
-  choiceSelected: { borderColor: colors.primary, backgroundColor: colors.accentTint },
-  choicePressed: { backgroundColor: colors.neutralTint },
-  choiceCopy: { flex: 1, gap: 2 },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.inputBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: { borderColor: colors.primary },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
   amount: { fontVariant: ['tabular-nums'] },
 });

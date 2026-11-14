@@ -1,17 +1,17 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
+import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { CustomerPicker } from '@/features/customers/customer-picker';
 import { listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerSummary } from '@/features/customers/customer-types';
 import { createDeliveryDraft } from '@/features/deliveries/delivery-repository';
-import { colors } from '@/theme/colors';
 
 export default function NewDeliveryScreen() {
   const db = useSQLiteContext();
@@ -55,31 +55,41 @@ export default function NewDeliveryScreen() {
   }, [businessDate, customerId, db, deliveredBy, receivedBy]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.intro}>
-        <Text selectable style={styles.eyebrow}>UNNUMBERED DRAFT</Text>
-        <Text selectable style={styles.introText}>
-          Pick the inventory items to deliver next. The DF number is allocated and stock is deducted only when you finalize the delivery.
-        </Text>
-      </View>
-      <Text selectable style={styles.title}>Customer</Text>
-      <CustomerPicker customers={customers} selectedId={customerId} onSelect={setCustomerId} onCreated={handleCustomerCreated} />
-      <DateField label="Delivery date" value={businessDate} onChange={setBusinessDate} />
-      <FormField autoCapitalize="words" label="Delivered by (optional)" onChangeText={setDeliveredBy} placeholder="Driver or staff name" value={deliveredBy} />
-      <FormField autoCapitalize="words" label="Received by (optional)" onChangeText={setReceivedBy} placeholder="Name of the person receiving" value={receivedBy} />
-      {error ? <Text selectable style={styles.error}>{error}</Text> : null}
-      <ActionButton disabled={saving || !customerId} onPress={() => void create()}>
-        {saving ? 'Creating…' : 'Create draft'}
-      </ActionButton>
-    </ScrollView>
+    <SheetBody
+      error={error}
+      actions={
+        <>
+          <ActionButton disabled={saving || !customerId} onPress={() => void create()}>
+            {saving ? 'Creating…' : 'Create draft'}
+          </ActionButton>
+          <ActionButton disabled={saving} variant="secondary" onPress={() => router.back()}>Cancel</ActionButton>
+        </>
+      }
+    >
+      <Notice label="Unnumbered draft">
+        Pick the inventory items to deliver next. The DF number is allocated and stock is deducted only when you
+        finalize the delivery.
+      </Notice>
+      <SheetSection title="Customer">
+        <CustomerPicker customers={customers} selectedId={customerId} onSelect={setCustomerId} onCreated={handleCustomerCreated} />
+      </SheetSection>
+      <SheetSection title="Delivery">
+        <DateField label="Delivery date" value={businessDate} onChange={setBusinessDate} />
+        <FormField
+          autoCapitalize="words"
+          label="Delivered by (optional)"
+          onChangeText={setDeliveredBy}
+          placeholder="Driver or staff name"
+          value={deliveredBy}
+        />
+        <FormField
+          autoCapitalize="words"
+          label="Received by (optional)"
+          onChangeText={setReceivedBy}
+          placeholder="Name of the person receiving"
+          value={receivedBy}
+        />
+      </SheetSection>
+    </SheetBody>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { gap: 16, padding: 18, paddingBottom: 44 },
-  intro: { gap: 6, padding: 16, backgroundColor: colors.accentTint, borderRadius: 10, borderCurve: 'continuous' },
-  eyebrow: { color: colors.brandBlue, fontSize: 13, fontWeight: '600', letterSpacing: 1 },
-  introText: { color: colors.brandNavy, fontSize: 15, lineHeight: 20 },
-  title: { color: colors.label, fontSize: 17, fontWeight: '600' },
-  error: { color: colors.error, fontSize: 13, fontWeight: '600' },
-});
