@@ -2,10 +2,8 @@ import { createContext, useContext } from 'react';
 import { useWindowDimensions } from 'react-native';
 
 /**
- * The measured width of the app's root view. On Android the window size
- * reported to JavaScript can stay on the old orientation when the app starts
- * behind the lock screen or rotates while in the background; the root view's
- * own layout always matches what is on screen.
+ * The measured width of the app's root view, which follows rotation and
+ * Samsung's floating and split windows: the space the app really has.
  */
 export const AppWidthContext = createContext<number | null>(null);
 

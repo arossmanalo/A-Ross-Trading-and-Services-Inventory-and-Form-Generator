@@ -80,135 +80,147 @@ function useImmersiveMode() {
 }
 
 export default function RootLayout() {
-  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
-  const fallbackWidth = useAppWidth();
-  const width = measuredWidth ?? fallbackWidth;
   useImmersiveMode();
 
   return (
     <Suspense fallback={<LoadingDatabase />}>
       <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDatabase} useSuspense>
-        <AppWidthContext.Provider value={measuredWidth}>
-        <View style={styles.appShell} onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}>
-          <StatusBar hidden style="dark" />
-          {width >= RAIL_MIN_WIDTH ? <SideMenu compact={width < FULL_MENU_MIN_WIDTH} /> : null}
-          <View style={styles.stack}>
-          <Stack
-            screenOptions={{
-              contentStyle: {
-                // No fixed width: the native stack sizes itself, so the layout
-                // follows rotation instead of keeping the old orientation's width.
-                flex: 1,
-                backgroundColor: colors.background,
-              },
-              headerTintColor: colors.label,
-              headerTitleStyle: { fontSize: fontSize.section, fontWeight: '600', color: colors.label },
-              headerStyle: { backgroundColor: colors.surface },
-              headerShadowVisible: false,
-            }}
-            screenLayout={({ children, options, navigation }) => (
-              options.presentation === 'transparentModal' ? (
-                <SheetFrame title={typeof options.title === 'string' ? options.title : ''} onClose={() => navigation.goBack()}>
-                  {children}
-                </SheetFrame>
-              ) : children
-            )}
-          >
-          <Stack.Screen name="index" options={{ title: 'Overview', headerShown: false }} />
-          <Stack.Screen name="backup" options={{ title: 'Backup', ...PAGE }} />
-          <Stack.Screen name="search" options={{ title: 'Search records', ...PAGE }} />
-          <Stack.Screen name="reports/index" options={{ title: 'Reports', ...PAGE }} />
-          <Stack.Screen name="reports/stock" options={{ title: 'Reports', ...PAGE }} />
-          <Stack.Screen name="reports/movements" options={{ title: 'Reports', ...PAGE }} />
-          <Stack.Screen name="reports/audit" options={{ title: 'Reports', ...PAGE }} />
-          <Stack.Screen name="reports/collections" options={{ title: 'Reports', ...PAGE }} />
-          <Stack.Screen name="reports/sales" options={{ title: 'Reports', ...PAGE }} />
-          <Stack.Screen name="inventory/index" options={{ title: 'Inventory', ...SECTION }} />
-          <Stack.Screen
-            name="inventory/new"
-            options={{ title: 'New inventory item', ...SHEET }}
-          />
-          <Stack.Screen name="inventory/item/[item-id]/index" options={{ title: 'Inventory item' }} />
-          <Stack.Screen
-            name="inventory/item/[item-id]/movement"
-            options={{ title: 'Stock movement', ...SHEET }}
-          />
-          <Stack.Screen name="customers/index" options={{ title: 'Customers', ...SECTION }} />
-          <Stack.Screen
-            name="customers/new"
-            options={{ title: 'New customer', ...SHEET }}
-          />
-          <Stack.Screen
-            name="customers/edit"
-            options={{ title: 'Edit customer', ...SHEET }}
-          />
-          <Stack.Screen
-            name="customers/equipment/edit"
-            options={{ title: 'Edit equipment', ...SHEET }}
-          />
-          <Stack.Screen name="customers/[customer-id]" options={{ title: 'Customer' }} />
-          <Stack.Screen
-            name="customers/[customer-id]/pricing"
-            options={{ title: 'Customer pricing' }}
-          />
-          <Stack.Screen
-            name="customers/equipment/new"
-            options={{ title: 'New equipment', ...SHEET }}
-          />
-          <Stack.Screen
-            name="customers/member/new"
-            options={{ title: 'Add company member', ...SHEET }}
-          />
-          <Stack.Screen
-            name="customers/pricing/new"
-            options={{ title: 'Set customer price', ...SHEET }}
-          />
-          <Stack.Screen name="services/index" options={{ title: 'Services', ...SECTION }} />
-          <Stack.Screen
-            name="services/new"
-            options={{ title: 'New service', ...SHEET }}
-          />
-          <Stack.Screen name="services/[service-id]" options={{ title: 'Service' }} />
-          <Stack.Screen name="settings" options={{ title: 'Settings', ...PAGE }} />
-          <Stack.Screen name="service-reports/index" options={{ title: 'Service reports', ...SECTION }} />
-          <Stack.Screen name="service-reports/new" options={{ title: 'New CSR draft', ...SHEET }} />
-          <Stack.Screen name="service-reports/[report-id]" options={{ title: 'CSR' }} />
-          <Stack.Screen name="service-reports/preview" options={{ title: 'CSR PDF Preview' }} />
-          <Stack.Screen name="service-reports/item-usage/new" options={{ title: 'Add item usage', ...SHEET }} />
-          <Stack.Screen name="service-reports/machine-services" options={{ title: 'Services by machine' }} />
-          <Stack.Screen name="service-reports/void" options={{ title: 'Void CSR', ...SHEET }} />
-          <Stack.Screen name="quotations/index" options={{ title: 'Quotations', ...SECTION }} />
-          <Stack.Screen name="quotations/new" options={{ title: 'New quotation draft', ...SHEET }} />
-          <Stack.Screen name="quotations/[quotation-id]" options={{ title: 'Quotation' }} />
-          <Stack.Screen name="quotations/preview" options={{ title: 'Quotation Preview' }} />
-          <Stack.Screen name="quotations/charge/new" options={{ title: 'Add to quotation', ...SHEET }} />
-          <Stack.Screen name="quotations/convert" options={{ title: 'Convert quotation', ...SHEET }} />
-          <Stack.Screen name="quotations/void" options={{ title: 'Void quotation', ...SHEET }} />
-          <Stack.Screen name="deliveries/index" options={{ title: 'Deliveries', ...SECTION }} />
-          <Stack.Screen name="deliveries/new" options={{ title: 'New delivery draft', ...SHEET }} />
-          <Stack.Screen name="deliveries/[delivery-id]" options={{ title: 'Delivery Form' }} />
-          <Stack.Screen name="deliveries/preview" options={{ title: 'Delivery Form Preview' }} />
-          <Stack.Screen name="deliveries/item/new" options={{ title: 'Add item to delivery', ...SHEET }} />
-          <Stack.Screen name="deliveries/void" options={{ title: 'Void delivery', ...SHEET }} />
-          <Stack.Screen name="billing-statements/index" options={{ title: 'Billing statements', ...SECTION }} />
-          <Stack.Screen name="billing-statements/new" options={{ title: 'New statement draft', ...SHEET }} />
-          <Stack.Screen name="billing-statements/[statement-id]" options={{ title: 'Billing Statement' }} />
-          <Stack.Screen name="billing-statements/preview" options={{ title: 'Billing Statement Preview' }} />
-          <Stack.Screen name="billing-statements/charge/new" options={{ title: 'Add charge', ...SHEET }} />
-          <Stack.Screen name="billing-statements/void" options={{ title: 'Void statement', ...SHEET }} />
-          <Stack.Screen name="billing-statements/finalize" options={{ title: 'Finalize statement', ...SHEET }} />
-          <Stack.Screen name="payments/index" options={{ title: 'Payments', ...SECTION }} />
-          <Stack.Screen name="payments/new" options={{ title: 'Record payment', ...SHEET }} />
-          <Stack.Screen name="payments/[payment-id]" options={{ title: 'Payment Acknowledgment' }} />
-          <Stack.Screen name="payments/void" options={{ title: 'Void payment', ...SHEET }} />
-          <Stack.Screen name="signatures/manage" options={{ title: 'Document Signing' }} />
-          <Stack.Screen name="signatures/capture" options={{ title: 'Draw signature', presentation: 'modal' }} />
-          </Stack>
-          </View>
-        </View>
-        </AppWidthContext.Provider>
+        <AppShell />
       </SQLiteProvider>
     </Suspense>
+  );
+}
+
+/**
+ * The side menu beside the screen stack. It holds its own width state because
+ * SQLiteProvider is memoized without comparing its children: anything the
+ * root layout re-renders inside the provider never reaches the screen.
+ */
+function AppShell() {
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+  const fallbackWidth = useAppWidth();
+  const width = measuredWidth ?? fallbackWidth;
+
+  return (
+    <AppWidthContext.Provider value={measuredWidth}>
+    <View style={styles.appShell} onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}>
+      <StatusBar hidden style="dark" />
+      {width >= RAIL_MIN_WIDTH ? <SideMenu compact={width < FULL_MENU_MIN_WIDTH} /> : null}
+      <View style={styles.stack}>
+      <Stack
+        screenOptions={{
+          contentStyle: {
+            // No fixed width: the native stack sizes itself, so the layout
+            // follows rotation instead of keeping the old orientation's width.
+            flex: 1,
+            backgroundColor: colors.background,
+          },
+          headerTintColor: colors.label,
+          headerTitleStyle: { fontSize: fontSize.section, fontWeight: '600', color: colors.label },
+          headerStyle: { backgroundColor: colors.surface },
+          headerShadowVisible: false,
+        }}
+        screenLayout={({ children, options, navigation }) => (
+          options.presentation === 'transparentModal' ? (
+            <SheetFrame title={typeof options.title === 'string' ? options.title : ''} onClose={() => navigation.goBack()}>
+              {children}
+            </SheetFrame>
+          ) : children
+        )}
+      >
+      <Stack.Screen name="index" options={{ title: 'Overview', headerShown: false }} />
+      <Stack.Screen name="backup" options={{ title: 'Backup', ...PAGE }} />
+      <Stack.Screen name="search" options={{ title: 'Search records', ...PAGE }} />
+      <Stack.Screen name="reports/index" options={{ title: 'Reports', ...PAGE }} />
+      <Stack.Screen name="reports/stock" options={{ title: 'Reports', ...PAGE }} />
+      <Stack.Screen name="reports/movements" options={{ title: 'Reports', ...PAGE }} />
+      <Stack.Screen name="reports/audit" options={{ title: 'Reports', ...PAGE }} />
+      <Stack.Screen name="reports/collections" options={{ title: 'Reports', ...PAGE }} />
+      <Stack.Screen name="reports/sales" options={{ title: 'Reports', ...PAGE }} />
+      <Stack.Screen name="inventory/index" options={{ title: 'Inventory', ...SECTION }} />
+      <Stack.Screen
+        name="inventory/new"
+        options={{ title: 'New inventory item', ...SHEET }}
+      />
+      <Stack.Screen name="inventory/item/[item-id]/index" options={{ title: 'Inventory item' }} />
+      <Stack.Screen
+        name="inventory/item/[item-id]/movement"
+        options={{ title: 'Stock movement', ...SHEET }}
+      />
+      <Stack.Screen name="customers/index" options={{ title: 'Customers', ...SECTION }} />
+      <Stack.Screen
+        name="customers/new"
+        options={{ title: 'New customer', ...SHEET }}
+      />
+      <Stack.Screen
+        name="customers/edit"
+        options={{ title: 'Edit customer', ...SHEET }}
+      />
+      <Stack.Screen
+        name="customers/equipment/edit"
+        options={{ title: 'Edit equipment', ...SHEET }}
+      />
+      <Stack.Screen name="customers/[customer-id]" options={{ title: 'Customer' }} />
+      <Stack.Screen
+        name="customers/[customer-id]/pricing"
+        options={{ title: 'Customer pricing' }}
+      />
+      <Stack.Screen
+        name="customers/equipment/new"
+        options={{ title: 'New equipment', ...SHEET }}
+      />
+      <Stack.Screen
+        name="customers/member/new"
+        options={{ title: 'Add company member', ...SHEET }}
+      />
+      <Stack.Screen
+        name="customers/pricing/new"
+        options={{ title: 'Set customer price', ...SHEET }}
+      />
+      <Stack.Screen name="services/index" options={{ title: 'Services', ...SECTION }} />
+      <Stack.Screen
+        name="services/new"
+        options={{ title: 'New service', ...SHEET }}
+      />
+      <Stack.Screen name="services/[service-id]" options={{ title: 'Service' }} />
+      <Stack.Screen name="settings" options={{ title: 'Settings', ...PAGE }} />
+      <Stack.Screen name="service-reports/index" options={{ title: 'Service reports', ...SECTION }} />
+      <Stack.Screen name="service-reports/new" options={{ title: 'New CSR draft', ...SHEET }} />
+      <Stack.Screen name="service-reports/[report-id]" options={{ title: 'CSR' }} />
+      <Stack.Screen name="service-reports/preview" options={{ title: 'CSR PDF Preview' }} />
+      <Stack.Screen name="service-reports/item-usage/new" options={{ title: 'Add item usage', ...SHEET }} />
+      <Stack.Screen name="service-reports/machine-services" options={{ title: 'Services by machine' }} />
+      <Stack.Screen name="service-reports/void" options={{ title: 'Void CSR', ...SHEET }} />
+      <Stack.Screen name="quotations/index" options={{ title: 'Quotations', ...SECTION }} />
+      <Stack.Screen name="quotations/new" options={{ title: 'New quotation draft', ...SHEET }} />
+      <Stack.Screen name="quotations/[quotation-id]" options={{ title: 'Quotation' }} />
+      <Stack.Screen name="quotations/preview" options={{ title: 'Quotation Preview' }} />
+      <Stack.Screen name="quotations/charge/new" options={{ title: 'Add to quotation', ...SHEET }} />
+      <Stack.Screen name="quotations/convert" options={{ title: 'Convert quotation', ...SHEET }} />
+      <Stack.Screen name="quotations/void" options={{ title: 'Void quotation', ...SHEET }} />
+      <Stack.Screen name="deliveries/index" options={{ title: 'Deliveries', ...SECTION }} />
+      <Stack.Screen name="deliveries/new" options={{ title: 'New delivery draft', ...SHEET }} />
+      <Stack.Screen name="deliveries/[delivery-id]" options={{ title: 'Delivery Form' }} />
+      <Stack.Screen name="deliveries/preview" options={{ title: 'Delivery Form Preview' }} />
+      <Stack.Screen name="deliveries/item/new" options={{ title: 'Add item to delivery', ...SHEET }} />
+      <Stack.Screen name="deliveries/void" options={{ title: 'Void delivery', ...SHEET }} />
+      <Stack.Screen name="billing-statements/index" options={{ title: 'Billing statements', ...SECTION }} />
+      <Stack.Screen name="billing-statements/new" options={{ title: 'New statement draft', ...SHEET }} />
+      <Stack.Screen name="billing-statements/[statement-id]" options={{ title: 'Billing Statement' }} />
+      <Stack.Screen name="billing-statements/preview" options={{ title: 'Billing Statement Preview' }} />
+      <Stack.Screen name="billing-statements/charge/new" options={{ title: 'Add charge', ...SHEET }} />
+      <Stack.Screen name="billing-statements/void" options={{ title: 'Void statement', ...SHEET }} />
+      <Stack.Screen name="billing-statements/finalize" options={{ title: 'Finalize statement', ...SHEET }} />
+      <Stack.Screen name="payments/index" options={{ title: 'Payments', ...SECTION }} />
+      <Stack.Screen name="payments/new" options={{ title: 'Record payment', ...SHEET }} />
+      <Stack.Screen name="payments/[payment-id]" options={{ title: 'Payment Acknowledgment' }} />
+      <Stack.Screen name="payments/void" options={{ title: 'Void payment', ...SHEET }} />
+      <Stack.Screen name="signatures/manage" options={{ title: 'Document Signing' }} />
+      <Stack.Screen name="signatures/capture" options={{ title: 'Draw signature', presentation: 'modal' }} />
+      </Stack>
+      </View>
+    </View>
+    </AppWidthContext.Provider>
   );
 }
 
