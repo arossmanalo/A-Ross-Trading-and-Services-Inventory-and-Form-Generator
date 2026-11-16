@@ -2,7 +2,7 @@
 
 ## What was added
 - **Quotation** (`QT-000001`): the Billing Statement's form with a *valid until* date. No stock or payment effect. Prices are quoted as entered (no price-drift check).
-- **Delivery form** (`DF-000001`): inventory items only. **Finalizing deducts stock** (rejected if any item is short). The printed form shows items and quantities, not prices; prices stay in the data so the Billing Statement can bill them.
+- **Delivery form** (`DF-000001`): inventory items only. **Finalizing deducts stock** (rejected if any item is short). The printed form shows each item's quantity, unit price and line total, plus the total quantity and total amount, so it can serve as the bill. A Billing Statement can still be linked to the delivery when the customer asks for one.
 - **Billing Statement linked to a delivery**: one live statement per delivery. Delivered items are billed as delivered and are **not deducted from stock again**. A statement links to a CSR *or* a delivery, never both.
 - **Quotation conversion**: a finalized quotation asks *repair or delivery*. Repair creates a CSR draft (machines chosen) plus its Billing Statement draft; Delivery creates a Delivery draft plus its Billing Statement draft (quoted services go on the statement). The quotation's discount is carried to the statement. A quotation converts once and cannot be voided afterwards.
 - Database schema 12. Older backups restore into it; the two new sequences start at 1.

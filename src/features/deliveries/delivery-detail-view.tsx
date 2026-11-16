@@ -265,7 +265,7 @@ export function DeliveryDetailView({ deliveryId, embedded = false, onDeleted, on
         ) : null}
 
         <View style={styles.valueRow}>
-          <Text style={[text.meta, styles.valueNote]}>Prices are kept for billing and are not printed on the delivery form.</Text>
+          <Text style={[text.meta, styles.valueNote]}>The delivery form prints these prices and the total, so it can serve as the bill.</Text>
           <Text style={text.meta}>Value delivered</Text>
           <Text style={styles.valueAmount}>{formatCentavos(delivery.totalCentavos)}</Text>
         </View>

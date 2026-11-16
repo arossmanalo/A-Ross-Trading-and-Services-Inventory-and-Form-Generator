@@ -114,7 +114,8 @@ describe('delivery repository', () => {
     expect(result.dfNumber).toBe('DF-000001');
     expect(result.html).toContain('Delivery Form');
     expect(result.html).toContain('Detergent');
-    expect(result.html).not.toContain('₱'); // prices are kept for billing but not printed
+    // The form prints the frozen prices and their total, so it can serve as the bill.
+    expect(result.html).toContain('Total</span><span>₱7,200.00');
     expect(await getDelivery(db, id)).toMatchObject({ dfNumber: 'DF-000001', documentState: 'finalized', pdfState: 'pending', totalCentavos: 720000 });
     expect(stockOf('item')).toBe(6);
     expect(stockOf('softener')).toBe(0);
@@ -189,12 +190,15 @@ describe('delivery repository', () => {
 });
 
 describe('delivery template', () => {
-  it('shows items and quantities, both people and signature slots, and escapes text', () => {
+  it('shows items, prices and totals, both people and signature slots, and escapes text', () => {
     const html = buildDeliveryHtml({
       dfNumber: 'DF-000009', businessDate: '2026-09-01', fingerprint: 'AB12',
       business: { name: 'A.Ross', address: 'Addr', contactDetails: '0917' }, customer: { name: 'Quicklean <Co>', address: 'Somewhere' },
       deliveredBy: 'Driver', receivedBy: 'Clerk', notes: 'Leave at <gate>',
-      lines: [{ description: 'Filter', quantity: 2, unitLabel: 'pc' }, { description: 'Belt', quantity: 5, unitLabel: 'pc' }],
+      lines: [
+        { description: 'Filter', quantity: 2, unitLabel: 'pc', unitPriceCentavos: 15000, amountCentavos: 30000 },
+        { description: 'Belt', quantity: 5, unitLabel: 'pc', unitPriceCentavos: 65000, amountCentavos: 325000 },
+      ],
     });
     expect(html).toContain('<h1 class="title">Delivery Form</h1>');
     expect(html).toContain('DF-000009');
@@ -202,7 +206,10 @@ describe('delivery template', () => {
     expect(html).toContain('Received by Clerk');
     expect(html).toContain('Quicklean &lt;Co&gt;');
     expect(html).toContain('Leave at &lt;gate&gt;');
+    expect(html).toContain('<th>Description</th><th class="number">Quantity</th><th class="number">Unit Price</th><th class="number">Total</th>');
+    expect(html).toContain('<td class="number">₱650.00</td><td class="number">₱3,250.00</td>');
     expect(html).toContain('Total quantity</span><span>7');
+    expect(html).toContain('Total</span><span>₱3,550.00');
     expect(html).toContain('data-signature-role="customer"');
     expect(html).toContain('data-signature-role="preparer"');
   });

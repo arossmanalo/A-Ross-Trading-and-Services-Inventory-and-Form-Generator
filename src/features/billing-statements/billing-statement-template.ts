@@ -55,5 +55,5 @@ function vatSummary(snapshot: BillingStatementRenderSnapshot): string {
   return `${rate}% VAT ${snapshot.vatDisplayMode}; shown for information only`;
 }
 
-function money(value: number): string { return PHP_FORMATTER.format(value / 100); }
+export function money(value: number): string { return PHP_FORMATTER.format(value / 100); }
 export function escapeHtml(value: string): string { return value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }

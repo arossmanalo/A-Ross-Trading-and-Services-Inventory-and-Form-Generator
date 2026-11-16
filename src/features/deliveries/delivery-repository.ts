@@ -290,7 +290,13 @@ export async function finalizeDelivery(db: SQLiteDatabase, deliveryId: string): 
       deliveredBy: row.delivered_by,
       receivedBy: row.received_by,
       notes: row.notes,
-      lines: lines.map((line) => ({ description: line.description_snapshot, quantity: line.quantity_integer, unitLabel: line.unit_label || 'pc' })),
+      lines: lines.map((line) => ({
+        description: line.description_snapshot,
+        quantity: line.quantity_integer,
+        unitLabel: line.unit_label || 'pc',
+        unitPriceCentavos: line.unit_price_centavos,
+        amountCentavos: line.amount_centavos,
+      })),
     };
     snapshot.preparerSignatureHtml = await getPreparerSignatureHtml(tx);
     snapshot.business.logoDataUrl = await getBusinessLogo(tx);

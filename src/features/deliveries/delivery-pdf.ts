@@ -45,7 +45,13 @@ export async function getDeliveryPreview(db: SQLiteDatabase, deliveryId: string)
       deliveredBy: delivery.deliveredBy,
       receivedBy: delivery.receivedBy,
       notes: delivery.notes,
-      lines: delivery.lines.map((line) => ({ description: line.description, quantity: line.quantity, unitLabel: line.unitLabel })),
+      lines: delivery.lines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unitLabel: line.unitLabel,
+        unitPriceCentavos: line.unitPriceCentavos,
+        amountCentavos: line.amountCentavos,
+      })),
     };
     return { dfNumber: snapshot.dfNumber, html: buildDeliveryHtml(snapshot), isDraft: true };
   }
