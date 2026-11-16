@@ -60,13 +60,13 @@ describe('overview lists', () => {
     ]);
   });
 
-  it('lists active items at or below their low-stock level, emptiest first', () => {
-    const { lowStock } = buildOverviewLists({
+  it('lists active items closest to their low-stock level first and flags the low ones', () => {
+    const { stockWatch } = buildOverviewLists({
       serviceReports: [], quotations: [], deliveries: [], statements: [],
       items: [item('a', 2, 2), item('b', 0, 3), item('c', 5, 2), item('d', 0, 1, false)],
     });
 
-    expect(lowStock.map((entry) => entry.id)).toEqual(['b', 'a']);
+    expect(stockWatch.map((entry) => `${entry.id}:${entry.low}`)).toEqual(['b:true', 'a:true', 'c:false']);
   });
 
   it('lists finalized statements that have no active payment, oldest first', () => {

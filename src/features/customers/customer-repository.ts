@@ -11,6 +11,7 @@ import type {
   CustomerEquipment,
   CustomerMember,
   CustomerSummary,
+  RecentCustomer,
   UpdateCustomerInput,
   UpdateEquipmentInput,
 } from '@/features/customers/customer-types';
@@ -75,6 +76,30 @@ export async function listCustomers(db: SQLiteDatabase): Promise<CustomerSummary
   );
 
   return rows.map(mapCustomerRow);
+}
+
+/** Active customers with the newest documents first; voided documents do not count. */
+export async function listRecentCustomers(db: SQLiteDatabase, limit: number): Promise<RecentCustomer[]> {
+  const rows = await db.getAllAsync<{ id: string; name: string; last_activity_date: string }>(
+    `SELECT c.id, c.name, MAX(d.business_date) AS last_activity_date
+     FROM customers c
+     JOIN (
+       SELECT customer_id, business_date FROM service_reports WHERE document_state != 'voided'
+       UNION ALL
+       SELECT customer_id, business_date FROM quotations WHERE document_state != 'voided'
+       UNION ALL
+       SELECT customer_id, business_date FROM deliveries WHERE document_state != 'voided'
+       UNION ALL
+       SELECT customer_id, business_date FROM billing_statements WHERE document_state != 'voided'
+     ) d ON d.customer_id = c.id
+     WHERE c.active = 1 AND c.merged_into_customer_id IS NULL
+     GROUP BY c.id
+     ORDER BY last_activity_date DESC, c.name COLLATE NOCASE ASC
+     LIMIT ?`,
+    limit,
+  );
+
+  return rows.map((row) => ({ id: row.id, name: row.name, lastActivityDate: row.last_activity_date }));
 }
 
 export async function getCustomerDetail(

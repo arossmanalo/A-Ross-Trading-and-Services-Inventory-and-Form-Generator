@@ -14,7 +14,9 @@ export type OpenDraft = {
   totalCentavos: number;
 };
 
-export type LowStockItem = Pick<InventoryItemSummary, 'id' | 'name' | 'unitLabel' | 'currentStock' | 'lowStockThreshold'>;
+export type StockWatchItem = Pick<InventoryItemSummary, 'id' | 'name' | 'unitLabel' | 'currentStock' | 'lowStockThreshold'> & {
+  low: boolean;
+};
 
 export type StatementAwaitingPayment = {
   id: string;
@@ -26,7 +28,7 @@ export type StatementAwaitingPayment = {
 
 export type OverviewLists = {
   drafts: OpenDraft[];
-  lowStock: LowStockItem[];
+  stockWatch: StockWatchItem[];
   awaitingPayment: StatementAwaitingPayment[];
 };
 
@@ -41,9 +43,10 @@ type OverviewSources = {
 const byNewestDate = (a: { businessDate: string }, b: { businessDate: string }) => b.businessDate.localeCompare(a.businessDate);
 
 /**
- * What the Overview lists: every unfinished draft, active items at or below
- * their low-stock level (the same rule as the low-stock count), and finalized
- * statements that have no active payment recorded yet.
+ * What the Overview lists: every unfinished draft, active items ordered by how
+ * close they are to their low-stock level (low means at or below it, the same
+ * rule as the low-stock count), and finalized statements that have no active
+ * payment recorded yet.
  */
 export function buildOverviewLists(sources: OverviewSources): OverviewLists {
   const drafts: OpenDraft[] = [
@@ -61,10 +64,18 @@ export function buildOverviewLists(sources: OverviewSources): OverviewLists {
       .map((statement) => ({ kind: 'billing_statement' as const, id: statement.id, customerName: statement.customerName, businessDate: statement.businessDate, totalCentavos: statement.discountedTotalCentavos })),
   ].sort(byNewestDate);
 
-  const lowStock = sources.items
-    .filter((item) => item.active && item.currentStock <= item.lowStockThreshold)
-    .map(({ id, name, unitLabel, currentStock, lowStockThreshold }) => ({ id, name, unitLabel, currentStock, lowStockThreshold }))
-    .sort((a, b) => a.currentStock - b.currentStock || a.name.localeCompare(b.name));
+  const headroom = (item: StockWatchItem) => item.currentStock - item.lowStockThreshold;
+  const stockWatch = sources.items
+    .filter((item) => item.active)
+    .map(({ id, name, unitLabel, currentStock, lowStockThreshold }) => ({
+      id,
+      name,
+      unitLabel,
+      currentStock,
+      lowStockThreshold,
+      low: currentStock <= lowStockThreshold,
+    }))
+    .sort((a, b) => headroom(a) - headroom(b) || a.name.localeCompare(b.name));
 
   const awaitingPayment = sources.statements
     .filter((statement) => statement.documentState === 'finalized' && statement.bsNumber !== null)
@@ -78,5 +89,5 @@ export function buildOverviewLists(sources: OverviewSources): OverviewLists {
     }))
     .sort((a, b) => a.businessDate.localeCompare(b.businessDate));
 
-  return { drafts, lowStock, awaitingPayment };
+  return { drafts, stockWatch, awaitingPayment };
 }

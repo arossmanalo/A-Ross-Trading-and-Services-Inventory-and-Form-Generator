@@ -1,6 +1,6 @@
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -16,8 +16,9 @@ import { useAppWidth } from '@/components/app-width';
 import { formatDisplayDate } from '@/domain/calendar';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
-import type { BackupStatus } from '@/features/backup/backup-repository';
 import { listBillingStatements } from '@/features/billing-statements/billing-statement-repository';
+import { listRecentCustomers } from '@/features/customers/customer-repository';
+import type { RecentCustomer } from '@/features/customers/customer-types';
 import { listDeliveries } from '@/features/deliveries/delivery-repository';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import { listQuotations } from '@/features/quotations/quotation-repository';
@@ -31,8 +32,11 @@ type Overview = OverviewLists & {
   activeItems: number;
   lowStockItems: number;
   customers: number;
-  backupStatus: BackupStatus;
+  recentCustomers: RecentCustomer[];
 };
+
+/** How many rows each square beside the drafts shows before pointing to the full list. */
+const SQUARE_ROWS = 6;
 
 const DRAFT_LABELS: Record<OpenDraft['kind'], string> = {
   service_report: 'CSR draft',
@@ -86,14 +90,15 @@ export default function OverviewScreen() {
       listDeliveries(db),
       listBillingStatements(db),
       listInventoryItems(db),
+      listRecentCustomers(db, SQUARE_ROWS),
     ])
-      .then(([summary, serviceReports, quotations, deliveries, statements, items]) => {
+      .then(([summary, serviceReports, quotations, deliveries, statements, items, recentCustomers]) => {
         if (!active) return;
         setOverview({
           activeItems: summary.activeItems,
           lowStockItems: summary.lowStockItems,
           customers: summary.customers,
-          backupStatus: summary.backupStatus,
+          recentCustomers,
           ...buildOverviewLists({ serviceReports, quotations, deliveries, statements, items }),
         });
       })
@@ -174,52 +179,60 @@ export default function OverviewScreen() {
               )}
             </View>
 
-            <View style={[styles.column, wide ? styles.sideColumn : null]}>
-              <Text accessibilityRole="header" style={text.section}>Needs attention</Text>
-              <BackupNotice status={overview.backupStatus} />
-
-              <View style={styles.listBlock}>
-                <View style={styles.blockHeading}>
-                  <Text style={text.bodyStrong}>Low stock</Text>
-                  <LinkText label="Stock report" onPress={() => router.push('/reports/stock')} />
-                </View>
-                {overview.lowStock.length === 0 ? (
-                  <Text style={text.meta}>Every active item is above its low-stock level.</Text>
-                ) : overview.lowStock.slice(0, 6).map((item) => (
-                  <Pressable
-                    key={item.id}
-                    accessibilityRole="link"
-                    onPress={() => router.push({ pathname: '/inventory/item/[item-id]', params: { 'item-id': item.id } })}
-                    style={({ pressed }) => [styles.lineRow, pressed ? styles.pressed : null]}
-                  >
-                    <Text numberOfLines={1} style={[text.body, styles.lineLabel]}>{item.name}</Text>
-                    <Text style={[text.amount, styles.lowStockValue]}>{item.currentStock} {item.unitLabel} left</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <View style={styles.listBlock}>
-                <View style={styles.blockHeading}>
-                  <Text style={text.bodyStrong}>Statements with no payment yet</Text>
-                  <LinkText label="Collections" onPress={() => router.push('/reports/collections')} />
-                </View>
-                {overview.awaitingPayment.length === 0 ? (
-                  <Text style={text.meta}>Every finalized statement has a payment recorded.</Text>
-                ) : overview.awaitingPayment.slice(0, 6).map((statement) => (
-                  <Pressable
+            <View style={[styles.column, styles.squares, wide ? styles.sideColumn : null]}>
+              <Square
+                title="Unpaid statements"
+                linkLabel="Collections"
+                onLink={() => router.push('/reports/collections')}
+                empty="Every finalized statement has a payment recorded."
+              >
+                {overview.awaitingPayment.slice(0, SQUARE_ROWS).map((statement, index) => (
+                  <SquareRow
                     key={statement.id}
-                    accessibilityRole="link"
+                    first={index === 0}
                     onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statement.id } })}
-                    style={({ pressed }) => [styles.lineRow, pressed ? styles.pressed : null]}
-                  >
-                    <View style={styles.lineLabel}>
-                      <Text numberOfLines={1} style={text.body}>{statement.customerName}</Text>
-                      <Text style={text.meta}>{statement.bsNumber} · {formatDisplayDate(statement.businessDate)}</Text>
-                    </View>
-                    <Text style={text.amount}>{formatCentavos(statement.totalCentavos)}</Text>
-                  </Pressable>
+                    title={statement.customerName}
+                    meta={`${statement.bsNumber} · ${formatDisplayDate(statement.businessDate)}`}
+                    value={formatCentavos(statement.totalCentavos)}
+                  />
                 ))}
-              </View>
+              </Square>
+
+              <Square
+                title="Customers"
+                linkLabel="All customers"
+                onLink={() => router.push('/customers')}
+                empty="No customer has a CSR, quotation, delivery or statement yet."
+              >
+                {overview.recentCustomers.map((customer, index) => (
+                  <SquareRow
+                    key={customer.id}
+                    first={index === 0}
+                    onPress={() => router.push({ pathname: '/customers/[customer-id]', params: { 'customer-id': customer.id } })}
+                    title={customer.name}
+                    meta={`Last document ${formatDisplayDate(customer.lastActivityDate)}`}
+                  />
+                ))}
+              </Square>
+
+              <Square
+                title="Inventory"
+                linkLabel="Stock report"
+                onLink={() => router.push('/reports/stock')}
+                empty="No active inventory items. Add them from Inventory."
+              >
+                {overview.stockWatch.slice(0, SQUARE_ROWS).map((item, index) => (
+                  <SquareRow
+                    key={item.id}
+                    first={index === 0}
+                    onPress={() => router.push({ pathname: '/inventory/item/[item-id]', params: { 'item-id': item.id } })}
+                    title={item.name}
+                    meta={item.low ? 'At or below its low-stock level' : `Low at ${item.lowStockThreshold} ${item.unitLabel}`}
+                    value={`${item.currentStock} ${item.unitLabel} left`}
+                    warn={item.low}
+                  />
+                ))}
+              </Square>
             </View>
           </View>
 
@@ -253,30 +266,47 @@ function LinkText({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-function BackupNotice({ status }: { status: BackupStatus }) {
-  const lastExport = status.lastExport
-    ? formatDisplayDate(getLocalBusinessDate(new Date(status.lastExport.createdAt)))
-    : null;
-  if (!status.noticeDue) {
-    return (
-      <View style={styles.listBlock}>
-        <View style={styles.blockHeading}>
-          <Text style={text.bodyStrong}>Backup</Text>
-          <LinkText label="Open backup" onPress={() => router.push('/backup')} />
-        </View>
-        <Text style={text.meta}>{lastExport ? `Last exported ${lastExport}.` : 'No backup has been exported yet.'}</Text>
-      </View>
-    );
-  }
+/** A titled panel of rows, the same shape as the open drafts list. */
+function Square({ title, linkLabel, onLink, empty, children }: {
+  title: string;
+  linkLabel: string;
+  onLink: () => void;
+  empty: string;
+  children: ReactNode[];
+}) {
   return (
-    <View style={styles.notice}>
-      <Text style={styles.noticeTitle}>Backup is due</Text>
-      <Text style={styles.noticeBody}>
-        {status.revisionsNotExported} change{status.revisionsNotExported === 1 ? '' : 's'} since the last backup
-        {lastExport ? ` on ${lastExport}` : ''}.
-      </Text>
-      <ActionButton compact variant="secondary" onPress={() => router.push('/backup')} style={styles.noticeButton}>Back up now</ActionButton>
+    <View style={styles.square}>
+      <View style={styles.squareHeading}>
+        <Text accessibilityRole="header" style={text.section}>{title}</Text>
+        <LinkText label={linkLabel} onPress={onLink} />
+      </View>
+      <View style={styles.panel}>
+        {children.length === 0 ? <Text style={[text.meta, styles.squareEmpty]}>{empty}</Text> : children}
+      </View>
     </View>
+  );
+}
+
+function SquareRow({ first, onPress, title, meta, value, warn = false }: {
+  first: boolean;
+  onPress: () => void;
+  title: string;
+  meta: string;
+  value?: string;
+  warn?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={onPress}
+      style={({ pressed }) => [styles.squareRow, first ? null : styles.rowDivider, pressed ? styles.pressed : null]}
+    >
+      <View style={styles.squareCopy}>
+        <Text numberOfLines={1} style={text.body}>{title}</Text>
+        <Text numberOfLines={1} style={[text.meta, warn ? styles.warnText : null]}>{meta}</Text>
+      </View>
+      {value ? <Text style={[text.amount, warn ? styles.warnText : null]}>{value}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -336,29 +366,20 @@ const styles = StyleSheet.create({
   draftCopy: { flex: 1, minWidth: 0 },
   chevron: { color: colors.secondaryLabel, fontSize: fontSize.section },
   pressed: { backgroundColor: colors.subtleSurface },
-  listBlock: { gap: 6 },
-  blockHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
+  squares: { gap: spacing.xl },
+  square: { gap: spacing.md },
+  squareHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
   link: { color: colors.primary, fontSize: fontSize.meta, fontWeight: '600' },
-  lineRow: {
-    minHeight: 44,
+  squareRow: {
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.separator,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
   },
-  lineLabel: { flex: 1, minWidth: 0 },
-  lowStockValue: { color: colors.error },
-  notice: {
-    gap: 6,
-    padding: spacing.lg,
-    backgroundColor: colors.warningTint,
-    borderWidth: 1,
-    borderColor: colors.warningBorder,
-    borderRadius: radius.panel,
-  },
-  noticeTitle: { color: colors.warning, fontSize: fontSize.body, fontWeight: '600' },
-  noticeBody: { color: colors.warning, fontSize: fontSize.meta, lineHeight: 18 },
-  noticeButton: { alignSelf: 'flex-start', marginTop: spacing.xs },
+  squareCopy: { flex: 1, minWidth: 0 },
+  squareEmpty: { paddingHorizontal: spacing.lg, paddingVertical: 14 },
+  warnText: { color: colors.error },
   phoneLinks: { gap: spacing.sm },
 });

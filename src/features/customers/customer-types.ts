@@ -12,6 +12,13 @@ export type CustomerSummary = {
   memberCount: number;
 };
 
+/** A customer and the business date of their newest CSR, quotation, delivery or statement. */
+export type RecentCustomer = {
+  id: string;
+  name: string;
+  lastActivityDate: string;
+};
+
 export type CustomerMember = {
   id: string;
   customerId: string;
