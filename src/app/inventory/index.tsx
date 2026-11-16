@@ -3,8 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
-import { ListEmpty, listRowStyles } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip } from '@/components/status-chip';
 import { formatCentavos } from '@/domain/money';
@@ -81,10 +80,13 @@ export default function InventoryScreen() {
       onRefresh={loadItems}
       ListHeaderComponent={(
         <View style={styles.header}>
-          <ActionButton onPress={() => router.push('/inventory/new')}>Add item</ActionButton>
-          <Text style={text.meta}>
-            {items.length} item{items.length === 1 ? '' : 's'}{lowCount ? ` · ${lowCount} low on stock` : ''}. Every quantity comes from the append-only movement log.
-          </Text>
+          <ListTitle
+            title="Inventory"
+            subtitle={`${items.length} item${items.length === 1 ? '' : 's'}${lowCount ? ` · ${lowCount} low` : ''}`}
+            actionLabel="Add item"
+            onAction={() => router.push('/inventory/new')}
+          />
+          <Text style={text.meta}>Every quantity comes from the append-only movement log.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}

@@ -129,11 +129,12 @@ export default function DeliveriesScreen() {
       onRefresh={load}
       ListHeaderComponent={(
         <ListPaneHeader
+          title="Deliveries"
           newLabel="New delivery draft"
           onNew={() => router.push('/deliveries/new')}
           query={criteria.query}
           onQueryChange={(value) => update('query', value)}
-          searchPlaceholder="DF number, customer, item, date, amount"
+          searchPlaceholder="DF no., customer, item, date"
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((open) => !open)}
           activeFilterCount={activeFilterCount}

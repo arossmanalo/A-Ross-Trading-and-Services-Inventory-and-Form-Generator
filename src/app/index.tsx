@@ -9,10 +9,10 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { useAppWidth } from '@/components/app-width';
 import { formatDisplayDate } from '@/domain/calendar';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatCentavos } from '@/domain/money';
@@ -71,7 +71,7 @@ const PHONE_LINKS: Array<{ label: string; href: Href }> = [
 
 export default function OverviewScreen() {
   const db = useSQLiteContext();
-  const { width } = useWindowDimensions();
+  const width = useAppWidth();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');

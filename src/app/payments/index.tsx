@@ -3,7 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ListEmpty, listRowStyles } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip, sentenceCase } from '@/components/status-chip';
 import { formatDisplayDate } from '@/domain/calendar';
@@ -77,6 +77,7 @@ export default function PaymentsScreen() {
       onRefresh={load}
       ListHeaderComponent={(
         <View style={styles.header}>
+          <ListTitle title="Payments" />
           <Text style={text.meta}>Payment acknowledgments, newest first. Record a payment from a finalized Billing Statement; corrections keep the original as void.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>

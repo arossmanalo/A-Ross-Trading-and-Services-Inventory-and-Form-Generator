@@ -133,11 +133,12 @@ export default function ServiceReportsScreen() {
       onRefresh={loadReports}
       ListHeaderComponent={(
         <ListPaneHeader
+          title="Service reports"
           newLabel="New CSR draft"
           onNew={() => router.push('/service-reports/new')}
           query={criteria.query}
           onQueryChange={(value) => update('query', value)}
-          searchPlaceholder="CSR, customer, machine, serial, control no., BS no."
+          searchPlaceholder="CSR, customer, serial, control no."
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((open) => !open)}
           activeFilterCount={activeFilterCount}

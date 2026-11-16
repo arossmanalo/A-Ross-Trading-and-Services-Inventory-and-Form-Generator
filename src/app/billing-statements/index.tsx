@@ -161,11 +161,12 @@ export default function BillingStatementsScreen() {
       onRefresh={load}
       ListHeaderComponent={(
         <ListPaneHeader
+          title="Billing statements"
           newLabel="New statement draft"
           onNew={() => router.push('/billing-statements/new')}
           query={criteria.query}
           onQueryChange={(value) => update('query', value)}
-          searchPlaceholder="BS number, customer, CSR, PA or control no."
+          searchPlaceholder="BS no., customer, CSR, control no."
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((open) => !open)}
           activeFilterCount={activeFilterCount}

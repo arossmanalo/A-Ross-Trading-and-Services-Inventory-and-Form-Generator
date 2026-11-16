@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { useAppWidth } from '@/components/app-width';
 import { colors } from '@/theme/colors';
 import { spacing, text } from '@/theme/typography';
 
@@ -8,7 +9,7 @@ import { spacing, text } from '@/theme/typography';
 export const SPLIT_MIN_WINDOW_WIDTH = 1000;
 
 export function useSplitLayout(): boolean {
-  return useWindowDimensions().width >= SPLIT_MIN_WINDOW_WIDTH;
+  return useAppWidth() >= SPLIT_MIN_WINDOW_WIDTH;
 }
 
 type SplitViewProps = {

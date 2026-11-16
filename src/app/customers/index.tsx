@@ -3,8 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
-import { ListEmpty, listRowStyles } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip } from '@/components/status-chip';
 import { CustomerDetailView } from '@/features/customers/customer-detail-view';
@@ -74,10 +73,13 @@ export default function CustomersScreen() {
       onRefresh={loadCustomers}
       ListHeaderComponent={(
         <View style={styles.header}>
-          <ActionButton onPress={() => router.push('/customers/new')}>Add customer</ActionButton>
-          <Text style={text.meta}>
-            {customers.length} registered customer{customers.length === 1 ? '' : 's'}. Every service report and billing statement starts from a customer profile.
-          </Text>
+          <ListTitle
+            title="Customers"
+            subtitle={`${customers.length} registered`}
+            actionLabel="Add customer"
+            onAction={() => router.push('/customers/new')}
+          />
+          <Text style={text.meta}>Every service report and billing statement starts from a customer profile.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}

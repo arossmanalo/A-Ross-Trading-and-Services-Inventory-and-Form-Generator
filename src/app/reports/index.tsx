@@ -1,12 +1,12 @@
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { DateField } from '@/components/date-field';
-import { FormField } from '@/components/form-field';
 import { ReportFrame } from '@/components/report-frame';
+import { ReportControls, ReportField, ReportFieldRow, ReportScope } from '@/components/report-layout';
 import { getLocalBusinessDate } from '@/domain/business-date';
 import { formatDisplayDate } from '@/domain/calendar';
 import { listCustomers } from '@/features/customers/customer-repository';
@@ -57,7 +57,7 @@ export default function FinancialReportsScreen() {
     }
   };
 
-  const selectedName = customers.find((c) => c.id === customerId)?.name ?? 'All customers';
+  const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
   const matches = query.trim()
     ? customers.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 15)
     : [];
@@ -65,38 +65,33 @@ export default function FinancialReportsScreen() {
   return (
     <ReportFrame>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        <Text style={text.meta}>
-          Sales and expenses use statement dates. Collections use payment dates. Outstanding shows today’s balance on statements from the selected period.
-        </Text>
-        <View style={styles.filters}>
-          <View style={styles.dateField}><DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture /></View>
-          <View style={styles.dateField}><DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture /></View>
-          <FormField containerStyle={styles.customerField} label="Find customer (including inactive)" value={query} onChangeText={setQuery} placeholder={selectedName} />
-          <ActionButton compact variant={customerId ? 'secondary' : 'primary'} disabled={busy} onPress={() => setCustomerId('')}>All customers</ActionButton>
-        </View>
-        {matches.length ? (
-          <View style={styles.matches}>
-            {matches.map((c, index) => (
-              <Pressable
-                key={c.id}
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={() => { setCustomerId(c.id); setQuery(''); }}
-                style={({ pressed }) => [styles.match, index > 0 ? styles.matchDivider : null, pressed ? styles.pressed : null]}
-              >
-                <Text style={text.body}>{c.name}{c.active ? '' : ' (inactive)'}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-        <View style={styles.generateRow}>
-          <Text style={text.meta}>Customer: <Text style={text.bodyStrong}>{selectedName}</Text></Text>
-          <ActionButton compact disabled={busy} onPress={() => void generate()}>{busy ? 'Working…' : 'Generate report'}</ActionButton>
-        </View>
-        {error ? <Text accessibilityLiveRegion="polite" style={text.error}>{error}</Text> : null}
+        <ReportControls
+          intro="Sales and expenses use statement dates. Collections use payment dates. Outstanding shows today’s balance on statements from the selected period."
+          error={error}
+          actions={<ActionButton disabled={busy} onPress={() => void generate()}>{busy ? 'Working…' : 'Generate report'}</ActionButton>}
+        >
+          <ReportFieldRow>
+            <ReportField><DateField label="From" value={from} onChange={setFrom} disabled={busy} allowFuture /></ReportField>
+            <ReportField><DateField label="To" value={to} onChange={setTo} disabled={busy} allowFuture /></ReportField>
+          </ReportFieldRow>
+          <ReportScope
+            label="Find customer (including inactive)"
+            allLabel="All customers"
+            query={query}
+            onQueryChange={setQuery}
+            selectedTitle={selectedCustomer?.name ?? null}
+            onClear={() => setCustomerId('')}
+            matches={matches.map((c) => ({ id: c.id, title: `${c.name}${c.active ? '' : ' (inactive)'}` }))}
+            onPick={(id) => {
+              setCustomerId(id);
+              setQuery('');
+            }}
+            disabled={busy}
+          />
+        </ReportControls>
 
         {loaded ? (
-          <>
+          <View style={styles.results}>
             <View style={styles.resultsHeading}>
               <Text accessibilityRole="header" style={text.subhead}>
                 {formatDisplayDate(loaded.filter.from)} to {formatDisplayDate(loaded.filter.to)} · {loaded.customerName}
@@ -127,7 +122,7 @@ export default function FinancialReportsScreen() {
             >
               Share these results as CSV
             </ActionButton>
-          </>
+          </View>
         ) : null}
       </ScrollView>
     </ReportFrame>
@@ -135,23 +130,9 @@ export default function FinancialReportsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.xxl, gap: spacing.lg, paddingBottom: 48 },
-  filters: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: spacing.lg },
-  dateField: { flexBasis: 180, flexGrow: 1, maxWidth: 240 },
-  customerField: { flexBasis: 260, flexGrow: 2 },
-  matches: {
-    maxWidth: 520,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.separator,
-    borderRadius: radius.panel,
-    overflow: 'hidden',
-  },
-  match: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
-  matchDivider: { borderTopWidth: 1, borderTopColor: colors.hairline },
-  pressed: { backgroundColor: colors.subtleSurface },
-  generateRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  resultsHeading: { gap: 2, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.separator },
+  content: { paddingBottom: 48 },
+  results: { gap: spacing.lg, padding: spacing.xl },
+  resultsHeading: { gap: 2 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

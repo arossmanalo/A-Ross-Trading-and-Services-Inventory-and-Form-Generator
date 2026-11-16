@@ -114,17 +114,21 @@ export default function BackupScreen() {
         <PageNote tone="warning" title="Unencrypted backup">
           Backup files may contain customer information, signatures, and returned signed PDFs. Store them only in a private Drive location.
         </PageNote>
-        <View style={styles.actions}>
-          <ActionButton disabled={busy} onPress={() => void exportBackup()}>
-            {busy ? 'Creating backup…' : 'Create and share backup'}
-          </ActionButton>
-          <ActionButton disabled={busy} variant="secondary" onPress={() => void restoreBackup()}>
-            {busy ? 'Working…' : 'Validate and restore backup'}
-          </ActionButton>
-        </View>
-        {message ? <Text selectable style={styles.message}>{message}</Text> : null}
-        {error ? <Text selectable style={text.error}>{error}</Text> : null}
+        <ActionButton disabled={busy} style={styles.start} onPress={() => void exportBackup()}>
+          {busy ? 'Working…' : 'Create and share backup'}
+        </ActionButton>
       </PageSection>
+      <PageSection
+        title="Restore"
+        description="Pick an .arossbackup file. It is checked first; restoring then replaces all data on this tablet with the backup's data."
+      >
+        <ActionButton disabled={busy} variant="danger" style={styles.start} onPress={() => void restoreBackup()}>
+          {busy ? 'Working…' : 'Validate and restore backup'}
+        </ActionButton>
+        <Text style={text.meta}>You are asked "Replace local data?" before anything changes.</Text>
+      </PageSection>
+      {message ? <Text selectable style={styles.message}>{message}</Text> : null}
+      {error ? <Text selectable style={text.error}>{error}</Text> : null}
     </PageBody>
   );
 }
@@ -141,6 +145,6 @@ const styles = StyleSheet.create({
   },
   tabular: { fontVariant: ['tabular-nums'] },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, padding: spacing.lg },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  start: { alignSelf: 'flex-start' },
   message: { color: colors.success, fontSize: fontSize.meta, lineHeight: 18, fontWeight: '600' },
 });

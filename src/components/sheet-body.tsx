@@ -64,7 +64,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.separator,
   },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // The primary action comes first in the markup and lands at the right edge, Cancel to its left.
+  actions: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.sm },
   section: { gap: spacing.md },
   sectionHeading: { gap: 2 },
   message: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },

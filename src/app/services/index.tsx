@@ -3,8 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ActionButton } from '@/components/action-button';
-import { ListEmpty, listRowStyles } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip } from '@/components/status-chip';
 import { formatCentavos } from '@/domain/money';
@@ -73,7 +72,7 @@ export default function ServicesScreen() {
       onRefresh={loadServices}
       ListHeaderComponent={(
         <View style={styles.header}>
-          <ActionButton onPress={() => router.push('/services/new')}>Add service</ActionButton>
+          <ListTitle title="Service catalog" actionLabel="Add service" onAction={() => router.push('/services/new')} />
           <Text style={text.meta}>Labor and service rates. The rate can be changed per machine on each CSR.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>

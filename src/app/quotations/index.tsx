@@ -125,11 +125,12 @@ export default function QuotationsScreen() {
       onRefresh={load}
       ListHeaderComponent={(
         <ListPaneHeader
+          title="Quotations"
           newLabel="New quotation draft"
           onNew={() => router.push('/quotations/new')}
           query={criteria.query}
           onQueryChange={(value) => update('query', value)}
-          searchPlaceholder="QT number, customer, item or service, amount"
+          searchPlaceholder="QT no., customer, item, amount"
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((open) => !open)}
           activeFilterCount={activeFilterCount}
