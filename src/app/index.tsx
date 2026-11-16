@@ -35,8 +35,13 @@ type Overview = OverviewLists & {
   recentCustomers: RecentCustomer[];
 };
 
-/** How many rows each square beside the drafts shows before pointing to the full list. */
-const SQUARE_ROWS = 6;
+/** Customers listed in the Customers panel; the full list is one tap away. */
+const RECENT_CUSTOMER_LIMIT = 50;
+
+/** Stands in for an amount while prices are hidden, e.g. when a customer can see the screen. */
+const HIDDEN_AMOUNT = '₱ ••••';
+
+type FigureTone = 'accent' | 'good' | 'alert' | 'pending';
 
 const DRAFT_LABELS: Record<OpenDraft['kind'], string> = {
   service_report: 'CSR draft',
@@ -79,6 +84,8 @@ export default function OverviewScreen() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [pricesHidden, setPricesHidden] = useState(false);
+  const amount = (centavos: number) => (pricesHidden ? HIDDEN_AMOUNT : formatCentavos(centavos));
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -90,7 +97,7 @@ export default function OverviewScreen() {
       listDeliveries(db),
       listBillingStatements(db),
       listInventoryItems(db),
-      listRecentCustomers(db, SQUARE_ROWS),
+      listRecentCustomers(db, RECENT_CUSTOMER_LIMIT),
     ])
       .then(([summary, serviceReports, quotations, deliveries, statements, items, recentCustomers]) => {
         if (!active) return;
@@ -134,6 +141,13 @@ export default function OverviewScreen() {
           style={styles.search}
           value={query}
         />
+        <ActionButton
+          compact
+          variant="secondary"
+          onPress={() => setPricesHidden((hidden) => !hidden)}
+        >
+          {pricesHidden ? 'Show prices' : 'Hide prices'}
+        </ActionButton>
         <ActionButton compact onPress={() => router.push('/service-reports/new')}>New CSR</ActionButton>
       </View>
 
@@ -143,10 +157,10 @@ export default function OverviewScreen() {
       {overview ? (
         <>
           <View style={styles.figures}>
-            <Figure label="Active items" value={String(overview.activeItems)} />
-            <Figure label="Low stock" value={String(overview.lowStockItems)} warn={overview.lowStockItems > 0} />
-            <Figure label="Customers" value={String(overview.customers)} />
-            <Figure label="Open drafts" value={String(overview.drafts.length)} />
+            <Figure label="Active items" value={overview.activeItems} tone="accent" />
+            <Figure label="Low stock" value={overview.lowStockItems} tone={overview.lowStockItems > 0 ? 'alert' : 'good'} />
+            <Figure label="Customers" value={overview.customers} tone="accent" />
+            <Figure label="Open drafts" value={overview.drafts.length} tone={overview.drafts.length > 0 ? 'pending' : 'good'} />
           </View>
 
           <View style={[styles.columns, wide ? styles.columnsWide : null]}>
@@ -158,7 +172,7 @@ export default function OverviewScreen() {
               {overview.drafts.length === 0 ? (
                 <Text style={[text.meta, styles.empty]}>No drafts. New CSRs, quotations, deliveries and statements start here as drafts until you finalize them.</Text>
               ) : (
-                <View style={styles.panel}>
+                <ScrollView nestedScrollEnabled style={[styles.panel, styles.draftsPanel]}>
                   {overview.drafts.map((draft, index) => (
                     <Pressable
                       key={`${draft.kind}:${draft.id}`}
@@ -171,11 +185,11 @@ export default function OverviewScreen() {
                         <Text numberOfLines={1} style={text.bodyStrong}>{draft.customerName}</Text>
                         <Text style={text.meta}>{formatDisplayDate(draft.businessDate)}</Text>
                       </View>
-                      <Text style={text.amount}>{formatCentavos(draft.totalCentavos)}</Text>
+                      <Text style={text.amount}>{amount(draft.totalCentavos)}</Text>
                       <Text style={styles.chevron}>›</Text>
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               )}
             </View>
 
@@ -186,14 +200,14 @@ export default function OverviewScreen() {
                 onLink={() => router.push('/reports/collections')}
                 empty="Every finalized statement has a payment recorded."
               >
-                {overview.awaitingPayment.slice(0, SQUARE_ROWS).map((statement, index) => (
+                {overview.awaitingPayment.map((statement, index) => (
                   <SquareRow
                     key={statement.id}
                     first={index === 0}
                     onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': statement.id } })}
                     title={statement.customerName}
                     meta={`${statement.bsNumber} · ${formatDisplayDate(statement.businessDate)}`}
-                    value={formatCentavos(statement.totalCentavos)}
+                    value={amount(statement.totalCentavos)}
                   />
                 ))}
               </Square>
@@ -221,7 +235,7 @@ export default function OverviewScreen() {
                 onLink={() => router.push('/reports/stock')}
                 empty="No active inventory items. Add them from Inventory."
               >
-                {overview.stockWatch.slice(0, SQUARE_ROWS).map((item, index) => (
+                {overview.stockWatch.map((item, index) => (
                   <SquareRow
                     key={item.id}
                     first={index === 0}
@@ -249,11 +263,19 @@ export default function OverviewScreen() {
   );
 }
 
-function Figure({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
+const FIGURE_TONES: Record<FigureTone, { backgroundColor: string; color: string }> = {
+  accent: { backgroundColor: colors.accentTint, color: colors.primary },
+  good: { backgroundColor: colors.successTint, color: colors.success },
+  alert: { backgroundColor: colors.errorTint, color: colors.error },
+  pending: { backgroundColor: colors.warningTint, color: colors.warning },
+};
+
+function Figure({ label, value, tone }: { label: string; value: number; tone: FigureTone }) {
+  const { backgroundColor, color } = FIGURE_TONES[tone];
   return (
-    <View style={styles.figure}>
-      <Text style={text.meta}>{label}</Text>
-      <Text style={[styles.figureValue, warn ? styles.figureWarn : null]}>{value}</Text>
+    <View style={[styles.figure, { backgroundColor }]}>
+      <Text style={[text.meta, styles.figureLabel]}>{label}</Text>
+      <Text style={[styles.figureValue, { color }]}>{value}</Text>
     </View>
   );
 }
@@ -266,7 +288,7 @@ function LinkText({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** A titled panel of rows, the same shape as the open drafts list. */
+/** A titled panel of rows that scrolls inside a fixed height, like the open drafts list. */
 function Square({ title, linkLabel, onLink, empty, children }: {
   title: string;
   linkLabel: string;
@@ -280,9 +302,15 @@ function Square({ title, linkLabel, onLink, empty, children }: {
         <Text accessibilityRole="header" style={text.section}>{title}</Text>
         <LinkText label={linkLabel} onPress={onLink} />
       </View>
-      <View style={styles.panel}>
-        {children.length === 0 ? <Text style={[text.meta, styles.squareEmpty]}>{empty}</Text> : children}
-      </View>
+      {children.length === 0 ? (
+        <View style={styles.panel}>
+          <Text style={[text.meta, styles.squareEmpty]}>{empty}</Text>
+        </View>
+      ) : (
+        <ScrollView nestedScrollEnabled style={[styles.panel, styles.squarePanel]}>
+          {children}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -328,17 +356,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
   },
   loading: { marginTop: spacing.xxl },
-  figures: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.separator,
+  figures: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  figure: {
+    flexGrow: 1,
+    flexBasis: 140,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.xl,
+    gap: 2,
     borderRadius: radius.panel,
   },
-  figure: { flexGrow: 1, flexBasis: 140, paddingVertical: 14, paddingHorizontal: spacing.xl, gap: 2 },
-  figureValue: { color: colors.label, fontSize: fontSize.section, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  figureWarn: { color: colors.error },
+  figureLabel: { color: colors.tertiaryLabel },
+  figureValue: { fontSize: fontSize.title, fontWeight: '700', fontVariant: ['tabular-nums'] },
   columns: { gap: spacing.xxl },
   columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
   column: { gap: spacing.md },
@@ -353,6 +381,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.panel,
     overflow: 'hidden',
   },
+  // Fixed heights keep each panel the same size as records pile up; rows scroll inside.
+  draftsPanel: { maxHeight: 620 },
+  squarePanel: { maxHeight: 250 },
   draftRow: {
     minHeight: 60,
     flexDirection: 'row',
