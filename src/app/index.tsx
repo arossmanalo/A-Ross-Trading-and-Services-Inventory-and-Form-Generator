@@ -84,7 +84,8 @@ export default function OverviewScreen() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [pricesHidden, setPricesHidden] = useState(false);
+  // Hidden on every app start, since the tablet is often in front of customers.
+  const [pricesHidden, setPricesHidden] = useState(true);
   const amount = (centavos: number) => (pricesHidden ? HIDDEN_AMOUNT : formatCentavos(centavos));
 
   useFocusEffect(useCallback(() => {
