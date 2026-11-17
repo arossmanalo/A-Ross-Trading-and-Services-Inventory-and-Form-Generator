@@ -8,6 +8,7 @@ import { ActionButton } from '@/components/action-button';
 import { ActionMenu } from '@/components/action-menu';
 import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
+import { Notice as HighlightNotice } from '@/components/notice';
 import { Fact, Panel, RecordHeader, SectionTitle } from '@/components/record-layout';
 import { StatusChip, documentStateTone, sentenceCase, type ChipTone } from '@/components/status-chip';
 import { formatDisplayDate } from '@/domain/calendar';
@@ -255,11 +256,22 @@ export function BillingStatementDetailView({ statementId, embedded = false, onDe
               {!draft ? <Fact label="Signature status">{sentenceCase(statement.signatureStatus)}</Fact> : null}
             </View>
 
-            {draft && linkedCsrIsDraft && serviceReportId ? (
-              <Notice>
-                <Text style={text.body}>Items and services added here are saved on the linked CSR too. Existing CSR charges appear automatically; do not add them twice. Edit or remove shared charges on the CSR, then finalize the CSR before this statement.</Text>
-                <ActionButton compact disabled={busy} variant="secondary" style={styles.noticeButton} onPress={() => router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': serviceReportId } })}>Continue linked CSR draft</ActionButton>
-              </Notice>
+            {serviceReportId ? (
+              // Same highlighted box as on the CSR, so staff can find the way back to it.
+              <HighlightNotice label="Linked CSR">
+                <Text style={text.body}>
+                  {draft && linkedCsrIsDraft
+                    ? 'Items and services added here are saved on the linked CSR too. Existing CSR charges appear automatically; do not add them twice. Edit or remove shared charges on the CSR, then finalize the CSR before this statement.'
+                    : `This statement bills the visit on ${statement.serviceReportNumber ?? 'the linked CSR draft'}.`}
+                </Text>
+                <ActionButton
+                  disabled={busy}
+                  style={styles.linkedCsrButton}
+                  onPress={() => router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': serviceReportId } })}
+                >
+                  {draft && linkedCsrIsDraft ? 'Continue linked CSR draft' : `Open ${statement.serviceReportNumber ?? 'linked CSR'}`}
+                </ActionButton>
+              </HighlightNotice>
             ) : null}
             {draft && deliveryId ? (
               <Notice>
@@ -427,6 +439,7 @@ const styles = StyleSheet.create({
   linkText: { color: colors.primary, fontSize: fontSize.body, fontWeight: '600' },
   notice: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.control, backgroundColor: colors.neutralTint },
   noticeButton: { alignSelf: 'flex-start' },
+  linkedCsrButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
   draftFields: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: spacing.lg },
   dateField: { flexBasis: 200, flexGrow: 1, maxWidth: 260 },
   discountField: { flexBasis: 300, flexGrow: 2, gap: 6 },
