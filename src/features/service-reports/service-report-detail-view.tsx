@@ -557,15 +557,7 @@ export function ServiceReportDetailView({ reportId, embedded = false, onDeleted,
               </View>
 
               <LinkedStatements statements={report.linkedStatements} />
-              {hasLiveStatement ? null : (
-                // Staff missed this as an outline button, so it stands out as a tinted box with a filled button.
-                <Notice label="Billing statement">
-                  <Text style={text.body}>Bill this visit on a statement that stays linked to this CSR.</Text>
-                  <ActionButton disabled={busy} style={styles.statementButton} onPress={() => void createBillingDraft()}>
-                    Create linked Billing Statement draft
-                  </ActionButton>
-                </Notice>
-              )}
+              {hasLiveStatement ? null : <LinkedStatementPrompt busy={busy} onCreate={() => void createBillingDraft()} />}
             </View>
           </View>
         ) : (
@@ -586,6 +578,10 @@ export function ServiceReportDetailView({ reportId, embedded = false, onDeleted,
               <Fact label="Serviced by / acknowledged by">{`${report.servicedBy || '—'} / ${report.acknowledgedBy || '—'}`}</Fact>
               {report.documentState === 'finalized' ? <Fact label="Signature status">{sentenceCase(report.signatureStatus)}</Fact> : null}
             </View>
+
+            {report.documentState === 'finalized' && !hasLiveStatement ? (
+              <LinkedStatementPrompt busy={busy} onCreate={() => void createBillingDraft()} />
+            ) : null}
 
             <View style={styles.readGrid}>
               <ReadBlock label="Reported problem" values={report.reportedProblem} />
@@ -649,6 +645,18 @@ export function ServiceReportDetailView({ reportId, embedded = false, onDeleted,
 }
 
 /** Tappable list of the Billing Statements billed against this CSR. */
+/** Staff missed this as an outline button, so it stands out as a tinted box with a filled button. */
+function LinkedStatementPrompt({ busy, onCreate }: { busy: boolean; onCreate: () => void }) {
+  return (
+    <Notice label="Billing statement">
+      <Text style={text.body}>Bill this visit on a statement that stays linked to this CSR.</Text>
+      <ActionButton disabled={busy} style={styles.statementButton} onPress={onCreate}>
+        Create linked Billing Statement draft
+      </ActionButton>
+    </Notice>
+  );
+}
+
 function LinkedStatements({ statements, bare = false }: { statements: ServiceReportDetail['linkedStatements']; bare?: boolean }) {
   if (!statements.length) return bare ? <Text style={text.meta}>No Billing Statement is linked to this CSR yet.</Text> : null;
   return (
