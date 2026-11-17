@@ -8,6 +8,7 @@ import { ActionButton } from '@/components/action-button';
 import { ActionMenu } from '@/components/action-menu';
 import { DateField } from '@/components/date-field';
 import { FormField } from '@/components/form-field';
+import { Notice } from '@/components/notice';
 import { Fact, Panel, RecordHeader, SectionTitle } from '@/components/record-layout';
 import { StatusChip, documentStateTone, sentenceCase } from '@/components/status-chip';
 import { getLocalBusinessDate } from '@/domain/business-date';
@@ -557,7 +558,13 @@ export function ServiceReportDetailView({ reportId, embedded = false, onDeleted,
 
               <LinkedStatements statements={report.linkedStatements} />
               {hasLiveStatement ? null : (
-                <ActionButton compact disabled={busy} variant="secondary" onPress={() => void createBillingDraft()}>Create linked Billing Statement draft</ActionButton>
+                // Staff missed this as an outline button, so it stands out as a tinted box with a filled button.
+                <Notice label="Billing statement">
+                  <Text style={text.body}>Bill this visit on a statement that stays linked to this CSR.</Text>
+                  <ActionButton disabled={busy} style={styles.statementButton} onPress={() => void createBillingDraft()}>
+                    Create linked Billing Statement draft
+                  </ActionButton>
+                </Notice>
               )}
             </View>
           </View>
@@ -708,6 +715,7 @@ const styles = StyleSheet.create({
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.separator },
   lineCopy: { flex: 1, minWidth: 0, gap: 2 },
   remove: { color: colors.error, fontSize: fontSize.meta, fontWeight: '600', paddingVertical: 10 },
+  statementButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
   totalBox: {
     flexDirection: 'row',
     alignItems: 'center',
