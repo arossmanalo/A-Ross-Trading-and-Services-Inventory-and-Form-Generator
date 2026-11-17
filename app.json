@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "A.Ross Operations",
+    "name": "AROSS Trading Forms",
     "slug": "a-ross-inventory-and-forms",
     "scheme": "aross-app",
     "version": "0.1.0",
@@ -17,8 +17,8 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow A.Ross Operations to save document preview images to your photo library.",
-          "savePhotosPermission": "Allow A.Ross Operations to save document preview images to your photo library.",
+          "photosPermission": "Allow AROSS Trading Forms to save document preview images to your photo library.",
+          "savePhotosPermission": "Allow AROSS Trading Forms to save document preview images to your photo library.",
           "granularPermissions": []
         }
       ],
@@ -43,7 +43,7 @@
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#F4F7FB",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
