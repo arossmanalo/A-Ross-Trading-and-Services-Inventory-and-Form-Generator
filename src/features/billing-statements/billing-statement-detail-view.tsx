@@ -257,7 +257,7 @@ export function BillingStatementDetailView({ statementId, embedded = false, onDe
             </View>
 
             {serviceReportId ? (
-              // Same highlighted box as on the CSR, so staff can find the way back to it.
+              // Highlighted like the box on the CSR, so staff can find the way back to the source document.
               <HighlightNotice label="Linked CSR">
                 <Text style={text.body}>
                   {draft && linkedCsrIsDraft
@@ -266,20 +266,28 @@ export function BillingStatementDetailView({ statementId, embedded = false, onDe
                 </Text>
                 <ActionButton
                   disabled={busy}
-                  style={styles.linkedCsrButton}
+                  style={styles.linkedButton}
                   onPress={() => router.push({ pathname: '/service-reports/[report-id]', params: { 'report-id': serviceReportId } })}
                 >
                   {draft && linkedCsrIsDraft ? 'Continue linked CSR draft' : `Open ${statement.serviceReportNumber ?? 'linked CSR'}`}
                 </ActionButton>
               </HighlightNotice>
             ) : null}
-            {draft && deliveryId ? (
-              <Notice>
+            {deliveryId ? (
+              <HighlightNotice label="Linked delivery">
                 <Text style={text.body}>
-                  Delivered items are billed exactly as delivered and were already taken from stock by the delivery. Change them on the delivery{statement.deliveryNumber ? '' : ', then finalize the delivery before this statement'}. Services and other charges can still be added here.
+                  {draft
+                    ? `Delivered items are billed exactly as delivered and were already taken from stock by the delivery. Change them on the delivery${statement.deliveryNumber ? '' : ', then finalize the delivery before this statement'}. Services and other charges can still be added here.`
+                    : `This statement bills the items on ${statement.deliveryNumber ?? 'the linked delivery draft'}.`}
                 </Text>
-                <ActionButton compact disabled={busy} variant="secondary" style={styles.noticeButton} onPress={() => router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': deliveryId } })}>Open the linked delivery</ActionButton>
-              </Notice>
+                <ActionButton
+                  disabled={busy}
+                  style={styles.linkedButton}
+                  onPress={() => router.push({ pathname: '/deliveries/[delivery-id]', params: { 'delivery-id': deliveryId } })}
+                >
+                  {statement.deliveryNumber ? `Open ${statement.deliveryNumber}` : 'Open the linked delivery'}
+                </ActionButton>
+              </HighlightNotice>
             ) : null}
             {draft && linkedCsrIsDraft && statement.lines.length === 0 ? (
               <Notice>
@@ -438,8 +446,7 @@ const styles = StyleSheet.create({
   link: { minHeight: 32, justifyContent: 'center' },
   linkText: { color: colors.primary, fontSize: fontSize.body, fontWeight: '600' },
   notice: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.control, backgroundColor: colors.neutralTint },
-  noticeButton: { alignSelf: 'flex-start' },
-  linkedCsrButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  linkedButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
   draftFields: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: spacing.lg },
   dateField: { flexBasis: 200, flexGrow: 1, maxWidth: 260 },
   discountField: { flexBasis: 300, flexGrow: 2, gap: 6 },
