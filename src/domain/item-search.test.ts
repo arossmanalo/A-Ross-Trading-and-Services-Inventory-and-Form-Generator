@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterItemsForSelection } from './item-search';
+import { filterItemsByQuery, filterItemsForSelection } from './item-search';
 
 const item = (name: string, extra: Partial<{ sku: string | null; unitLabel: string; active: boolean }> = {}) => ({
   name, sku: null, unitLabel: 'pc', active: true, ...extra,
@@ -25,5 +25,10 @@ describe('inventory item selection search', () => {
 
   it('never returns an inactive item even when it matches', () => {
     expect(filterItemsForSelection(items, 'gasket')).toEqual([]);
+  });
+
+  it('keeps inactive items when searching the inventory list', () => {
+    expect(filterItemsByQuery(items, 'GASKET').map((entry) => entry.name)).toEqual(['Old Gasket']);
+    expect(filterItemsByQuery(items, '')).toHaveLength(3);
   });
 });

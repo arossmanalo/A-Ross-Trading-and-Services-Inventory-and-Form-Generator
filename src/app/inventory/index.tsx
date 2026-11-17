@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListSearch, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip } from '@/components/status-chip';
+import { filterItemsByQuery } from '@/domain/item-search';
 import { formatCentavos } from '@/domain/money';
 import { InventoryItemDetailView } from '@/features/inventory/inventory-item-detail-view';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
@@ -48,6 +49,8 @@ export default function InventoryScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const visibleItems = useMemo(() => filterItemsByQuery(items, query), [items, query]);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -72,7 +75,8 @@ export default function InventoryScreen() {
 
   const list = (
     <FlatList
-      data={items}
+      data={visibleItems}
+      keyboardShouldPersistTaps="handled"
       extraData={`${selectedId}:${split}`}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => <InventoryRow item={item} selected={split && item.id === selectedId} onOpen={openItem} />}
@@ -86,13 +90,16 @@ export default function InventoryScreen() {
             actionLabel="Add item"
             onAction={() => router.push('/inventory/new')}
           />
+          <ListSearch query={query} onQueryChange={setQuery} placeholder="Search name, SKU or unit" />
           <Text style={text.meta}>Every quantity comes from the append-only movement log.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}
       ListEmptyComponent={loading
         ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
-        : <ListEmpty title="No inventory yet" body="Add the first item and record its opening stock." />}
+        : items.length > 0
+          ? <ListEmpty title="No matching items" body={`Nothing matches “${query.trim()}”. Check the spelling or search by SKU.`} />
+          : <ListEmpty title="No inventory yet" body="Add the first item and record its opening stock." />}
     />
   );
 

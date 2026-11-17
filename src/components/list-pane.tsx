@@ -27,6 +27,30 @@ export function ListTitle({ title, subtitle, actionLabel, onAction }: ListTitleP
   );
 }
 
+type ListSearchProps = {
+  query: string;
+  onQueryChange: (value: string) => void;
+  placeholder: string;
+};
+
+/** The search box at the top of a list pane. */
+export function ListSearch({ query, onQueryChange, placeholder }: ListSearchProps) {
+  return (
+    <TextInput
+      accessibilityLabel="Search"
+      autoCapitalize="none"
+      autoCorrect={false}
+      numberOfLines={1}
+      onChangeText={onQueryChange}
+      placeholder={placeholder}
+      placeholderTextColor={colors.secondaryLabel}
+      returnKeyType="search"
+      style={styles.search}
+      value={query}
+    />
+  );
+}
+
 type ListPaneHeaderProps = {
   title: string;
   newLabel: string;
@@ -65,18 +89,7 @@ export function ListPaneHeader(props: ListPaneHeaderProps) {
           <Text maxFontSizeMultiplier={1} style={styles.newButtonText}>+</Text>
         </Pressable>
       </View>
-      <TextInput
-        accessibilityLabel="Search"
-        autoCapitalize="none"
-        autoCorrect={false}
-        numberOfLines={1}
-        onChangeText={props.onQueryChange}
-        placeholder={props.searchPlaceholder}
-        placeholderTextColor={colors.secondaryLabel}
-        returnKeyType="search"
-        style={styles.search}
-        value={props.query}
-      />
+      <ListSearch query={props.query} onQueryChange={props.onQueryChange} placeholder={props.searchPlaceholder} />
       <View style={styles.toolbar}>
         <Pressable
           accessibilityRole="button"
