@@ -1,12 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListSearch, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip, sentenceCase } from '@/components/status-chip';
 import { formatDisplayDate } from '@/domain/calendar';
+import { filterPaymentsByQuery } from '@/domain/payment-search';
 import { formatCentavos } from '@/domain/money';
 import { PaymentDetailView } from '@/features/payments/payment-detail-view';
 import { listPayments } from '@/features/payments/payment-repository';
@@ -47,6 +48,8 @@ export default function PaymentsScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const visibleRows = useMemo(() => filterPaymentsByQuery(rows, query), [rows, query]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,7 +72,8 @@ export default function PaymentsScreen() {
 
   const list = (
     <FlatList
-      data={rows}
+      data={visibleRows}
+      keyboardShouldPersistTaps="handled"
       extraData={`${selectedId}:${split}`}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => <PaymentRow payment={item} selected={split && item.id === selectedId} onOpen={openPayment} />}
@@ -78,13 +82,16 @@ export default function PaymentsScreen() {
       ListHeaderComponent={(
         <View style={styles.header}>
           <ListTitle title="Payments" />
+          <ListSearch query={query} onQueryChange={setQuery} placeholder="Search PA, BS or CSR no., customer, reference" />
           <Text style={text.meta}>Payment acknowledgments, newest first. Record a payment from a finalized Billing Statement; corrections keep the original as void.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}
       ListEmptyComponent={loading
         ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
-        : <ListEmpty title="No payments yet" body="Open a finalized statement to record its required payment." />}
+        : rows.length > 0
+          ? <ListEmpty title="No matching payments" body={`Nothing matches “${query.trim()}”. Try a PA or BS number.`} />
+          : <ListEmpty title="No payments yet" body="Open a finalized statement to record its required payment." />}
     />
   );
 

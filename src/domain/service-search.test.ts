@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterServicesForSelection } from './service-search';
+import { filterServicesByQuery, filterServicesForSelection } from './service-search';
 
 const service = (name: string, extra: Partial<{ description: string; active: boolean }> = {}) => ({
   name, description: '', active: true, ...extra,
@@ -20,6 +20,11 @@ describe('service selection search', () => {
   it('matches name and description regardless of case or spacing', () => {
     expect(filterServicesForSelection(services, ' deep   CLEAN').map((entry) => entry.name)).toEqual(['Deep Cleaning']);
     expect(filterServicesForSelection(services, 'technician').map((entry) => entry.name)).toEqual(['Labor']);
+  });
+
+  it('keeps inactive services when searching the catalog list', () => {
+    expect(filterServicesByQuery(services, 'retired').map((entry) => entry.name)).toEqual(['Retired Inspection']);
+    expect(filterServicesByQuery(services, '')).toHaveLength(3);
   });
 
   it('never returns an inactive service', () => {

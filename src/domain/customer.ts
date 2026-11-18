@@ -16,15 +16,19 @@ type SearchableCustomer = {
   active: boolean;
 };
 
-/** Case-insensitive match on name, address, phone and email; inactive customers are never offered for new work. */
-export function filterCustomersForSelection<T extends SearchableCustomer>(customers: readonly T[], query: string): T[] {
+/** Case-insensitive match on name, address, phone and email; an empty search keeps every customer. */
+export function filterCustomersByQuery<T extends SearchableCustomer>(customers: readonly T[], query: string): T[] {
   const text = normalizeCustomerName(query).toLowerCase();
   const digits = text.replace(/\D/g, '');
   return customers.filter((customer) => {
-    if (!customer.active) return false;
     if (!text) return true;
     if ([customer.name, customer.address, customer.email].some((value) => value.toLowerCase().includes(text))) return true;
     // Phone numbers are stored as typed, so compare digits to ignore spaces and dashes.
     return digits.length >= 3 && customer.contactNumber.replace(/\D/g, '').includes(digits);
   });
+}
+
+/** The same search, but inactive customers are never offered for new work. */
+export function filterCustomersForSelection<T extends SearchableCustomer>(customers: readonly T[], query: string): T[] {
+  return filterCustomersByQuery(customers, query).filter((customer) => customer.active);
 }

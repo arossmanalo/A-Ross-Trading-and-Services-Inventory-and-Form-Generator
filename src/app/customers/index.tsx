@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListSearch, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip } from '@/components/status-chip';
+import { filterCustomersByQuery } from '@/domain/customer';
 import { CustomerDetailView } from '@/features/customers/customer-detail-view';
 import { listCustomers } from '@/features/customers/customer-repository';
 import type { CustomerSummary } from '@/features/customers/customer-types';
@@ -43,6 +44,8 @@ export default function CustomersScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const visibleCustomers = useMemo(() => filterCustomersByQuery(customers, query), [customers, query]);
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
@@ -65,7 +68,8 @@ export default function CustomersScreen() {
 
   const list = (
     <FlatList
-      data={customers}
+      data={visibleCustomers}
+      keyboardShouldPersistTaps="handled"
       extraData={`${selectedId}:${split}`}
       keyExtractor={(customer) => customer.id}
       renderItem={({ item }) => <CustomerRow customer={item} selected={split && item.id === selectedId} onOpen={openCustomer} />}
@@ -79,13 +83,16 @@ export default function CustomersScreen() {
             actionLabel="Add customer"
             onAction={() => router.push('/customers/new')}
           />
+          <ListSearch query={query} onQueryChange={setQuery} placeholder="Search name, address, phone or email" />
           <Text style={text.meta}>Every service report and billing statement starts from a customer profile.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}
       ListEmptyComponent={loading
         ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
-        : <ListEmpty title="No customers yet" body="Add the first customer before creating equipment or service work." />}
+        : customers.length > 0
+          ? <ListEmpty title="No matching customers" body={`Nothing matches “${query.trim()}”. Try part of the name or phone number.`} />
+          : <ListEmpty title="No customers yet" body="Add the first customer before creating equipment or service work." />}
     />
   );
 

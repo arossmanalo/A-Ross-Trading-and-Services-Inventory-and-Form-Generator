@@ -5,7 +5,9 @@ import { FlatList, KeyboardAvoidingView, Pressable, StyleSheet, Text, View } fro
 
 import { ActionButton } from '@/components/action-button';
 import { FormField } from '@/components/form-field';
+import { filterItemsByQuery } from '@/domain/item-search';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
+import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import {
@@ -26,6 +28,8 @@ export default function SetCustomerPriceScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const visibleItems = useMemo(() => filterItemsByQuery(items, query), [items, query]);
 
   useEffect(() => {
     if (!customerId) {
@@ -84,7 +88,7 @@ export default function SetCustomerPriceScreen() {
         <FlatList
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={styles.content}
-          data={items}
+          data={visibleItems}
           keyExtractor={getItemKey}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => (
@@ -102,6 +106,15 @@ export default function SetCustomerPriceScreen() {
               <Text selectable style={styles.headerText}>
                 Existing special prices are shown beside their base price.
               </Text>
+              <FormField
+                autoCapitalize="none"
+                autoCorrect={false}
+                label="Search supplies and products"
+                onChangeText={setQuery}
+                placeholder="Item name, SKU, or unit"
+                returnKeyType="search"
+                value={query}
+              />
               {selectedItemId ? (
                 <View style={styles.editor}>
                   <FormField
@@ -122,7 +135,9 @@ export default function SetCustomerPriceScreen() {
           ListEmptyComponent={
             !loading ? (
               <View style={styles.emptyState}>
-                <Text selectable style={styles.emptyTitle}>No active inventory items</Text>
+                <Text selectable style={styles.emptyTitle}>
+                  {items.length > 0 ? `No items match “${query.trim()}”` : 'No active inventory items'}
+                </Text>
               </View>
             ) : null
           }
@@ -156,7 +171,7 @@ function PriceItemRow({
       <View style={styles.itemCopy}>
         <Text selectable style={styles.itemName}>{item.name}</Text>
         <Text selectable style={styles.itemMeta}>
-          Base {formatCentavos(item.baseSellingPriceCentavos)}{currentPrice === undefined ? '' : ` · Current ${formatCentavos(currentPrice)}`}
+          {INVENTORY_LABELS[item.inventoryKind].singular} · Base {formatCentavos(item.baseSellingPriceCentavos)}{currentPrice === undefined ? '' : ` · Current ${formatCentavos(currentPrice)}`}
         </Text>
       </View>
       <Text style={styles.selectLabel}>{selected ? 'Selected' : 'Select'}</Text>

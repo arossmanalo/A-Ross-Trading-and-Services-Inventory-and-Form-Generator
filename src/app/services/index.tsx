@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ListEmpty, listRowStyles, ListTitle } from '@/components/list-pane';
+import { ListEmpty, listRowStyles, ListSearch, ListTitle } from '@/components/list-pane';
 import { SplitView, useSplitLayout } from '@/components/split-view';
 import { StatusChip } from '@/components/status-chip';
+import { filterServicesByQuery } from '@/domain/service-search';
 import { formatCentavos } from '@/domain/money';
 import { ServiceDetailView } from '@/features/services/service-detail-view';
 import { listServices } from '@/features/services/service-repository';
@@ -42,6 +43,8 @@ export default function ServicesScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const visibleServices = useMemo(() => filterServicesByQuery(services, query), [services, query]);
 
   const loadServices = useCallback(async () => {
     setLoading(true);
@@ -64,7 +67,8 @@ export default function ServicesScreen() {
 
   const list = (
     <FlatList
-      data={services}
+      data={visibleServices}
+      keyboardShouldPersistTaps="handled"
       extraData={`${selectedId}:${split}`}
       keyExtractor={(service) => service.id}
       renderItem={({ item }) => <ServiceRow service={item} selected={split && item.id === selectedId} onOpen={openService} />}
@@ -73,13 +77,16 @@ export default function ServicesScreen() {
       ListHeaderComponent={(
         <View style={styles.header}>
           <ListTitle title="Service catalog" actionLabel="Add service" onAction={() => router.push('/services/new')} />
+          <ListSearch query={query} onQueryChange={setQuery} placeholder="Search name or description" />
           <Text style={text.meta}>Labor and service rates. The rate can be changed per machine on each CSR.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}
       ListEmptyComponent={loading
         ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
-        : <ListEmpty title="No services yet" body="Add the labor and service fees you charge, with a default rate for each." />}
+        : services.length > 0
+          ? <ListEmpty title="No matching services" body={`Nothing matches “${query.trim()}”. Check the spelling.`} />
+          : <ListEmpty title="No services yet" body="Add the labor and service fees you charge, with a default rate for each." />}
     />
   );
 

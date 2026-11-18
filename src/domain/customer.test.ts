@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertOptionalEmail, filterCustomersForSelection, normalizeCustomerName } from './customer';
+import { assertOptionalEmail, filterCustomersByQuery, filterCustomersForSelection, normalizeCustomerName } from './customer';
 
 describe('customer rules', () => {
   it('normalizes surrounding and repeated whitespace for duplicate comparison', () => {
@@ -38,6 +38,11 @@ describe('customer rules', () => {
     it('matches phone numbers by digits and ignores a too-short digit fragment', () => {
       expect(filterCustomersForSelection(customers, '0917-123').map((entry) => entry.name)).toEqual(['C & C Laundry']);
       expect(filterCustomersForSelection(customers, '09')).toEqual([]);
+    });
+
+    it('keeps inactive customers when searching the customer list', () => {
+      expect(filterCustomersByQuery(customers, 'closed').map((entry) => entry.name)).toEqual(['Closed Shop']);
+      expect(filterCustomersByQuery(customers, '')).toHaveLength(3);
     });
   });
 });

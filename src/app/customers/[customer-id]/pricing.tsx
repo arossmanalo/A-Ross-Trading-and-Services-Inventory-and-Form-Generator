@@ -1,9 +1,10 @@
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { ListSearch } from '@/components/list-pane';
 import { formatCentavos } from '@/domain/money';
 import { getCustomerDetail } from '@/features/customers/customer-repository';
 import { listActiveCustomerPrices } from '@/features/pricing/pricing-repository';
@@ -30,6 +31,12 @@ export default function CustomerPricingScreen() {
   const [prices, setPrices] = useState<CustomerItemPriceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const visiblePrices = useMemo(() => {
+    const textQuery = query.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!textQuery) return prices;
+    return prices.filter((price) => [price.itemName, price.sku ?? ''].some((value) => value.toLowerCase().includes(textQuery)));
+  }, [prices, query]);
 
   const loadPrices = useCallback(async () => {
     if (!customerId) {
@@ -68,8 +75,9 @@ export default function CustomerPricingScreen() {
       <Stack.Screen options={{ title: `${customerName} prices` }} />
       <FlatList
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={prices.length === 0 ? styles.emptyContent : styles.content}
-        data={prices}
+        contentContainerStyle={visiblePrices.length === 0 ? styles.emptyContent : styles.content}
+        data={visiblePrices}
+        keyboardShouldPersistTaps="handled"
         keyExtractor={getPriceKey}
         renderItem={renderPrice}
         ItemSeparatorComponent={RowSeparator}
@@ -82,6 +90,7 @@ export default function CustomerPricingScreen() {
               These prices override base item prices on future document finalizations.
             </Text>
             <ActionButton compact style={styles.add} onPress={addPrice}>Set item price</ActionButton>
+            {prices.length > 0 ? <ListSearch query={query} onQueryChange={setQuery} placeholder="Search item name or SKU" /> : null}
             {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
           </View>
         }
@@ -90,8 +99,10 @@ export default function CustomerPricingScreen() {
             <ActivityIndicator color={colors.brandBlue} size="large" />
           ) : (
             <View style={styles.emptyState}>
-              <Text selectable style={styles.emptyTitle}>No special prices</Text>
-              <Text selectable style={styles.emptyBody}>Base inventory prices apply to this customer.</Text>
+              <Text selectable style={styles.emptyTitle}>{prices.length > 0 ? 'No matching prices' : 'No special prices'}</Text>
+              <Text selectable style={styles.emptyBody}>
+                {prices.length > 0 ? `Nothing matches “${query.trim()}”.` : 'Base inventory prices apply to this customer.'}
+              </Text>
             </View>
           )
         }
