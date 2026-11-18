@@ -7,6 +7,7 @@ import { ActionButton } from '@/components/action-button';
 import { RecordHeader } from '@/components/record-layout';
 import { StatusChip, sentenceCase } from '@/components/status-chip';
 import { formatCentavos } from '@/domain/money';
+import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
 import { getInventoryItemDetail, listInventoryMovements, setInventoryItemActive } from '@/features/inventory/inventory-repository';
 import type { InventoryItemDetail, InventoryMovementSummary } from '@/features/inventory/inventory-types';
 import { colors } from '@/theme/colors';
@@ -114,7 +115,7 @@ export function InventoryItemDetailView({ itemId, embedded = false, onChanged }:
             <RecordHeader
               title={item.name}
               chips={<StatusChip label={item.active ? 'Active' : 'Inactive'} tone={item.active ? 'final' : 'neutral'} />}
-              subtitle={[item.sku ? `SKU ${item.sku}` : 'No SKU', `unit ${item.unitLabel}`, item.description].filter(Boolean).join(' · ')}
+              subtitle={[INVENTORY_LABELS[item.inventoryKind].singular, item.sku ? `SKU ${item.sku}` : 'No SKU', `unit ${item.unitLabel}`, item.description].filter(Boolean).join(' · ')}
               actions={(
                 <>
                   <ActionButton compact variant={item.active ? 'danger' : 'secondary'} onPress={confirmActiveToggle}>

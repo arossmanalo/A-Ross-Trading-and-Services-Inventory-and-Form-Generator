@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SCHEMA_V1 } from '@/db/schema';
+import { schemaSql } from '@/test-utils/schema';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import {
   filterMovementReport,
@@ -17,6 +17,7 @@ import {
 
 const item: InventoryItemSummary = {
   id: 'a',
+  inventoryKind: 'supply',
   name: 'Bearing',
   sku: 'BR-1',
   unitLabel: 'pc',
@@ -34,6 +35,14 @@ describe('stock reporting', () => {
     expect(filterStockReport([item], 'missing', 'all')).toEqual([]);
   });
 
+  it('keeps supplies and products apart when an inventory is chosen', () => {
+    const product = { ...item, id: 'p', inventoryKind: 'product' as const };
+    expect(filterStockReport([item, product], '', 'all', 'product')).toEqual([product]);
+    expect(filterStockReport([item, product], '', 'all', 'supply')).toEqual([item]);
+    expect(filterStockReport([item, product], '', 'all')).toEqual([item, product]);
+    expect(stockReportCsv([product])).toContain('"150.25","Products"');
+  });
+
   it('exports integer quantities, PHP prices, and protected spreadsheet cells', () => {
     const csv = stockReportCsv([{ ...item, name: '=malicious', active: false }]);
     expect(csv).toContain('"\'=malicious"');
@@ -47,14 +56,15 @@ describe('movement reporting', () => {
 
   beforeEach(() => {
     raw = new DatabaseSync(':memory:');
-    raw.exec(SCHEMA_V1);
+    raw.exec(schemaSql());
     db = {
       getAllAsync: async <T>(sql: string, ...params: Array<string | number | null>) => raw.prepare(sql).all(...params) as T[],
     } as unknown as SQLiteDatabase;
 
     raw.exec("INSERT INTO customers(id,name,created_at,updated_at) VALUES('customer','Laundry','now','now');");
     raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','customer','Washer','now','now');");
-    raw.exec("INSERT INTO items(id,name,sku,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Liquid Detergent','LD-1','carboy',120000,1,'now','now'),('other','Fabcon','FB-1','gallon',97500,1,'now','now');");
+    raw.exec("INSERT INTO items(id,name,sku,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Liquid Detergent','LD-1','carboy',120000,1,'now','now');");
+    raw.exec("INSERT INTO items(id,inventory_kind,name,sku,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('other','product','Fabcon','FB-1','gallon',97500,1,'now','now');");
     raw.exec("INSERT INTO service_reports(id,csr_number,customer_id,equipment_id,document_state,service_outcome,business_date,created_at) VALUES('csr','CSR-000001','customer','equipment','finalized','completed','2026-09-04','now');");
     raw.exec("INSERT INTO billing_statements(id,bs_number,customer_id,document_state,business_date,created_at) VALUES('bs','BS-000001','customer','finalized','2026-09-05','now');");
     const movement = raw.prepare('INSERT INTO inventory_movements(id,item_id,movement_type,quantity_delta_integer,service_report_id,billing_statement_id,description,created_at) VALUES(?,?,?,?,?,?,?,?)');
@@ -71,6 +81,13 @@ describe('movement reporting', () => {
       { id: 'sale', itemName: 'Liquid Detergent', movementType: 'sale', quantityDelta: -2, serviceReportNumber: 'CSR-000001', billingStatementNumber: 'BS-000001' },
     ]);
     expect(await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30' })).toHaveLength(3);
+  });
+
+  it('limits movements to supplies or products', async () => {
+    const products = await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30', inventoryKind: 'product' });
+    expect(products.map(row => row.id)).toEqual(['other-item']);
+    const supplies = await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30', inventoryKind: 'supply' });
+    expect(supplies.map(row => row.id).sort()).toEqual(['nonbillable', 'sale']);
   });
 
   it('searches loaded rows and exports spreadsheet-safe movement CSV', async () => {

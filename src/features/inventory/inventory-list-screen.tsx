@@ -9,8 +9,9 @@ import { StatusChip } from '@/components/status-chip';
 import { filterItemsByQuery } from '@/domain/item-search';
 import { formatCentavos } from '@/domain/money';
 import { InventoryItemDetailView } from '@/features/inventory/inventory-item-detail-view';
+import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
-import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
+import type { InventoryItemSummary, InventoryKind } from '@/features/inventory/inventory-types';
 import { colors } from '@/theme/colors';
 import { fontSize, spacing, text } from '@/theme/typography';
 
@@ -42,7 +43,14 @@ const InventoryRow = memo(function InventoryRow({ item, selected, onOpen }: Inve
   );
 });
 
-export default function InventoryScreen() {
+const INTRO: Record<InventoryKind, string> = {
+  supply: 'Parts and materials used on repairs. CSRs draw from this list.',
+  product: 'Items sold to customers on deliveries, quotations and statements.',
+};
+
+/** Supplies and Products are two separate lists over the same item and movement tables. */
+export function InventoryListScreen({ inventoryKind }: { inventoryKind: InventoryKind }) {
+  const labels = INVENTORY_LABELS[inventoryKind];
   const db = useSQLiteContext();
   const split = useSplitLayout();
   const [items, setItems] = useState<InventoryItemSummary[]>([]);
@@ -56,13 +64,13 @@ export default function InventoryScreen() {
     setLoading(true);
     setError(null);
     try {
-      setItems(await listInventoryItems(db));
+      setItems((await listInventoryItems(db)).filter((item) => item.inventoryKind === inventoryKind));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load inventory.');
     } finally {
       setLoading(false);
     }
-  }, [db]);
+  }, [db, inventoryKind]);
 
   useFocusEffect(useCallback(() => { void loadItems(); }, [loadItems]));
 
@@ -85,13 +93,13 @@ export default function InventoryScreen() {
       ListHeaderComponent={(
         <View style={styles.header}>
           <ListTitle
-            title="Inventory"
+            title={labels.plural}
             subtitle={`${items.length} item${items.length === 1 ? '' : 's'}${lowCount ? ` · ${lowCount} low` : ''}`}
-            actionLabel="Add item"
-            onAction={() => router.push('/inventory/new')}
+            actionLabel={`Add ${labels.singular.toLowerCase()}`}
+            onAction={() => router.push({ pathname: '/inventory/new', params: { kind: inventoryKind } })}
           />
           <ListSearch query={query} onQueryChange={setQuery} placeholder="Search name, SKU or unit" />
-          <Text style={text.meta}>Every quantity comes from the append-only movement log.</Text>
+          <Text style={text.meta}>{INTRO[inventoryKind]} Every quantity comes from the append-only movement log.</Text>
           {error ? <Text style={text.error}>{error}</Text> : null}
         </View>
       )}
@@ -99,7 +107,12 @@ export default function InventoryScreen() {
         ? <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 32 }} />
         : items.length > 0
           ? <ListEmpty title="No matching items" body={`Nothing matches “${query.trim()}”. Check the spelling or search by SKU.`} />
-          : <ListEmpty title="No inventory yet" body="Add the first item and record its opening stock." />}
+          : <ListEmpty
+              title={`No ${labels.plural.toLowerCase()} yet`}
+              body={inventoryKind === 'product'
+                ? 'Add a product, or move an existing item here from its edit screen.'
+                : 'Add the first supply and record its opening stock.'}
+            />}
     />
   );
 

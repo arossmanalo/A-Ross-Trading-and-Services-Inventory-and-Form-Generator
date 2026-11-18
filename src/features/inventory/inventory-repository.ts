@@ -7,6 +7,7 @@ import type {
   CreateInventoryItemInput,
   InventoryItemDetail,
   InventoryItemSummary,
+  InventoryKind,
   InventoryMovementInput,
   InventoryMovementSummary,
   UpdateInventoryItemInput,
@@ -14,6 +15,7 @@ import type {
 
 type InventoryItemRow = {
   id: string;
+  inventory_kind: InventoryKind;
   name: string;
   sku: string | null;
   unit_label: string;
@@ -55,6 +57,7 @@ export async function listInventoryItems(db: SQLiteDatabase): Promise<InventoryI
   const rows = await db.getAllAsync<InventoryItemRow>(
     `SELECT
        i.id,
+       i.inventory_kind,
        i.name,
        i.sku,
        i.unit_label,
@@ -88,6 +91,7 @@ export async function getInventoryItemDetail(
   const row = await db.getFirstAsync<InventoryItemDetailRow>(
     `SELECT
        i.id,
+       i.inventory_kind,
        i.name,
        i.sku,
        i.description,
@@ -149,6 +153,7 @@ export async function createInventoryItemWithOpeningStock(
 
   if (!name) throw new Error('Item name is required.');
   if (!unitLabel) throw new Error('Unit label is required.');
+  assertInventoryKind(input.inventoryKind);
   assertNonNegativeInteger(input.baseSellingPriceCentavos, 'Selling price');
   assertNonNegativeInteger(input.lowStockThreshold, 'Low-stock threshold');
   assertNonNegativeInteger(input.openingStock, 'Opening stock');
@@ -176,10 +181,11 @@ export async function createInventoryItemWithOpeningStock(
 
     await tx.runAsync(
       `INSERT INTO items
-        (id, name, sku, description, unit_label, base_selling_price_centavos,
+        (id, inventory_kind, name, sku, description, unit_label, base_selling_price_centavos,
          low_stock_threshold, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       itemId,
+      input.inventoryKind,
       name,
       sku,
       description,
@@ -207,7 +213,7 @@ export async function createInventoryItemWithOpeningStock(
       eventType: usedDuplicateSkuOverride ? 'item.created_duplicate_sku_override' : 'item.created',
       entityType: 'item',
       entityId: itemId,
-      details: { sku, openingStock: input.openingStock },
+      details: { sku, inventoryKind: input.inventoryKind, openingStock: input.openingStock },
       createdAt: now,
     });
     await incrementDatabaseRevision(tx);
@@ -227,6 +233,7 @@ export async function updateInventoryItem(
   const description = input.description?.trim() ?? '';
   if (!name) throw new Error('Item name is required.');
   if (!unitLabel) throw new Error('Unit label is required.');
+  assertInventoryKind(input.inventoryKind);
   assertNonNegativeInteger(input.baseSellingPriceCentavos, 'Selling price');
   assertNonNegativeInteger(input.lowStockThreshold, 'Low-stock threshold');
 
@@ -245,9 +252,10 @@ export async function updateInventoryItem(
       usedDuplicateSkuOverride = Boolean(duplicate && input.allowDuplicateSku);
     }
     await tx.runAsync(
-      `UPDATE items SET name = ?, sku = ?, description = ?, unit_label = ?,
+      `UPDATE items SET inventory_kind = ?, name = ?, sku = ?, description = ?, unit_label = ?,
        base_selling_price_centavos = ?, low_stock_threshold = ?, updated_at = ?
        WHERE id = ?`,
+      input.inventoryKind,
       name,
       sku,
       description,
@@ -261,7 +269,7 @@ export async function updateInventoryItem(
       eventType: usedDuplicateSkuOverride ? 'item.updated_duplicate_sku_override' : 'item.updated',
       entityType: 'item',
       entityId: itemId,
-      details: { name, sku },
+      details: { name, sku, inventoryKind: input.inventoryKind },
       createdAt: now,
     });
     await incrementDatabaseRevision(tx);
@@ -362,6 +370,7 @@ async function recordManualMovement(
 function mapInventoryItemRow(row: InventoryItemRow): InventoryItemSummary {
   return {
     id: row.id,
+    inventoryKind: row.inventory_kind,
     name: row.name,
     sku: row.sku,
     unitLabel: row.unit_label,
@@ -370,6 +379,10 @@ function mapInventoryItemRow(row: InventoryItemRow): InventoryItemSummary {
     currentStock: row.current_stock,
     active: row.active === 1,
   };
+}
+
+function assertInventoryKind(kind: InventoryKind): void {
+  if (kind !== 'supply' && kind !== 'product') throw new Error('Choose Supplies or Products for this item.');
 }
 
 function assertNonNegativeInteger(value: number, label: string): void {

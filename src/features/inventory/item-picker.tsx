@@ -7,13 +7,16 @@ import { FormField } from '@/components/form-field';
 import { filterItemsForSelection } from '@/domain/item-search';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
 import { createInventoryItemWithOpeningStock, DuplicateSkuError } from '@/features/inventory/inventory-repository';
-import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
+import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
+import type { InventoryItemSummary, InventoryKind } from '@/features/inventory/inventory-types';
 import { colors } from '@/theme/colors';
 
 /** Results beyond this are hidden so a large catalog never floods the screen. */
 const MAX_VISIBLE_RESULTS = 100;
 
 type ItemPickerProps = {
+  /** Only this inventory is listed, and quick add saves into it. */
+  inventoryKind: InventoryKind;
   items: InventoryItemSummary[];
   selectedId: string;
   onSelect: (itemId: string) => void;
@@ -21,7 +24,8 @@ type ItemPickerProps = {
   onCreated: (itemId: string) => Promise<void> | void;
 };
 
-export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPickerProps) {
+export function ItemPicker({ inventoryKind, items, selectedId, onSelect, onCreated }: ItemPickerProps) {
+  const labels = INVENTORY_LABELS[inventoryKind];
   const db = useSQLiteContext();
   const [query, setQuery] = useState('');
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -34,7 +38,10 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const matches = useMemo(() => filterItemsForSelection(items, query), [items, query]);
+  const matches = useMemo(
+    () => filterItemsForSelection(items.filter((item) => item.inventoryKind === inventoryKind), query),
+    [inventoryKind, items, query],
+  );
   const visible = matches.slice(0, MAX_VISIBLE_RESULTS);
   const selected = items.find((item) => item.id === selectedId);
 
@@ -58,6 +65,7 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
       if (!/^\d+$/.test(openingStock.trim())) throw new Error('Opening stock must be a non-negative whole number.');
       const quantity = Number.parseInt(openingStock, 10);
       const itemId = await createInventoryItemWithOpeningStock(db, {
+        inventoryKind,
         name,
         sku,
         unitLabel,
@@ -82,7 +90,7 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
     } finally {
       setSaving(false);
     }
-  }, [db, name, onCreated, openingStock, sellingPrice, sku, unitLabel]);
+  }, [db, inventoryKind, name, onCreated, openingStock, sellingPrice, sku, unitLabel]);
 
   if (selected) {
     return (
@@ -103,7 +111,7 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
       <FormField
         autoCapitalize="none"
         autoCorrect={false}
-        label="Search inventory"
+        label={`Search ${labels.plural.toLowerCase()}`}
         onChangeText={setQuery}
         placeholder="Item name, SKU, or unit"
         returnKeyType="search"
@@ -111,7 +119,7 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
       />
       <Text selectable style={styles.count}>
         {matches.length === 0
-          ? 'No matching items'
+          ? `No matching ${labels.plural.toLowerCase()}`
           : matches.length > MAX_VISIBLE_RESULTS
             ? `Showing the first ${MAX_VISIBLE_RESULTS} of ${matches.length} items. Type more to narrow the list.`
             : `${matches.length} item${matches.length === 1 ? '' : 's'}`}
@@ -138,7 +146,7 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
 
       {quickAddOpen ? (
         <View style={styles.quickAdd}>
-          <Text selectable style={styles.quickAddTitle}>Quick add inventory item</Text>
+          <Text selectable style={styles.quickAddTitle}>Quick add {labels.singular.toLowerCase()}</Text>
           <FormField
             autoCapitalize="words"
             label="Item name"
@@ -181,7 +189,9 @@ export function ItemPicker({ items, selectedId, onSelect, onCreated }: ItemPicke
         </View>
       ) : (
         <ActionButton variant="secondary" onPress={openQuickAdd}>
-          {query.trim() && matches.length === 0 ? `Add “${query.trim()}” as a new item` : 'Quick add a new item'}
+          {query.trim() && matches.length === 0
+            ? `Add “${query.trim()}” as a new ${labels.singular.toLowerCase()}`
+            : `Quick add a new ${labels.singular.toLowerCase()}`}
         </ActionButton>
       )}
     </View>

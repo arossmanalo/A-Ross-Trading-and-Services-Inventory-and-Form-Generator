@@ -25,7 +25,9 @@ import {
   filterMovementReport,
   getInventoryMovementReport,
   movementReportCsv,
+  INVENTORY_FILTER_OPTIONS,
   movementTypeLabel,
+  type InventoryKindFilter,
   type InventoryMovementReportRow,
   type MovementTypeFilter,
 } from '@/features/reports/inventory-report';
@@ -44,6 +46,7 @@ export default function MovementReportScreen() {
   const [itemId, setItemId] = useState('');
   const [itemQuery, setItemQuery] = useState('');
   const [movementType, setMovementType] = useState<MovementTypeFilter>('all');
+  const [inventoryKind, setInventoryKind] = useState<InventoryKindFilter>('all');
   const [rows, setRows] = useState<InventoryMovementReportRow[]>([]);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -75,13 +78,13 @@ export default function MovementReportScreen() {
     setBusy(true);
     setError(null);
     try {
-      setRows(await getInventoryMovementReport(db, { from, to, itemId, movementType }));
+      setRows(await getInventoryMovementReport(db, { from, to, itemId, movementType, inventoryKind }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load movement report.');
     } finally {
       setBusy(false);
     }
-  }, [db, from, itemId, movementType, to]);
+  }, [db, from, inventoryKind, itemId, movementType, to]);
 
   const matchingItems = itemQuery.trim()
     ? items.filter(item => [item.name, item.sku ?? '', item.unitLabel].some(value => value.toLowerCase().includes(itemQuery.trim().toLowerCase()))).slice(0, 12)
@@ -141,6 +144,13 @@ export default function MovementReportScreen() {
                   setItemId(id);
                   setItemQuery('');
                 }}
+                disabled={busy}
+              />
+              <ChoiceChips
+                label="Inventory"
+                options={INVENTORY_FILTER_OPTIONS}
+                value={inventoryKind}
+                onChange={setInventoryKind}
                 disabled={busy}
               />
               <ChoiceChips

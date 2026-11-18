@@ -1,5 +1,9 @@
+/** Supplies are used up on repairs (CSRs); products are sold on deliveries, quotations and statements. */
+export type InventoryKind = 'supply' | 'product';
+
 export type InventoryItemSummary = {
   id: string;
+  inventoryKind: InventoryKind;
   name: string;
   sku: string | null;
   unitLabel: string;
@@ -24,6 +28,7 @@ export type InventoryMovementSummary = {
 };
 
 export type CreateInventoryItemInput = {
+  inventoryKind: InventoryKind;
   name: string;
   sku?: string;
   description?: string;
@@ -36,6 +41,7 @@ export type CreateInventoryItemInput = {
 };
 
 export type UpdateInventoryItemInput = {
+  inventoryKind: InventoryKind;
   name: string;
   sku?: string;
   description?: string;

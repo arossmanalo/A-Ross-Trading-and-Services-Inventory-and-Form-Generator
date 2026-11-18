@@ -85,7 +85,7 @@ export default function NewReportItemUsageScreen() {
         Draft selection does not deduct stock. Availability is checked again at finalization.
       </Notice>
       <SheetSection title="Item">
-        <ItemPicker items={items} selectedId={selectedItemId} onSelect={selectItem} onCreated={handleItemCreated} />
+        <ItemPicker inventoryKind="supply" items={items} selectedId={selectedItemId} onSelect={selectItem} onCreated={handleItemCreated} />
       </SheetSection>
       {selectedItemId ? (
         <SheetSection title="Usage">

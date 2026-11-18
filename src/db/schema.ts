@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 13;
+export const DATABASE_VERSION = 14;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -702,4 +702,13 @@ ALTER TABLE service_report_item_usage ADD COLUMN control_number TEXT;
 CREATE INDEX IF NOT EXISTS service_report_usage_control_number
   ON service_report_item_usage(control_number)
   WHERE control_number IS NOT NULL;
+`;
+
+/**
+ * Splits inventory in two: supplies used on repairs and products sold to
+ * customers. Every item that existed before starts as a supply.
+ */
+export const SCHEMA_V14 = `
+ALTER TABLE items ADD COLUMN inventory_kind TEXT NOT NULL DEFAULT 'supply'
+  CHECK (inventory_kind IN ('supply', 'product'));
 `;

@@ -99,7 +99,7 @@ export default function NewQuotationChargeScreen() {
 
       {mode === 'item' ? (
         <>
-          <ItemPicker items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
+          <ItemPicker inventoryKind="product" items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
           {selectedItem ? (
             <SheetSection
               title={selectedItem.name}

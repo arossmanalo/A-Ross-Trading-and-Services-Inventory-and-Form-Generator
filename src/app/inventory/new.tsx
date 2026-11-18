@@ -1,9 +1,10 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { ChoiceChips } from '@/components/choice-chips';
 import { FormField } from '@/components/form-field';
 import { Notice } from '@/components/notice';
 import { SheetBody, SheetSection } from '@/components/sheet-body';
@@ -12,10 +13,14 @@ import {
   createInventoryItemWithOpeningStock,
   DuplicateSkuError,
 } from '@/features/inventory/inventory-repository';
+import { INVENTORY_KIND_OPTIONS, parseInventoryKind } from '@/features/inventory/inventory-kind';
+import type { InventoryKind } from '@/features/inventory/inventory-types';
 import { spacing } from '@/theme/typography';
 
 export default function NewInventoryItemScreen() {
+  const { kind } = useLocalSearchParams<{ kind?: string }>();
   const db = useSQLiteContext();
+  const [inventoryKind, setInventoryKind] = useState<InventoryKind>(parseInventoryKind(kind) ?? 'supply');
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [unitLabel, setUnitLabel] = useState('pc');
@@ -34,6 +39,7 @@ export default function NewInventoryItemScreen() {
     try {
       const parsedOpeningStock = parseWholeNumber(openingStock, 'Opening stock');
       await createInventoryItemWithOpeningStock(db, {
+        inventoryKind,
         name,
         sku,
         description,
@@ -55,7 +61,7 @@ export default function NewInventoryItemScreen() {
     } finally {
       setSaving(false);
     }
-  }, [db, description, lowStockThreshold, name, openingDescription, openingStock, sellingPrice, sku, unitLabel]);
+  }, [db, description, inventoryKind, lowStockThreshold, name, openingDescription, openingStock, sellingPrice, sku, unitLabel]);
 
   return (
     <SheetBody
@@ -81,6 +87,7 @@ export default function NewInventoryItemScreen() {
       </Notice>
 
       <SheetSection title="Item">
+        <ChoiceChips label="Inventory" options={INVENTORY_KIND_OPTIONS} value={inventoryKind} onChange={setInventoryKind} />
         <FormField
           autoCapitalize="words"
           label="Item name"

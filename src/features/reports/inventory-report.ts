@@ -1,9 +1,17 @@
-import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
+import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
+import type { InventoryItemSummary, InventoryKind } from '@/features/inventory/inventory-types';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export type StockFilter = 'all' | 'active' | 'inactive' | 'low';
+export type InventoryKindFilter = 'all' | InventoryKind;
 export type MovementTypeFilter = 'all' | 'restock' | 'sale' | 'nonbillable_usage' | 'consumption' | 'reversal';
-export type MovementReportFilter = { from: string; to: string; itemId?: string; movementType?: MovementTypeFilter };
+export type MovementReportFilter = {
+  from: string;
+  to: string;
+  itemId?: string;
+  movementType?: MovementTypeFilter;
+  inventoryKind?: InventoryKindFilter;
+};
 export type InventoryMovementReportRow = {
   id: string;
   itemId: string;
@@ -36,9 +44,14 @@ type MovementReportSqlRow = {
   created_at: string;
 };
 
-export function filterStockReport(items: InventoryItemSummary[], query: string, status: StockFilter): InventoryItemSummary[] {
+export function filterStockReport(
+  items: InventoryItemSummary[],
+  query: string,
+  status: StockFilter,
+  inventoryKind: InventoryKindFilter = 'all',
+): InventoryItemSummary[] {
   const text=query.trim().toLowerCase();
-  return items.filter(item => (!text || [item.name,item.sku??'',item.unitLabel].some(value=>value.toLowerCase().includes(text))) &&
+  return items.filter(item => (inventoryKind === 'all' || item.inventoryKind === inventoryKind) && (!text || [item.name,item.sku??'',item.unitLabel].some(value=>value.toLowerCase().includes(text))) &&
     (status==='all' || (status==='inactive' ? !item.active : item.active && (status!=='low' || item.currentStock<=item.lowStockThreshold))));
 }
 
@@ -52,6 +65,7 @@ export function validateMovementReportFilter(filter: MovementReportFilter): void
   if (filter.from > filter.to) throw new Error('Start date must be on or before end date.');
   const type = filter.movementType ?? 'all';
   if (!['all','restock','sale','nonbillable_usage','consumption','reversal'].includes(type)) throw new Error('Choose a valid movement type.');
+  if (!['all', 'supply', 'product'].includes(filter.inventoryKind ?? 'all')) throw new Error('Choose Supplies, Products or All.');
 }
 
 export async function getInventoryMovementReport(db: SQLiteDatabase, filter: MovementReportFilter): Promise<InventoryMovementReportRow[]> {
@@ -78,6 +92,7 @@ export async function getInventoryMovementReport(db: SQLiteDatabase, filter: Mov
      WHERE substr(m.created_at, 1, 10) BETWEEN ? AND ?
        AND (? IS NULL OR m.item_id = ?)
        AND (? = 'all' OR m.movement_type = ?)
+       AND (? = 'all' OR i.inventory_kind = ?)
      ORDER BY m.created_at DESC, m.rowid DESC`,
     filter.from,
     filter.to,
@@ -85,6 +100,8 @@ export async function getInventoryMovementReport(db: SQLiteDatabase, filter: Mov
     filter.itemId || null,
     filter.movementType ?? 'all',
     filter.movementType ?? 'all',
+    filter.inventoryKind ?? 'all',
+    filter.inventoryKind ?? 'all',
   );
   return rows.map(row => ({
     id: row.id,
@@ -104,8 +121,8 @@ export async function getInventoryMovementReport(db: SQLiteDatabase, filter: Mov
 }
 
 export function stockReportCsv(items: InventoryItemSummary[]): string {
-  const rows: Array<Array<string|number>> = [['Item','SKU','Unit','Current stock','Low-stock threshold','Status','Low stock','Base selling price PHP'],
-    ...items.map(item=>[item.name,item.sku??'',item.unitLabel,item.currentStock,item.lowStockThreshold,item.active?'Active':'Inactive',item.active&&item.currentStock<=item.lowStockThreshold?'Yes':'No',(item.baseSellingPriceCentavos/100).toFixed(2)])];
+  const rows: Array<Array<string|number>> = [['Item','SKU','Unit','Current stock','Low-stock threshold','Status','Low stock','Base selling price PHP','Inventory'],
+    ...items.map(item=>[item.name,item.sku??'',item.unitLabel,item.currentStock,item.lowStockThreshold,item.active?'Active':'Inactive',item.active&&item.currentStock<=item.lowStockThreshold?'Yes':'No',(item.baseSellingPriceCentavos/100).toFixed(2),INVENTORY_LABELS[item.inventoryKind].plural])];
   return csv(rows);
 }
 
@@ -151,3 +168,9 @@ function csv(rows: Array<Array<string|number>>): string {
     return '"'+cell.replaceAll('"','""')+'"';
   }).join(',')).join('\r\n');
 }
+
+export const INVENTORY_FILTER_OPTIONS: ReadonlyArray<{ value: InventoryKindFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'supply', label: 'Supplies' },
+  { value: 'product', label: 'Products' },
+];

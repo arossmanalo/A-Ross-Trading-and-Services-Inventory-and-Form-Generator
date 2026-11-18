@@ -44,12 +44,21 @@ describe('database migrations', () => {
 
   afterEach(() => raw.close());
 
-  it('migrates a new database through version 13 with default metadata', async () => {
+  it('migrates a new database through version 14 with default metadata', async () => {
     await migrateDatabase(db);
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 13 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
     expect(raw.prepare("SELECT value FROM app_meta WHERE key='database_revision'").get()).toEqual({ value: '0' });
     expect(raw.prepare('SELECT COUNT(*) AS count FROM sequences').get()).toEqual({ count: 5 });
     expect(raw.prepare("SELECT business_name,low_stock_notifications_enabled FROM settings WHERE id='business'").get()).toEqual({ business_name: 'A.Ross Trading and Services', low_stock_notifications_enabled: 1 });
+  });
+
+  it('files every existing item under Supplies and allows only supplies or products', async () => {
+    raw.exec(`${SCHEMA_V1} PRAGMA user_version = 1;`);
+    raw.exec("INSERT INTO items(id,name,created_at,updated_at) VALUES('old','Drain valve','now','now');");
+    await migrateDatabase(db);
+    expect(raw.prepare("SELECT inventory_kind FROM items WHERE id='old'").get()).toEqual({ inventory_kind: 'supply' });
+    raw.exec("INSERT INTO items(id,inventory_kind,name,created_at,updated_at) VALUES('new','product','Detergent','now','now');");
+    expect(() => raw.exec("INSERT INTO items(id,inventory_kind,name,created_at,updated_at) VALUES('bad','tools','Wrench','now','now');")).toThrow();
   });
 
   it('is idempotent when the app opens an already migrated database', async () => {
@@ -62,7 +71,7 @@ describe('database migrations', () => {
   it('upgrades a version 1 database with the later snapshot and signature schema', async () => {
     raw.exec(`${SCHEMA_V1} PRAGMA user_version = 1; INSERT INTO app_meta(key,value) VALUES('database_revision','2'); INSERT INTO sequences(name,high_water_mark) VALUES('CSR',1),('BS',2),('PA',3);`);
     await migrateDatabase(db);
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 13 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
     const paymentColumns = raw.prepare("PRAGMA table_info('payments')").all() as Array<{ name: string }>;
     expect(paymentColumns.map(column => column.name)).toEqual(expect.arrayContaining(['payment_kind', 'pdf_state', 'idempotency_key']));
     expect(raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='signature_captures'").get()).toEqual({ name: 'signature_captures' });

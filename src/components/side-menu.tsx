@@ -28,7 +28,8 @@ const GROUPS: MenuGroup[] = [
     label: 'Records',
     items: [
       { label: 'Customers', short: 'Clients', href: '/customers', section: 'customers' },
-      { label: 'Inventory', short: 'Stock', href: '/inventory', section: 'inventory' },
+      { label: 'Supplies', short: 'Supplies', href: '/supplies', section: 'supplies' },
+      { label: 'Products', short: 'Products', href: '/products', section: 'products' },
       { label: 'Service catalog', short: 'Services', href: '/services', section: 'services' },
     ],
   },

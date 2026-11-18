@@ -70,7 +70,7 @@ export default function NewDeliveryItemScreen() {
       }
     >
       <SheetSection title="Item">
-        <ItemPicker items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
+        <ItemPicker inventoryKind="product" items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
       </SheetSection>
       {selected ? (
         <SheetSection

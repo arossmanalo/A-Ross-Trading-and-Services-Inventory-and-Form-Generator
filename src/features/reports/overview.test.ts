@@ -30,7 +30,7 @@ function statement(
 }
 
 function item(id: string, currentStock: number, lowStockThreshold: number, active = true): InventoryItemSummary {
-  return { id, name: `Item ${id}`, sku: null, unitLabel: 'pc', baseSellingPriceCentavos: 100, lowStockThreshold, currentStock, active };
+  return { id, inventoryKind: 'supply', name: `Item ${id}`, sku: null, unitLabel: 'pc', baseSellingPriceCentavos: 100, lowStockThreshold, currentStock, active };
 }
 
 const quotation: QuotationListItem = {

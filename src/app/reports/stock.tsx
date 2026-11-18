@@ -17,7 +17,14 @@ import {
 } from '@/components/report-layout';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
-import { filterStockReport, stockReportCsv, type StockFilter } from '@/features/reports/inventory-report';
+import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
+import {
+  filterStockReport,
+  INVENTORY_FILTER_OPTIONS,
+  stockReportCsv,
+  type InventoryKindFilter,
+  type StockFilter,
+} from '@/features/reports/inventory-report';
 import { shareCsvReport } from '@/features/reports/report-export';
 
 const STATUS_OPTIONS: Array<{ value: StockFilter; label: string }> = [
@@ -32,6 +39,7 @@ export default function StockReportScreen() {
   const [items, setItems] = useState<InventoryItemSummary[]>([]);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StockFilter>('all');
+  const [inventoryKind, setInventoryKind] = useState<InventoryKindFilter>('all');
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +58,7 @@ export default function StockReportScreen() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  const rows = filterStockReport(items, query, status);
+  const rows = filterStockReport(items, query, status, inventoryKind);
 
   return (
     <ReportFrame>
@@ -84,6 +92,7 @@ export default function StockReportScreen() {
               )}
             >
               <FormField label="Find item, SKU, or unit" value={query} onChangeText={setQuery} />
+              <ChoiceChips label="Inventory" options={INVENTORY_FILTER_OPTIONS} value={inventoryKind} onChange={setInventoryKind} />
               <ChoiceChips label="Show" options={STATUS_OPTIONS} value={status} onChange={setStatus} />
             </ReportControls>
             <ReportSummary>
@@ -99,7 +108,7 @@ export default function StockReportScreen() {
               title={`${item.name}${item.active ? '' : ' · Inactive'}`}
               figure={`${item.currentStock} ${item.unitLabel}`}
               figureTone={low ? 'negative' : undefined}
-              meta={[`${item.sku ?? 'No SKU'} · Threshold ${item.lowStockThreshold}`]}
+              meta={[`${INVENTORY_LABELS[item.inventoryKind].singular} · ${item.sku ?? 'No SKU'} · Threshold ${item.lowStockThreshold}`]}
               note={low ? { text: 'Low stock', tone: 'error' } : null}
               onPress={() => router.push({ pathname: '/inventory/item/[item-id]', params: { 'item-id': item.id } })}
             />
