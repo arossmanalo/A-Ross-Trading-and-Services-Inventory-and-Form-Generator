@@ -4,11 +4,17 @@ import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { usePinGate } from '@/components/pin-gate';
 import { RecordHeader } from '@/components/record-layout';
 import { StatusChip, sentenceCase } from '@/components/status-chip';
 import { formatCentavos } from '@/domain/money';
 import { INVENTORY_LABELS } from '@/features/inventory/inventory-kind';
-import { getInventoryItemDetail, listInventoryMovements, setInventoryItemActive } from '@/features/inventory/inventory-repository';
+import {
+  deleteInventoryItem,
+  getInventoryItemDetail,
+  listInventoryMovements,
+  setInventoryItemActive,
+} from '@/features/inventory/inventory-repository';
 import type { InventoryItemDetail, InventoryMovementSummary } from '@/features/inventory/inventory-types';
 import { colors } from '@/theme/colors';
 import { fontSize, radius, spacing, text } from '@/theme/typography';
@@ -42,6 +48,7 @@ export function InventoryItemDetailView({ itemId, embedded = false, onChanged }:
   const [movements, setMovements] = useState<InventoryMovementSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { requirePin, pinPrompt } = usePinGate();
 
   const loadItem = useCallback(async () => {
     setLoading(true);
@@ -95,6 +102,33 @@ export function InventoryItemDetailView({ itemId, embedded = false, onChanged }:
     );
   }, [db, item, loadItem, onChanged]);
 
+  const confirmDelete = useCallback(() => {
+    if (!item) return;
+    requirePin(`delete ${item.name}`, () => {
+      Alert.alert(
+        `Delete ${item.name}?`,
+        'It disappears from inventory, pickers and stock reports. If a CSR, delivery, quotation or statement used it, those documents keep showing it. This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              void deleteInventoryItem(db, item.id)
+                .then(() => {
+                  onChanged?.();
+                  if (!embedded) router.back();
+                })
+                .catch((deleteError: unknown) => {
+                  setError(deleteError instanceof Error ? deleteError.message : 'Could not delete the item.');
+                });
+            },
+          },
+        ],
+      );
+    });
+  }, [db, embedded, item, onChanged, requirePin]);
+
   if (loading && !item) return <View style={styles.centered}><ActivityIndicator color={colors.primary} size="large" /></View>;
   if (!item) return <View style={styles.centered}><Text selectable style={text.error}>{error ?? 'Inventory item was not found.'}</Text></View>;
 
@@ -103,6 +137,7 @@ export function InventoryItemDetailView({ itemId, embedded = false, onChanged }:
   return (
     <>
       {embedded ? null : <Stack.Screen options={{ title: item.name }} />}
+      {pinPrompt}
       <FlatList
         contentContainerStyle={styles.content}
         data={movements}
@@ -114,10 +149,13 @@ export function InventoryItemDetailView({ itemId, embedded = false, onChanged }:
           <View style={styles.header}>
             <RecordHeader
               title={item.name}
-              chips={<StatusChip label={item.active ? 'Active' : 'Inactive'} tone={item.active ? 'final' : 'neutral'} />}
+              chips={item.deletedAt
+                ? <StatusChip label="Deleted" tone="void" />
+                : <StatusChip label={item.active ? 'Active' : 'Inactive'} tone={item.active ? 'final' : 'neutral'} />}
               subtitle={[INVENTORY_LABELS[item.inventoryKind].singular, item.sku ? `SKU ${item.sku}` : 'No SKU', `unit ${item.unitLabel}`, item.description].filter(Boolean).join(' · ')}
-              actions={(
+              actions={item.deletedAt ? null : (
                 <>
+                  <ActionButton compact variant="danger" onPress={confirmDelete}>Delete</ActionButton>
                   <ActionButton compact variant={item.active ? 'danger' : 'secondary'} onPress={confirmActiveToggle}>
                     {item.active ? 'Deactivate' : 'Reactivate'}
                   </ActionButton>

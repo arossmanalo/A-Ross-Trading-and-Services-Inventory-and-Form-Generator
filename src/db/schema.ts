@@ -1,5 +1,5 @@
 export const DATABASE_NAME = 'a-ross-operations.db';
-export const DATABASE_VERSION = 14;
+export const DATABASE_VERSION = 15;
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -711,4 +711,15 @@ CREATE INDEX IF NOT EXISTS service_report_usage_control_number
 export const SCHEMA_V14 = `
 ALTER TABLE items ADD COLUMN inventory_kind TEXT NOT NULL DEFAULT 'supply'
   CHECK (inventory_kind IN ('supply', 'product'));
+`;
+
+/**
+ * Deleted items that documents still use are hidden rather than erased, and
+ * deleting items or setting a stock count needs the owner's PIN, kept here as
+ * a salted SHA-256 hash.
+ */
+export const SCHEMA_V15 = `
+ALTER TABLE items ADD COLUMN deleted_at TEXT;
+ALTER TABLE settings ADD COLUMN edit_pin_hash TEXT;
+ALTER TABLE settings ADD COLUMN edit_pin_salt TEXT;
 `;

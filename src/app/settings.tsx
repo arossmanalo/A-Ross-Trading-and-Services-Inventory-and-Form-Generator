@@ -8,6 +8,7 @@ import { PageBody, PageSection } from '@/components/page-section';
 import { ToggleRow } from '@/components/toggle-row';
 import { SavedSignatureSettings } from '@/features/signatures/saved-signature-settings';
 import { BusinessLogoSettings } from '@/features/settings/business-logo-settings';
+import { EditPinSettings } from '@/features/settings/edit-pin-settings';
 import {
   getBusinessSettings,
   updateBusinessSettings,
@@ -102,6 +103,10 @@ export default function SettingsScreen() {
       <PageSection title="Document signature and logo" description="Used on documents you finalize from now on.">
         <SavedSignatureSettings />
         <BusinessLogoSettings />
+      </PageSection>
+
+      <PageSection title="Inventory PIN" description="Saved on its own; the Save button below is not needed.">
+        <EditPinSettings />
       </PageSection>
 
       <PageSection title="Notifications">

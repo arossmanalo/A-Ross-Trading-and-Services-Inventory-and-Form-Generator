@@ -58,7 +58,7 @@ describe('upgrading a v11 database to quotations and deliveries', () => {
   });
 
   it('reaches version 12 and keeps every existing row and sequence value', () => {
-    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+    expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
     expect(raw.prepare('SELECT name, high_water_mark FROM sequences ORDER BY name').all()).toEqual([
       { name: 'BS', high_water_mark: 2 }, { name: 'CSR', high_water_mark: 4 }, { name: 'DF', high_water_mark: 0 },
       { name: 'PA', high_water_mark: 1 }, { name: 'QT', high_water_mark: 0 },

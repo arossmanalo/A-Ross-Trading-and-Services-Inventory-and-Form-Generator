@@ -64,7 +64,10 @@ export function InventoryListScreen({ inventoryKind }: { inventoryKind: Inventor
     setLoading(true);
     setError(null);
     try {
-      setItems((await listInventoryItems(db)).filter((item) => item.inventoryKind === inventoryKind));
+      const rows = (await listInventoryItems(db)).filter((item) => item.inventoryKind === inventoryKind);
+      setItems(rows);
+      // A deleted or moved item leaves the list, so it can no longer stay selected.
+      setSelectedId((current) => (current && rows.some((item) => item.id === current) ? current : null));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Could not load inventory.');
     } finally {

@@ -15,6 +15,18 @@ export type InventoryItemSummary = {
 
 export type InventoryItemDetail = InventoryItemSummary & {
   description: string;
+  /** Set when the item was deleted but documents still use it; it is hidden everywhere else. */
+  deletedAt: string | null;
+};
+
+/** What deleting did: erased an unused item, or hid one that documents still use. */
+export type InventoryDeleteResult = 'erased' | 'hidden';
+
+export type SetStockCountInput = {
+  itemId: string;
+  /** The counted quantity on hand. */
+  quantity: number;
+  reason: string;
 };
 
 export type InventoryMovementSummary = {

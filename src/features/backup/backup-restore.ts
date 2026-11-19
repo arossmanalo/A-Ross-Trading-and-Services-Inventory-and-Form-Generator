@@ -396,6 +396,11 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
     // Schema 14 split inventory into parts ('supply') and products; older items were all parts.
     tables.items = tables.items.map(row => ({ inventory_kind: 'supply', ...row }));
   }
+  if (parsed.manifest.schemaVersion < 15) {
+    // Schema 15 added hidden (deleted) items and the inventory PIN; older backups have neither.
+    tables.items = tables.items.map(row => ({ deleted_at: null, ...row }));
+    tables.settings = tables.settings.map(row => ({ edit_pin_hash: null, edit_pin_salt: null, ...row }));
+  }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;
   return { ...parsed, tables, manifest: { ...parsed.manifest, recordCounts } };
 }

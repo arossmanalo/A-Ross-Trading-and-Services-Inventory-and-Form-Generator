@@ -13,9 +13,10 @@ import {
   SCHEMA_V12,
   SCHEMA_V13,
   SCHEMA_V14,
+  SCHEMA_V15,
 } from '@/db/schema';
 
-const SCHEMAS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14];
+const SCHEMAS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14, SCHEMA_V15];
 
 /** Schema SQL from version 1 up to and including `version`, so tests need not list every constant. */
 export function schemaSql(version: number = SCHEMAS.length): string {

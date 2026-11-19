@@ -59,7 +59,8 @@ export async function searchAppRecords(db: SQLiteDatabase, query: string, limit 
          CASE WHEN i.active=1 THEN 'Active item' ELSE 'Inactive item' END,
          i.updated_at
        FROM items i
-       WHERE i.name LIKE ? ESCAPE '\\' OR COALESCE(i.sku,'') LIKE ? ESCAPE '\\' OR i.description LIKE ? ESCAPE '\\' OR i.unit_label LIKE ? ESCAPE '\\'
+       WHERE i.deleted_at IS NULL
+         AND (i.name LIKE ? ESCAPE '\\' OR COALESCE(i.sku,'') LIKE ? ESCAPE '\\' OR i.description LIKE ? ESCAPE '\\' OR i.unit_label LIKE ? ESCAPE '\\')
 
        UNION ALL
        SELECT 'service',s.id,s.id,s.name,

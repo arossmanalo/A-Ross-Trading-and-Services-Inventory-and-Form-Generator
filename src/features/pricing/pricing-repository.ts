@@ -30,7 +30,7 @@ export async function listActiveCustomerPrices(
        p.effective_from
      FROM customer_item_prices p
      JOIN items i ON i.id = p.item_id
-     WHERE p.customer_id = ? AND p.effective_to IS NULL
+     WHERE p.customer_id = ? AND p.effective_to IS NULL AND i.deleted_at IS NULL
      ORDER BY i.name COLLATE NOCASE ASC`,
     customerId,
   );

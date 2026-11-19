@@ -6,8 +6,10 @@ import { assertPositiveIntegerQuantity } from '@/domain/stock';
 import type {
   CreateInventoryItemInput,
   InventoryItemDetail,
+  InventoryDeleteResult,
   InventoryItemSummary,
   InventoryKind,
+  SetStockCountInput,
   InventoryMovementInput,
   InventoryMovementSummary,
   UpdateInventoryItemInput,
@@ -27,6 +29,7 @@ type InventoryItemRow = {
 
 type InventoryItemDetailRow = InventoryItemRow & {
   description: string;
+  deleted_at: string | null;
 };
 
 type InventoryMovementRow = {
@@ -67,6 +70,7 @@ export async function listInventoryItems(db: SQLiteDatabase): Promise<InventoryI
        i.active
      FROM items i
      LEFT JOIN inventory_movements m ON m.item_id = i.id
+     WHERE i.deleted_at IS NULL
      GROUP BY i.id
      ORDER BY i.active DESC, i.name COLLATE NOCASE ASC`,
   );
@@ -99,6 +103,7 @@ export async function getInventoryItemDetail(
        i.base_selling_price_centavos,
        i.low_stock_threshold,
        i.active,
+       i.deleted_at,
        COALESCE(SUM(m.quantity_delta_integer), 0) AS current_stock
      FROM items i
      LEFT JOIN inventory_movements m ON m.item_id = i.id
@@ -108,7 +113,7 @@ export async function getInventoryItemDetail(
   );
 
   if (!row) return null;
-  return { ...mapInventoryItemRow(row), description: row.description };
+  return { ...mapInventoryItemRow(row), description: row.description, deletedAt: row.deleted_at };
 }
 
 export async function listInventoryMovements(
@@ -300,7 +305,7 @@ export async function setInventoryItemActive(
     const result = await tx.runAsync(
       `UPDATE items
        SET active = ?, updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND deleted_at IS NULL`,
       active ? 1 : 0,
       now,
       itemId,
@@ -315,6 +320,98 @@ export async function setInventoryItemActive(
     });
     await incrementDatabaseRevision(tx);
   });
+}
+
+/**
+ * Records a stock count: the difference from the current stock becomes a
+ * restock or consumption movement, so the movement log still explains every
+ * unit. A count equal to the current stock records nothing.
+ */
+export async function setInventoryItemStock(db: SQLiteDatabase, input: SetStockCountInput): Promise<void> {
+  assertNonNegativeInteger(input.quantity, 'Quantity on hand');
+  const reason = input.reason.trim();
+  if (!reason) throw new Error('Say why the count changed, for example "Shelf count".');
+
+  const now = new Date().toISOString();
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const item = await tx.getFirstAsync<{ id: string }>(
+      'SELECT id FROM items WHERE id = ? AND deleted_at IS NULL',
+      input.itemId,
+    );
+    if (!item) throw new Error('Inventory item was not found.');
+
+    const current = await getCurrentStock(tx, input.itemId);
+    const delta = input.quantity - current;
+    if (delta === 0) return;
+
+    await tx.runAsync(
+      `INSERT INTO inventory_movements
+        (id, item_id, movement_type, quantity_delta_integer, description, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      Crypto.randomUUID(),
+      input.itemId,
+      delta > 0 ? 'restock' : 'consumption',
+      delta,
+      `Stock count set to ${input.quantity} (was ${current}): ${reason}`,
+      now,
+    );
+    await appendAuditEvent(tx, {
+      eventType: 'inventory.stock_count',
+      entityType: 'item',
+      entityId: input.itemId,
+      details: { previous: current, counted: input.quantity, reason },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+}
+
+/**
+ * Deletes an item. One that no CSR, delivery, quotation or statement uses is
+ * erased with its movements and customer prices. One that documents still use
+ * is hidden and deactivated instead, so those documents keep showing it.
+ */
+export async function deleteInventoryItem(db: SQLiteDatabase, itemId: string): Promise<InventoryDeleteResult> {
+  const now = new Date().toISOString();
+  let result: InventoryDeleteResult = 'hidden';
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    const item = await tx.getFirstAsync<{ name: string }>(
+      'SELECT name FROM items WHERE id = ? AND deleted_at IS NULL',
+      itemId,
+    );
+    if (!item) throw new Error('Inventory item was not found.');
+
+    const usage = await tx.getFirstAsync<{ used: number }>(
+      `SELECT EXISTS(SELECT 1 FROM service_report_item_usage WHERE item_id = ?)
+          OR EXISTS(SELECT 1 FROM billing_statement_lines WHERE item_id = ?)
+          OR EXISTS(SELECT 1 FROM delivery_lines WHERE item_id = ?)
+          OR EXISTS(SELECT 1 FROM quotation_lines WHERE item_id = ?) AS used`,
+      itemId,
+      itemId,
+      itemId,
+      itemId,
+    );
+
+    if (usage?.used) {
+      await tx.runAsync('UPDATE items SET deleted_at = ?, active = 0, updated_at = ? WHERE id = ?', now, now, itemId);
+      result = 'hidden';
+    } else {
+      await tx.runAsync('DELETE FROM inventory_movements WHERE item_id = ?', itemId);
+      await tx.runAsync('DELETE FROM customer_item_prices WHERE item_id = ?', itemId);
+      await tx.runAsync('DELETE FROM items WHERE id = ?', itemId);
+      result = 'erased';
+    }
+
+    await appendAuditEvent(tx, {
+      eventType: result === 'erased' ? 'item.erased' : 'item.hidden',
+      entityType: 'item',
+      entityId: itemId,
+      details: { name: item.name },
+      createdAt: now,
+    });
+    await incrementDatabaseRevision(tx);
+  });
+  return result;
 }
 
 async function recordManualMovement(
