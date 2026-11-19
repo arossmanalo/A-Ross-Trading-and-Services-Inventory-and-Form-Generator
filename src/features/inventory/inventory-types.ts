@@ -1,4 +1,4 @@
-/** Supplies are used up on repairs (CSRs); products are sold on deliveries, quotations and statements. */
+/** Parts (stored as 'supply') are used up on repairs (CSRs); products are sold on deliveries, quotations and statements. */
 export type InventoryKind = 'supply' | 'product';
 
 export type InventoryItemSummary = {

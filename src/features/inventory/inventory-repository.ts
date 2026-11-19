@@ -382,7 +382,7 @@ function mapInventoryItemRow(row: InventoryItemRow): InventoryItemSummary {
 }
 
 function assertInventoryKind(kind: InventoryKind): void {
-  if (kind !== 'supply' && kind !== 'product') throw new Error('Choose Supplies or Products for this item.');
+  if (kind !== 'supply' && kind !== 'product') throw new Error('Choose Parts or Products for this item.');
 }
 
 function assertNonNegativeInteger(value: number, label: string): void {

@@ -65,7 +65,7 @@ export function validateMovementReportFilter(filter: MovementReportFilter): void
   if (filter.from > filter.to) throw new Error('Start date must be on or before end date.');
   const type = filter.movementType ?? 'all';
   if (!['all','restock','sale','nonbillable_usage','consumption','reversal'].includes(type)) throw new Error('Choose a valid movement type.');
-  if (!['all', 'supply', 'product'].includes(filter.inventoryKind ?? 'all')) throw new Error('Choose Supplies, Products or All.');
+  if (!['all', 'supply', 'product'].includes(filter.inventoryKind ?? 'all')) throw new Error('Choose Parts, Products or All.');
 }
 
 export async function getInventoryMovementReport(db: SQLiteDatabase, filter: MovementReportFilter): Promise<InventoryMovementReportRow[]> {
@@ -171,6 +171,6 @@ function csv(rows: Array<Array<string|number>>): string {
 
 export const INVENTORY_FILTER_OPTIONS: ReadonlyArray<{ value: InventoryKindFilter; label: string }> = [
   { value: 'all', label: 'All' },
-  { value: 'supply', label: 'Supplies' },
+  { value: 'supply', label: 'Parts' },
   { value: 'product', label: 'Products' },
 ];

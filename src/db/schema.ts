@@ -705,8 +705,8 @@ CREATE INDEX IF NOT EXISTS service_report_usage_control_number
 `;
 
 /**
- * Splits inventory in two: supplies used on repairs and products sold to
- * customers. Every item that existed before starts as a supply.
+ * Splits inventory in two: parts used on repairs (stored as 'supply', their
+ * first name) and products sold to customers. Every older item starts as a part.
  */
 export const SCHEMA_V14 = `
 ALTER TABLE items ADD COLUMN inventory_kind TEXT NOT NULL DEFAULT 'supply'

@@ -35,7 +35,7 @@ describe('stock reporting', () => {
     expect(filterStockReport([item], 'missing', 'all')).toEqual([]);
   });
 
-  it('keeps supplies and products apart when an inventory is chosen', () => {
+  it('keeps parts and products apart when an inventory is chosen', () => {
     const product = { ...item, id: 'p', inventoryKind: 'product' as const };
     expect(filterStockReport([item, product], '', 'all', 'product')).toEqual([product]);
     expect(filterStockReport([item, product], '', 'all', 'supply')).toEqual([item]);
@@ -83,11 +83,11 @@ describe('movement reporting', () => {
     expect(await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30' })).toHaveLength(3);
   });
 
-  it('limits movements to supplies or products', async () => {
+  it('limits movements to parts or products', async () => {
     const products = await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30', inventoryKind: 'product' });
     expect(products.map(row => row.id)).toEqual(['other-item']);
-    const supplies = await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30', inventoryKind: 'supply' });
-    expect(supplies.map(row => row.id).sort()).toEqual(['nonbillable', 'sale']);
+    const parts = await getInventoryMovementReport(db, { from: '2026-09-01', to: '2026-09-30', inventoryKind: 'supply' });
+    expect(parts.map(row => row.id).sort()).toEqual(['nonbillable', 'sale']);
   });
 
   it('searches loaded rows and exports spreadsheet-safe movement CSV', async () => {

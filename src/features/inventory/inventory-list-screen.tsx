@@ -48,7 +48,7 @@ const INTRO: Record<InventoryKind, string> = {
   product: 'Items sold to customers on deliveries, quotations and statements.',
 };
 
-/** Supplies and Products are two separate lists over the same item and movement tables. */
+/** Parts and Products are two separate lists over the same item and movement tables. */
 export function InventoryListScreen({ inventoryKind }: { inventoryKind: InventoryKind }) {
   const labels = INVENTORY_LABELS[inventoryKind];
   const db = useSQLiteContext();
@@ -111,7 +111,7 @@ export function InventoryListScreen({ inventoryKind }: { inventoryKind: Inventor
               title={`No ${labels.plural.toLowerCase()} yet`}
               body={inventoryKind === 'product'
                 ? 'Add a product, or move an existing item here from its edit screen.'
-                : 'Add the first supply and record its opening stock.'}
+                : 'Add the first part and record its opening stock.'}
             />}
     />
   );

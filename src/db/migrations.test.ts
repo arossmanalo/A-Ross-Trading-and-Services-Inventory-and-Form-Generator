@@ -52,7 +52,7 @@ describe('database migrations', () => {
     expect(raw.prepare("SELECT business_name,low_stock_notifications_enabled FROM settings WHERE id='business'").get()).toEqual({ business_name: 'A.Ross Trading and Services', low_stock_notifications_enabled: 1 });
   });
 
-  it('files every existing item under Supplies and allows only supplies or products', async () => {
+  it('files every existing item under Parts and allows only parts or products', async () => {
     raw.exec(`${SCHEMA_V1} PRAGMA user_version = 1;`);
     raw.exec("INSERT INTO items(id,name,created_at,updated_at) VALUES('old','Drain valve','now','now');");
     await migrateDatabase(db);

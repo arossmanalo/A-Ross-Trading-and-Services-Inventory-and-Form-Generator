@@ -393,7 +393,7 @@ function migrateLegacyPackage(parsed: ParsedBackupPackage): ParsedBackupPackage 
     tables.service_report_item_usage = tables.service_report_item_usage.map(row => ({ control_number: null, ...row }));
   }
   if (parsed.manifest.schemaVersion < 14) {
-    // Schema 14 split inventory into supplies and products; older items were all supplies.
+    // Schema 14 split inventory into parts ('supply') and products; older items were all parts.
     tables.items = tables.items.map(row => ({ inventory_kind: 'supply', ...row }));
   }
   const recordCounts = Object.fromEntries(DATA_TABLES.map(table => [table, tables[table].length])) as Record<BackupTableName, number>;

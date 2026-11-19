@@ -71,7 +71,7 @@ const PHONE_LINKS: Array<{ label: string; href: Href }> = [
   { label: 'Billing statements', href: '/billing-statements' },
   { label: 'Payments', href: '/payments' },
   { label: 'Customers', href: '/customers' },
-  { label: 'Supplies', href: '/supplies' },
+  { label: 'Parts', href: '/parts' },
   { label: 'Products', href: '/products' },
   { label: 'Service catalog', href: '/services' },
   { label: 'Reports', href: '/reports' },

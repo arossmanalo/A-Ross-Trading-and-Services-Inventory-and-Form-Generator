@@ -137,7 +137,7 @@ function AppShell() {
       <Stack.Screen name="reports/audit" options={{ title: 'Reports', ...PAGE }} />
       <Stack.Screen name="reports/collections" options={{ title: 'Reports', ...PAGE }} />
       <Stack.Screen name="reports/sales" options={{ title: 'Reports', ...PAGE }} />
-      <Stack.Screen name="supplies/index" options={{ title: 'Supplies', ...SECTION }} />
+      <Stack.Screen name="parts/index" options={{ title: 'Parts', ...SECTION }} />
       <Stack.Screen name="products/index" options={{ title: 'Products', ...SECTION }} />
       <Stack.Screen
         name="inventory/new"

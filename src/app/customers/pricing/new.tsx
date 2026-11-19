@@ -109,7 +109,7 @@ export default function SetCustomerPriceScreen() {
               <FormField
                 autoCapitalize="none"
                 autoCorrect={false}
-                label="Search supplies and products"
+                label="Search parts and products"
                 onChangeText={setQuery}
                 placeholder="Item name, SKU, or unit"
                 returnKeyType="search"
