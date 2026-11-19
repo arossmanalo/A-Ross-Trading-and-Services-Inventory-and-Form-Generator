@@ -106,7 +106,7 @@ export function SideMenu({ compact }: SideMenuProps) {
         <View style={[styles.brand, compact ? styles.brandRail : null]}>
           <View style={styles.logoTile}>
             <Image
-              accessibilityLabel="A.Ross Trading and Services"
+              accessibilityLabel="ARoss Trading and Services"
               contentFit="contain"
               source={require('../../assets/a-ross-logo.png')}
               style={styles.logo}
@@ -114,7 +114,7 @@ export function SideMenu({ compact }: SideMenuProps) {
           </View>
           {compact ? null : (
             <View>
-              <Text style={styles.brandName}>A.Ross</Text>
+              <Text style={styles.brandName}>ARoss</Text>
               <Text style={styles.brandSub}>Trading &amp; Services</Text>
             </View>
           )}
