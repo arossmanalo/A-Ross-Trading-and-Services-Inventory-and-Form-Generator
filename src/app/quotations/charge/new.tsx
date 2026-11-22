@@ -8,6 +8,7 @@ import { FormField } from '@/components/form-field';
 import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
+import { PICKER_INVENTORIES } from '@/features/inventory/inventory-kind';
 import { ItemPicker } from '@/features/inventory/item-picker';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import { addQuotationItemLine, addQuotationServiceLine } from '@/features/quotations/quotation-repository';
@@ -99,7 +100,7 @@ export default function NewQuotationChargeScreen() {
 
       {mode === 'item' ? (
         <>
-          <ItemPicker inventoryKind="product" items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
+          <ItemPicker inventoryKinds={PICKER_INVENTORIES.quotation} items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
           {selectedItem ? (
             <SheetSection
               title={selectedItem.name}

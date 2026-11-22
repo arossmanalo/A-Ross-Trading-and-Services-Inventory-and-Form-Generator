@@ -1,6 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export type SalesLineTypeFilter = 'all' | 'item' | 'service' | 'expense';
+/** What a sales line sold: an item from Parts or Products, a service, or an expense. */
+export type SalesCategory = 'part' | 'product' | 'service' | 'expense';
+export type SalesLineTypeFilter = 'all' | SalesCategory;
 export type SalesReportFilter = { from: string; to: string; customerId?: string; lineType?: SalesLineTypeFilter };
 export type SalesReportRow = {
   id: string;
@@ -9,7 +11,8 @@ export type SalesReportRow = {
   customerId: string;
   customerName: string;
   businessDate: string;
-  lineType: Exclude<SalesLineTypeFilter, 'all'>;
+  lineType: 'item' | 'service' | 'expense';
+  category: SalesCategory;
   description: string;
   quantity: number;
   unitPriceCentavos: number;
@@ -32,6 +35,7 @@ type SalesReportSqlRow = {
   customer_name: string;
   business_date: string;
   line_type: SalesReportRow['lineType'];
+  category: SalesCategory;
   description_snapshot: string;
   quantity_integer: number;
   unit_price_centavos: number;
@@ -44,7 +48,7 @@ type SalesReportSqlRow = {
   discounted_total_centavos: number;
 };
 
-export const SALES_LINE_TYPE_FILTERS: SalesLineTypeFilter[] = ['all', 'item', 'service', 'expense'];
+export const SALES_LINE_TYPE_FILTERS: SalesLineTypeFilter[] = ['all', 'product', 'part', 'service', 'expense'];
 
 export function validateSalesReportFilter(filter: SalesReportFilter): void {
   for (const date of [filter.from, filter.to]) {
@@ -69,6 +73,11 @@ export async function getSalesReport(db: SQLiteDatabase, filter: SalesReportFilt
        c.name AS customer_name,
        b.business_date,
        l.line_type,
+       CASE
+         WHEN l.line_type <> 'item' THEN l.line_type
+         WHEN i.inventory_kind = 'product' THEN 'product'
+         ELSE 'part'
+       END AS category,
        l.description_snapshot,
        l.quantity_integer,
        l.unit_price_centavos,
@@ -83,11 +92,12 @@ export async function getSalesReport(db: SQLiteDatabase, filter: SalesReportFilt
      JOIN billing_statements b ON b.id=l.billing_statement_id
      JOIN customers c ON c.id=b.customer_id
      LEFT JOIN service_report_item_usage u ON u.id=l.source_csr_usage_id
+     LEFT JOIN items i ON i.id=COALESCE(l.item_id,u.item_id)
      LEFT JOIN service_reports r ON r.id=COALESCE(u.service_report_id,b.service_report_id)
      WHERE b.document_state='finalized'
        AND b.business_date BETWEEN ? AND ?
        AND (? IS NULL OR c.id=?)
-       AND (?='all' OR l.line_type=?)
+       AND (?='all' OR category=?)
      ORDER BY b.business_date DESC, b.finalized_at DESC, b.rowid DESC, l.created_at ASC, l.rowid ASC`,
     filter.from,
     filter.to,
@@ -104,6 +114,7 @@ export async function getSalesReport(db: SQLiteDatabase, filter: SalesReportFilt
     customerName: row.customer_name,
     businessDate: row.business_date,
     lineType: row.line_type,
+    category: row.category,
     description: row.description_snapshot,
     quantity: row.quantity_integer,
     unitPriceCentavos: row.unit_price_centavos,
@@ -125,7 +136,7 @@ export function filterSalesReport(rows: SalesReportRow[], query: string): SalesR
     row.billingStatementNumber ?? '',
     row.customerName,
     row.description,
-    row.lineType,
+    lineTypeLabel(row.category),
     row.priceSource ?? '',
     row.overrideReason ?? '',
     row.serviceReportNumber ?? '',
@@ -140,7 +151,7 @@ export function salesReportCsv(rows: SalesReportRow[]): string {
       row.businessDate,
       row.billingStatementNumber ?? '',
       row.customerName,
-      lineTypeLabel(row.lineType),
+      lineTypeLabel(row.category),
       row.description,
       row.quantity,
       (row.unitPriceCentavos / 100).toFixed(2),
@@ -155,9 +166,16 @@ export function salesReportCsv(rows: SalesReportRow[]): string {
   ]);
 }
 
+const CATEGORY_LABELS: Record<SalesLineTypeFilter, string> = {
+  all: 'All',
+  product: 'Product',
+  part: 'Part',
+  service: 'Service',
+  expense: 'Expense',
+};
+
 export function lineTypeLabel(type: SalesLineTypeFilter): string {
-  if (type === 'all') return 'All';
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  return CATEGORY_LABELS[type];
 }
 
 function csv(rows: Array<Array<string | number>>): string {

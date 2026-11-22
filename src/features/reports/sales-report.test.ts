@@ -28,12 +28,14 @@ describe('sales reporting', () => {
     raw.exec("INSERT INTO customer_equipment(id,customer_id,machine_type,created_at,updated_at) VALUES('equipment','a','Washer','now','now');");
     raw.exec("INSERT INTO service_reports(id,csr_number,customer_id,equipment_id,document_state,service_outcome,business_date,created_at) VALUES('csr','CSR-000001','a','equipment','finalized','completed','2026-09-01','now');");
     raw.exec("INSERT INTO items(id,name,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('item','Detergent','carboy',120000,1,'now','now');");
+    raw.exec("INSERT INTO items(id,inventory_kind,name,unit_label,base_selling_price_centavos,active,created_at,updated_at) VALUES('fabcon','product','Fabcon','gallon',50000,1,'now','now');");
     raw.exec("INSERT INTO service_report_item_usage(id,service_report_id,item_id,quantity_integer,billable,description_snapshot,created_at) VALUES('usage','csr','item',1,1,'Detergent','now');");
     raw.exec("INSERT INTO billing_statements(id,bs_number,customer_id,service_report_id,document_state,business_date,subtotal_centavos,discounted_total_centavos,created_at,finalized_at) VALUES('bs-a','BS-000001','a','csr','finalized','2026-09-05',180000,170000,'2026-09-05','2026-09-05'),('bs-b','BS-000002','b',null,'finalized','2026-09-06',90000,90000,'2026-09-06','2026-09-06'),('draft','BS-DRAFT','a',null,'draft','2026-09-07',99999,99999,'2026-09-07',null);");
     const line = raw.prepare('INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,source_csr_usage_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,override_reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
     line.run('item-line', 'bs-a', 'item', 'usage', 'Liquid Detergent', 1, 120000, 120000, 'customer', null, '2026-09-05T08:00:00Z');
     line.run('service-line', 'bs-a', 'service', null, 'Service labor', 1, 60000, 60000, 'override', 'Holiday callout', '2026-09-05T08:01:00Z');
     line.run('expense-line', 'bs-b', 'expense', null, '=Parking', 1, 90000, 90000, 'expense', null, '2026-09-06T08:00:00Z');
+    raw.prepare("INSERT INTO billing_statement_lines(id,billing_statement_id,line_type,item_id,description_snapshot,quantity_integer,unit_price_centavos,amount_centavos,price_source,created_at) VALUES('product-line','bs-b','item','fabcon','Fabcon',2,25000,50000,'base','2026-09-06T08:01:00Z')").run();
     line.run('draft-line', 'draft', 'service', null, 'Draft service', 1, 99999, 99999, 'catalog', null, '2026-09-07T08:00:00Z');
   });
 
@@ -43,7 +45,15 @@ describe('sales reporting', () => {
     await expect(getSalesReport(db, { from: '2026-09-01', to: '2026-09-30', customerId: 'a', lineType: 'service' })).resolves.toMatchObject([
       { id: 'service-line', billingStatementNumber: 'BS-000001', amountCentavos: 60000, statementDiscountCentavos: 10000, serviceReportNumber: 'CSR-000001' },
     ]);
-    expect(await getSalesReport(db, { from: '2026-09-01', to: '2026-09-30' })).toHaveLength(3);
+    expect(await getSalesReport(db, { from: '2026-09-01', to: '2026-09-30' })).toHaveLength(4);
+  });
+
+  it('tells parts from products, including parts billed from a CSR', async () => {
+    const parts = await getSalesReport(db, { from: '2026-09-01', to: '2026-09-30', lineType: 'part' });
+    expect(parts.map(row => [row.id, row.category])).toEqual([['item-line', 'part']]);
+    const products = await getSalesReport(db, { from: '2026-09-01', to: '2026-09-30', lineType: 'product' });
+    expect(products.map(row => [row.id, row.category])).toEqual([['product-line', 'product']]);
+    expect(salesReportCsv(products)).toContain('"Product","Fabcon"');
   });
 
   it('searches loaded rows and exports statement-level discount context', async () => {

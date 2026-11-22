@@ -164,7 +164,7 @@ export default function SalesReportScreen() {
             figure={PHP.format(item.amountCentavos / 100)}
             meta={[
               `${item.customerName} · ${item.billingStatementNumber ?? 'Billing Statement'}${item.serviceReportNumber ? ` · ${item.serviceReportNumber}` : ''}${item.controlNumber ? ` · Control No. ${item.controlNumber}` : ''}`,
-              `${lineTypeLabel(item.lineType)} · ${item.quantity} × ${PHP.format(item.unitPriceCentavos / 100)}`,
+              `${lineTypeLabel(item.category)} · ${item.quantity} × ${PHP.format(item.unitPriceCentavos / 100)}`,
             ]}
             note={item.overrideReason ? { text: `Override: ${item.overrideReason}`, tone: 'warning' } : null}
             onPress={() => router.push({ pathname: '/billing-statements/[statement-id]', params: { 'statement-id': item.billingStatementId } })}

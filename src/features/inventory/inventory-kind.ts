@@ -19,3 +19,11 @@ export const INVENTORY_KIND_OPTIONS: readonly ChoiceOption<InventoryKind>[] = [
 export function parseInventoryKind(value: string | undefined): InventoryKind | null {
   return value === 'supply' || value === 'product' ? value : null;
 }
+
+/** Which inventories each form picks items from. Deliveries can carry parts as well as products. */
+export const PICKER_INVENTORIES = {
+  serviceReport: ['supply'],
+  quotation: ['product'],
+  billingStatement: ['product'],
+  delivery: ['product', 'supply'],
+} as const satisfies Record<string, readonly InventoryKind[]>;

@@ -9,6 +9,7 @@ import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { formatCentavos, parseCurrencyToCentavos } from '@/domain/money';
 import { addDeliveryItemLine } from '@/features/deliveries/delivery-repository';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
+import { PICKER_INVENTORIES } from '@/features/inventory/inventory-kind';
 import { ItemPicker } from '@/features/inventory/item-picker';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import { colors } from '@/theme/colors';
@@ -70,7 +71,7 @@ export default function NewDeliveryItemScreen() {
       }
     >
       <SheetSection title="Item">
-        <ItemPicker inventoryKind="product" items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
+        <ItemPicker inventoryKinds={PICKER_INVENTORIES.delivery} items={items} selectedId={itemId} onSelect={setItemId} onCreated={async (id) => { await load(); setItemId(id); }} />
       </SheetSection>
       {selected ? (
         <SheetSection

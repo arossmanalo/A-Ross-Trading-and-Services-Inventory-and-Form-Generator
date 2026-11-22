@@ -8,6 +8,7 @@ import { Notice } from '@/components/notice';
 import { SheetBody, SheetSection } from '@/components/sheet-body';
 import { ToggleRow } from '@/components/toggle-row';
 import { listInventoryItems } from '@/features/inventory/inventory-repository';
+import { PICKER_INVENTORIES } from '@/features/inventory/inventory-kind';
 import { ItemPicker } from '@/features/inventory/item-picker';
 import type { InventoryItemSummary } from '@/features/inventory/inventory-types';
 import { addReportItemUsage } from '@/features/service-reports/service-report-repository';
@@ -85,7 +86,7 @@ export default function NewReportItemUsageScreen() {
         Draft selection does not deduct stock. Availability is checked again at finalization.
       </Notice>
       <SheetSection title="Item">
-        <ItemPicker inventoryKind="supply" items={items} selectedId={selectedItemId} onSelect={selectItem} onCreated={handleItemCreated} />
+        <ItemPicker inventoryKinds={PICKER_INVENTORIES.serviceReport} items={items} selectedId={selectedItemId} onSelect={selectItem} onCreated={handleItemCreated} />
       </SheetSection>
       {selectedItemId ? (
         <SheetSection title="Usage">
